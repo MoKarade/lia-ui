@@ -1,20 +1,32 @@
-name: Gate
+name: CI
 
+# Le nom « CI » compte : `reacteur.yml` écoute ce workflow (workflow_run) pour réveiller le Coordinateur quand la CI devient rouge.
+# Socle commun posé par MoKarade/.github (tâche lia-ui#2) : Gate, Sécurité, puis les contrôles communs appelés depuis MoKarade/.github.
+# Les actions sont épinglées par SHA (grille de conformité, ligne 13). Pas de job « Qualité » : le dépôt n'a ni lint ni couverture
+# mesurée, il n'est pas simulé (voir HANDOVER.md, « À faire »).
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   gate:
+    name: Gate (build · tests · typecheck)
     runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || fromJSON('["self-hosted","pc-marc"]') }} # dépôt public : machines GitHub (gratuites) ; privé : robot du PC
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -24,3 +36,40 @@ jobs:
       - run: npm run build
       - name: dist/ à jour
         run: git diff --exit-code -- dist
+
+  securite:
+    # Secrets dans tout l'historique qui serait fusionné (gitleaks, binaire officiel à empreinte figée) + analyse statique (Semgrep).
+    name: Sécurité (secrets · analyse statique)
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || fromJSON('["self-hosted","pc-marc"]') }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0 # gitleaks lit l'historique complet, pas seulement le dernier commit
+          persist-credentials: false
+      - name: Secrets (gitleaks, historique complet)
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL -o gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar xzf gitleaks.tgz gitleaks
+          ./gitleaks git . --no-banner --redact --log-opts="--full-history HEAD"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Analyse statique (Semgrep)
+        run: |
+          # --only-binary : aucune compilation ni script d'installation, seulement des roues publiées.
+          python -m pip install --quiet --only-binary :all: semgrep==1.177.0
+          semgrep scan --metrics off --error --exclude .github --exclude dist \
+            --config p/typescript --config p/react \
+            --config p/secrets --config p/owasp-top-ten .
+
+  # Contrôles COMMUNS écrits une seule fois dans MoKarade/.github. L'appel reste en `@main` (voulu : un correctif y atteint tous les dépôts).
+  # `securite-commune` s'ajoute au job `securite` sans le remplacer : le renommer changerait le contrôle que .mergify.yml exige.
+  securite-commune:
+    name: Sécurité commune
+    uses: MoKarade/.github/.github/workflows/securite.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      actions: read

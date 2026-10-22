@@ -1,0 +1,17 @@
+# Mises à jour proposées automatiquement : ACTIONS SEULEMENT.
+# Pas de mises à jour npm de version, volontairement : `dist/` est commité, et une PR Dependabot ne peut pas le
+# reconstruire (elle resterait rouge à vie sur « dist/ à jour »). Les alertes de SÉCURITÉ de Dependabot restent actives.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      # Mineures et correctives : fusionnées seules par Mergify quand la CI est verte (MoKarade/.github#26).
+      # Majeures dans leur propre groupe : Marc les fusionne, et elles ne bloquent pas les mineures.
+      actions-mineures:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      actions-majeures:
+        patterns: ["*"]
+        update-types: [major]
