@@ -14,10 +14,10 @@
 1. **Le fil PC pose le tag `v0.2.0`** après merge de lia-ui#5 (une session cloud ne peut pas pousser de tag ; le v0.1.0 a été posé ainsi, pas par Marc), puis le hub et les apps bumpent leur épingle.
 2. **« autorisé » de Marc** avant de passer le dépôt en public (sinon les apps publiques ne peuvent pas l'installer).
 3. **Socle CI posé** (tâche lia-ui#2) : `ci.yml` (Gate, Sécurité, sécurité commune), `garde-fou.yml`, `reacteur.yml`, `graphe.yml`, `.mergify.yml`, `dependabot.yml` (actions seulement : `dist/` est commité). **Manque, dit et non simulé** : le job « Qualité » (lint, couverture, code mort, architecture) n'existe pas, le dépôt n'a ni ESLint ni seuil de couverture ; Mergify n'exige donc que Garde-fou, Gate et Sécurité. **Gestes de Marc** : secret `REVEIL_TOKEN` du dépôt, dépôt ajouté au jeton `RELECTURE_PAT`, protection de `main` (contrôles exigés Garde-fou, Gate, Sécurité).
-4. Blocs de réponse composés (22 formes) : le rendu vient de MemoryAI via `renderBlocks` ; rien à faire ici tant que l'API MemoryAI n'est pas là.
+4. Blocs de réponse composés (22 formes) : dessinés par `@mokarade/lia-ui/blocs` (v0.3.0, lia-ui#8) ; l'hôte branche `renderBlocks: (b, dans) => rendreBlocs(b, dans, { lienSource, onConfirmer })`. Catalogue : MemoryAI `lib/lia/blocs.ts`.
 5. Intégration : accueil du hub (colonne gauche, fil Refonte) puis chaque app ; l'hôte fournit `ask` (vers MemoryAI) et `actions`.
 
 ## Limites connues
 - `moteur.js` n'est pas typé (voir `CLAUDE.md`).
 - Une seule LIA par page.
-- Pas de réponses en blocs tant que `renderBlocks` n'est pas fourni.
+- Pas de réponses en blocs tant que l'hôte ne branche pas `renderBlocks` (`rendreBlocs`).
