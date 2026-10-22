@@ -57,6 +57,15 @@ export interface ActionLia {
   run: () => void | Promise<void>;
 }
 
+/** Pourquoi elle veut parler seule. Le texte vient toujours de l'hôte (`onSpontane`), jamais de ce paquet. */
+export type MotifSpontane = "salut" | "rien" | "relance";
+
+/** Ce que l'hôte la fait dire. `chips` : réponses rapides sous la bulle (pour une relance : « Utile », « Plus tard »…). */
+export interface ParoleSpontanee {
+  text: string;
+  chips?: readonly PuceLia[];
+}
+
 export interface ZoneVie {
   /** Coordonnées dans la couche de LIA, en pixels CSS. */
   x: number;
@@ -101,6 +110,16 @@ export interface OptionsLia {
    * pendant qu'ils défilent). Défaut : `[data-lia-cible]`. Elle ne fait jamais défiler la page.
    */
   cibles?: string;
+  /**
+   * Quoi dire quand elle a envie de parler seule (comme dans la maquette : une remarque, un salut, une relance).
+   * Renvoie le texte, ou `null` quand l'hôte n'a rien de vrai à dire : elle se tait. Absent : elle ne parle jamais seule.
+   * Pour une visite d'élément, sa phrase est l'attribut `data-lia-dit` de l'élément.
+   */
+  onSpontane?: (motif: MotifSpontane) => string | ParoleSpontanee | null | undefined;
+  /** Heures locales de silence [début, fin[ : aucune parole spontanée. Défaut [22, 7]. */
+  silence?: readonly [number, number];
+  /** Plafond de relances par jour (mémorisé dans le navigateur). Défaut 2. */
+  relancesParJour?: number;
 }
 
 export interface LiaHandle {

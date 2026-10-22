@@ -34,3 +34,30 @@ export function ecrireMemoire(cle: string, m: MemoireLia): void {
     /* navigateur sans stockage : LIA fonctionne pareil, sans mémoire */
   }
 }
+
+/** Relances du jour (plafond côté LIA, au cas où l'hôte l'oublierait). `jour` = date locale AAAA-MM-JJ. */
+export interface RelancesLia {
+  jour: string;
+  n: number;
+}
+
+export function lireRelances(cle: string, jour: string): number {
+  try {
+    const brut = localStorage.getItem(`${PREFIXE}${cle}:relances`);
+    if (brut === null) return 0;
+    const j: unknown = JSON.parse(brut);
+    if (typeof j !== "object" || j === null) return 0;
+    const { jour: jr, n } = j as Record<string, unknown>;
+    return jr === jour && typeof n === "number" && Number.isInteger(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function ecrireRelances(cle: string, r: RelancesLia): void {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:relances`, JSON.stringify(r));
+  } catch {
+    /* sans stockage, le plafond ne vaut que pour cette page : mieux que rien */
+  }
+}

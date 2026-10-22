@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle, H as HumeurLia } from './types-CYiEYwnB.mjs';
-export { A as ActionLia, a as HUMEURS_LIA, b as LIBELLE_HUMEUR, P as PuceLia, R as ReponseLia, Z as ZoneVie } from './types-CYiEYwnB.mjs';
+import { O as OptionsLia, L as LiaHandle, H as HumeurLia } from './types-WXmv0giw.mjs';
+export { A as ActionLia, a as HUMEURS_LIA, b as LIBELLE_HUMEUR, M as MotifSpontane, P as ParoleSpontanee, c as PuceLia, R as ReponseLia, Z as ZoneVie } from './types-WXmv0giw.mjs';
 
 /**
  * Fait vivre LIA : 100 traits en canvas 2D, vie propre, discussion au clic, menu au clic droit.
@@ -26,6 +26,11 @@ type Decision = {
     rang: number;
     duree: number;
 } | {
+    type: "parler";
+    motif: "salut" | "rien";
+} | {
+    type: "relance";
+} | {
     type: "humeur";
     humeur: HumeurLia;
 };
@@ -33,6 +38,10 @@ type Decision = {
 interface ContexteVie {
     curseurRecent: boolean;
     cibles: number;
+    /** Vrai quand l'hôte sait quoi lui faire dire (`onSpontane`) et que l'heure le permet. Sinon elle se tait. */
+    parole?: boolean;
+    /** Vrai tant que le plafond de relances du jour n'est pas atteint. */
+    relance?: boolean;
 }
 /**
  * Ce que LIA décide de faire quand rien ne se passe. Pure : le hasard est injecté.

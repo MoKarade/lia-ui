@@ -8,6 +8,7 @@
 - 32 tests (jsdom) + essai réel dans Chromium (clic, discussion, menu, mobile).
 
 - **v0.2.0 (lia-ui#5)** : suit le curseur, va voir un élément `[data-lia-cible]` et s'y colle (0 px d'écart au défilement, mesuré dans Chromium), vient près de Marc (`venirPres`), sans jamais faire défiler la page ; 62 tests. Cause de la plainte de Marc (22/10 22:08Z) : v0.1.0 n'avait que l'errance au hasard et les yeux au curseur ; les envies, la mémoire et les remarques spontanées de l'accueil v2 sont la tâche lia-ui#6.
+- **v0.2.1 (lia-ui#6)** : sa tirette de décisions et sa parole sont celles de la maquette v5 (`maison.js`, `penser`) : 28 % rester, 18 % errer, 22 % parler, 18 % visiter un élément (phrase `data-lia-dit`), 7 % humeur, 7 % relance ; dérive d'humeur toutes les 40 s ; `onSpontane` (texte de l'hôte), silence 22 h-7 h, 2 relances par jour. Marc, 22/10 22:35Z : « exactement pareil que la maquette ». Reste : envies et mémoire de l'accueil v2, voir lia-ui#6.
 - Corrigé en passant : un pas de temps négatif (horloge rAF en avance sur `performance.now()`) pouvait faire diverger le ressort.
 
 ## À faire
