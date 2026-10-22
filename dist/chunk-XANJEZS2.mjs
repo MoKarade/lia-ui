@@ -1,20 +1,30 @@
 // src/autonomie.ts
 var ETATS_ERRANCE = ["repos", "musique", "content", "repos", "surpris"];
 var HUMEURS_DERIVE = ["curieux", "calme", "joyeux", "concentre", "espiegle", "fatigue"];
+var HUMEURS_ECHEANCE = ["curieux", "calme", "joyeux", "concentre", "espiegle"];
+var PERIODE_DERIVE_HUMEUR_MS = 4e4;
+var CHANCE_DERIVE_HUMEUR = 0.35;
+function deriveHumeur(hasard) {
+  return hasard() < CHANCE_DERIVE_HUMEUR ? choisir(HUMEURS_ECHEANCE, hasard) : null;
+}
+function enSilence(heure, [debut, fin]) {
+  if (debut === fin) return false;
+  return debut < fin ? heure >= debut && heure < fin : heure >= debut || heure < fin;
+}
+function jourLocal(d) {
+  const deux = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
+}
 function choisir(liste, hasard) {
   const choix = liste[Math.floor(hasard() * liste.length)];
   if (choix === void 0) throw new Error("liste vide");
   return choix;
 }
 function prochaineDecision(hasard, contexte) {
+  if (contexte) return decisionMaquette(hasard, contexte);
   const r = hasard();
   if (r < 0.35) return { type: "attendre", duree: 3 + hasard() * 3 };
   if (r < 0.85) {
-    if (contexte) {
-      const s = hasard();
-      if (s < 0.3 && contexte.curseurRecent) return { type: "suivre", duree: 6 + hasard() * 5 };
-      if (s < 0.55 && contexte.cibles > 0) return { type: "voir", rang: hasard(), duree: 8 + hasard() * 6 };
-    }
     return {
       type: "errer",
       u: hasard(),
@@ -24,6 +34,33 @@ function prochaineDecision(hasard, contexte) {
     };
   }
   return { type: "humeur", humeur: choisir(HUMEURS_DERIVE, hasard) };
+}
+var SALUT_SUR_PAROLE = 0.2;
+var PART_SUIVRE = 0.35;
+function decisionMaquette(hasard, contexte) {
+  if (contexte.curseurRecent && hasard() < PART_SUIVRE) return { type: "suivre", duree: 6 + hasard() * 5 };
+  const r = hasard();
+  const rester = { type: "attendre", duree: 3 };
+  if (r < 0.28) return rester;
+  if (r < 0.46) {
+    return {
+      type: "errer",
+      u: hasard(),
+      v: hasard(),
+      duree: 4 + hasard() * 3,
+      etat: choisir(ETATS_ERRANCE, hasard)
+    };
+  }
+  if (r < 0.68) {
+    if (!contexte.parole) return rester;
+    return { type: "parler", motif: hasard() < SALUT_SUR_PAROLE ? "salut" : "rien" };
+  }
+  if (r < 0.86) {
+    if (contexte.cibles <= 0) return rester;
+    return { type: "voir", rang: hasard(), duree: 6.5 };
+  }
+  if (r < 0.93) return { type: "humeur", humeur: choisir(HUMEURS_DERIVE, hasard) };
+  return contexte.parole && contexte.relance ? { type: "relance" } : rester;
 }
 function pointDansZone(zone, u, v, marge) {
   const largeur = Math.max(0, zone.w - 2 * marge);
@@ -1618,6 +1655,24 @@ function ecrireMemoire(cle, m) {
   } catch {
   }
 }
+function lireRelances(cle, jour) {
+  try {
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:relances`);
+    if (brut2 === null) return 0;
+    const j = JSON.parse(brut2);
+    if (typeof j !== "object" || j === null) return 0;
+    const { jour: jr, n } = j;
+    return jr === jour && typeof n === "number" && Number.isInteger(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+function ecrireRelances(cle, r) {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:relances`, JSON.stringify(r));
+  } catch {
+  }
+}
 
 // src/styles.ts
 var CSS = `
@@ -2236,18 +2291,55 @@ function mountLia(options = {}) {
     cible = { x: p.x - r.left, y: p.y - r.top };
     if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
   }
+  const LONGUEUR_MAX_SPONTANE = 280;
+  const silence = options.silence ?? [22, 7];
+  const relancesMax = options.relancesParJour ?? 2;
+  const peutParlerSeule = () => !enSilence((/* @__PURE__ */ new Date()).getHours(), silence);
+  const relancesRestantes = () => lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) < relancesMax;
+  const direSpontane = (motif) => {
+    if (!options.onSpontane || !peutParlerSeule()) return false;
+    let rep;
+    try {
+      rep = options.onSpontane(motif);
+    } catch (e) {
+      console.error("LIA : onSpontane a \xE9chou\xE9, elle se tait", e);
+      return false;
+    }
+    const parole = typeof rep === "string" ? { text: rep } : rep ?? null;
+    const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (!parole || !texte) return false;
+    return dire(texte, parole.chips ? { chips: parole.chips } : void 0);
+  };
+  const visiter = (el2, secondes) => {
+    if (!allerVoir(el2, secondes)) return;
+    setTimeout(() => {
+      if (detruit || chatOuvert || glisse || parle || !peutParlerSeule()) return;
+      if (attention?.type !== "element" || attention.el !== el2) return;
+      const dit = el2.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+      if (dit) dire(dit);
+    }, 1500);
+  };
   const penser = () => {
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
     if (t < errance.jusqua || t - dernierMot < 14) return;
     const vues = regardables();
-    const d = prochaineDecision(Math.random, { curseurRecent: curseurRecent(), cibles: vues.length });
+    const d = prochaineDecision(Math.random, {
+      curseurRecent: curseurRecent(),
+      cibles: vues.length,
+      parole: !!options.onSpontane && peutParlerSeule(),
+      relance: relancesRestantes()
+    });
     if (d.type === "suivre") {
       suivreCurseur(d.duree);
     } else if (d.type === "voir") {
       const el2 = vues[rangDe(d.rang, vues.length)];
-      if (el2) allerVoir(el2, d.duree);
+      if (el2) visiter(el2, d.duree);
+    } else if (d.type === "parler") {
+      direSpontane(d.motif);
+    } else if (d.type === "relance") {
+      if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(/* @__PURE__ */ new Date()), n: lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) + 1 });
     } else if (d.type === "attendre") {
       errance = { jusqua: t + d.duree };
       choisir2("repos");
@@ -2259,6 +2351,11 @@ function mountLia(options = {}) {
       setHumeur2(d.humeur);
     }
   };
+  const minuterieHumeur = setInterval(() => {
+    if (!vie || document.hidden || chatOuvert) return;
+    const h = deriveHumeur(Math.random);
+    if (h) setHumeur2(h);
+  }, PERIODE_DERIVE_HUMEUR_MS);
   const minuterieVie = setInterval(penser, 1200);
   const dessinerImage = (still, dt) => {
     if (!still) majAttention();
@@ -2375,6 +2472,7 @@ function mountLia(options = {}) {
       detruit = true;
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
+      clearInterval(minuterieHumeur);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);
@@ -2395,4 +2493,4 @@ export {
   dansZone,
   mountLia
 };
-//# sourceMappingURL=chunk-G5T4N45N.mjs.map
+//# sourceMappingURL=chunk-XANJEZS2.mjs.map
