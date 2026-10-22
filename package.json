@@ -32,6 +32,16 @@
         "default": "./dist/react.js"
       }
     },
+    "./blocs": {
+      "import": {
+        "types": "./dist/blocs/index.d.mts",
+        "default": "./dist/blocs/index.mjs"
+      },
+      "require": {
+        "types": "./dist/blocs/index.d.ts",
+        "default": "./dist/blocs/index.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
