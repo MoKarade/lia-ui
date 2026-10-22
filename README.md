@@ -37,7 +37,7 @@ Sans framework : `const lia = mountLia({ ask, actions })`, puis `lia.dire("…")
 | `actions` | Entrées du menu (clic droit, appui long, touche Menu). L'hôte vérifie les droits : LIA n'exécute rien d'elle-même. |
 | `container` | Élément où elle vit (colonne du hub). Sans lui : la fenêtre. |
 | `bounds()` | Zone où elle a le droit de se déplacer. |
-| `onChip`, `onHumeur`, `renderBlocks` | Réponses rapides, voyant d'humeur, blocs composés (validés par l'hôte). |
+| `onChip`, `onHumeur`, `renderBlocks` | Réponses rapides, voyant d'humeur, blocs composés (validés par l'hôte ; rendu prêt : `rendreBlocs` de `@mokarade/lia-ui/blocs`). |
 | `cibles` | Sélecteur des éléments qu'elle peut aller voir (défaut `[data-lia-cible]`). Elle s'en approche, reste collée dessus quand la page défile, et ne fait **jamais** défiler la page. |
 | `onSpontane(motif)` | Ce qu'elle dit quand elle a envie de parler seule (`rien`, `salut`, `relance`). Renvoie le texte (ou `{ text, chips }`), ou `null` si l'hôte n'a rien de vrai à dire : elle se tait. Absent : jamais de parole spontanée. |
 | `silence`, `relancesParJour` | Heures sans parole spontanée (défaut `[22, 7]`) et plafond de relances par jour (défaut 2, mémorisé dans le navigateur). |
