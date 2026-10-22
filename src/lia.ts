@@ -1,3 +1,4 @@
+import { estRegarde, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./attache.js";
 import { dansZone, pointDansZone, prochaineDecision } from "./autonomie.js";
 import {
   ST,
@@ -134,6 +135,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
   let errance = { jusqua: 0 };
+  /** Ce qu'elle suit ou regarde en ce moment (rien = elle fait sa vie). Jamais de défilement de la page. */
+  type Attention =
+    | { type: "curseur"; jusqua: number }
+    | { type: "element"; el: Element; jusqua: number; colle: boolean };
+  let attention: Attention | null = null;
+  const pointeur = { x: 0, y: 0, ms: -1e9, fin: false };
+  const selecteurCibles = options.cibles ?? "[data-lia-cible]";
   let relache = 0;
   let glisse: { x: number; y: number; x0: number; y0: number; deplace: boolean } | null = null;
   let appui: ReturnType<typeof setTimeout> | undefined;
@@ -488,6 +496,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   function setVieAutonome(actifVie: boolean): void {
     vie = actifVie && !sansMouvement;
+    if (!vie) finAttention();
     memoriser();
   }
 
@@ -566,6 +575,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   });
 
   const surCurseur = (e: PointerEvent): void => {
+    pointeur.x = e.clientX;
+    pointeur.y = e.clientY;
+    pointeur.ms = performance.now();
+    pointeur.fin = e.pointerType !== "touch";
     const r = couche.getBoundingClientRect();
     regarder(limiter((e.clientX - r.left - pos.x) / 400, -1, 1), limiter((e.clientY - r.top - pos.y) / 400, -1, 1));
   };
@@ -583,14 +596,93 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   window.addEventListener("resize", surRedim);
 
+  /* ── suivre, regarder ── */
+  const fenetre = (): { w: number; h: number } => ({ w: window.innerWidth, h: window.innerHeight });
+  const curseurRecent = (): boolean => pointeur.fin && performance.now() - pointeur.ms < 4000;
+  const regardables = (): Element[] => {
+    let liste: Element[];
+    try {
+      liste = [...document.querySelectorAll(selecteurCibles)];
+    } catch {
+      // Sélecteur invalide fourni par l'hôte : elle n'a alors rien à aller voir, la vie continue.
+      return [];
+    }
+    const f = fenetre();
+    return liste.filter((x) => !couche.contains(x) && estRegarde(x.getBoundingClientRect(), f));
+  };
+  const peutBouger = (): boolean => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
+
+  function finAttention(): void {
+    if (!attention) return;
+    attention = null;
+    cible = { x: pos.x, y: pos.y };
+    errance = { jusqua: t + 4 };
+    choisir(etatForce ?? "repos");
+  }
+
+  function suivreCurseur(secondes = 8): boolean {
+    if (!peutBouger() || !curseurRecent()) return false;
+    attention = { type: "curseur", jusqua: t + secondes };
+    errance = { jusqua: t + secondes };
+    choisir(etatForce ?? "repos");
+    return true;
+  }
+
+  function allerVoir(element: Element, secondes = 10): boolean {
+    if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
+    attention = { type: "element", el: element, jusqua: t + secondes, colle: false };
+    errance = { jusqua: t + secondes };
+    choisir(etatForce ?? "surveille");
+    return true;
+  }
+
+  function venirPres(): boolean {
+    if (!peutBouger()) return false;
+    attention = null;
+    const r = couche.getBoundingClientRect();
+    const z = zoneVie();
+    const point = curseurRecent()
+      ? { x: pointeur.x + 90 - r.left, y: pointeur.y - 60 - r.top }
+      : { x: z.x + z.w - rayon * 1.6, y: z.y + z.h - rayon * 1.6 };
+    cible = dansZone(z, point.x, point.y, rayon);
+    errance = { jusqua: t + 5 };
+    return true;
+  }
+
+  /** Met `cible` à jour d'après ce qu'elle suit ; l'arrête quand elle n'a plus de raison de le faire. */
+  function majAttention(): void {
+    const a = attention;
+    if (!a) return;
+    if (!peutBouger() || t > a.jusqua) return finAttention();
+    const r = couche.getBoundingClientRect();
+    const f = fenetre();
+    if (a.type === "curseur") {
+      if (!curseurRecent()) return finAttention();
+      const p = pointPresDuCurseur(pointeur, t, rayon, f);
+      cible = { x: p.x - r.left, y: p.y - r.top };
+      return;
+    }
+    const rect = a.el.isConnected ? a.el.getBoundingClientRect() : null;
+    if (!rect || !estRegarde(rect, f)) return finAttention();
+    const p = pointPresDeLElement(rect, rayon, f);
+    cible = { x: p.x - r.left, y: p.y - r.top };
+    if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
+  }
+
   /* ── vie propre ── */
   const penser = (): void => {
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
     if (t < errance.jusqua || t - dernierMot < 14) return;
-    const d = prochaineDecision(Math.random);
-    if (d.type === "attendre") {
+    const vues = regardables();
+    const d = prochaineDecision(Math.random, { curseurRecent: curseurRecent(), cibles: vues.length });
+    if (d.type === "suivre") {
+      suivreCurseur(d.duree);
+    } else if (d.type === "voir") {
+      const el = vues[rangDe(d.rang, vues.length)];
+      if (el) allerVoir(el, d.duree);
+    } else if (d.type === "attendre") {
       errance = { jusqua: t + d.duree };
       choisir("repos");
     } else if (d.type === "errer") {
@@ -605,10 +697,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /* ── image par image ── */
   const dessinerImage = (still: boolean, dt: number): void => {
+    if (!still) majAttention();
     const z = zoneVie();
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
-    if (sansMouvement || still) {
+    // Collée à un élément : exactement sur lui, sans retard ni flottement quand la page défile.
+    const colle = attention?.type === "element" && attention.colle;
+    if (sansMouvement || still || colle) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
@@ -682,7 +777,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   const boucle = (maintenant: number): void => {
     if (detruit) return;
-    const dt = Math.min(0.05, (maintenant - dernier) / 1000 || 0);
+    // Jamais négatif : l'horloge de rAF peut précéder `performance.now()` d'un instant, et un pas négatif ferait diverger le ressort.
+    const dt = Math.max(0, Math.min(0.05, (maintenant - dernier) / 1000 || 0));
     dernier = maintenant;
     if (!document.hidden) {
       t += dt;
@@ -714,6 +810,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       choisir(e ?? "repos");
     },
     setVieAutonome,
+    suivreCurseur,
+    allerVoir,
+    venirPres,
+    rester: finAttention,
     destroy() {
       if (detruit) return;
       detruit = true;

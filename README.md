@@ -38,7 +38,12 @@ Sans framework : `const lia = mountLia({ ask, actions })`, puis `lia.dire("…")
 | `container` | Élément où elle vit (colonne du hub). Sans lui : la fenêtre. |
 | `bounds()` | Zone où elle a le droit de se déplacer. |
 | `onChip`, `onHumeur`, `renderBlocks` | Réponses rapides, voyant d'humeur, blocs composés (validés par l'hôte). |
+| `cibles` | Sélecteur des éléments qu'elle peut aller voir (défaut `[data-lia-cible]`). Elle s'en approche, reste collée dessus quand la page défile, et ne fait **jamais** défiler la page. |
 | `rayon`, `cle`, `vieAutonome`, `salut` | Taille, clé de mémorisation locale, vie autonome, message d'arrivée. |
+
+## Elle te suit, elle vit seule
+
+Sans rien lui demander, LIA décide d'elle-même de rester là, d'errer, de suivre le curseur un moment (souris ou stylet, jamais au doigt) ou d'aller voir un des éléments `[data-lia-cible]` visibles, puis s'y colle exactement (écart de 0 px mesuré pendant le défilement). L'hôte peut aussi la guider : `lia.suivreCurseur(secondes)`, `lia.allerVoir(element, secondes)`, `lia.venirPres()` (près du curseur ou sur le bord, avant de la faire parler) et `lia.rester()`. Tout est coupé par « Couper sa vie autonome » et par `prefers-reduced-motion`. Elle ne parle jamais seule : seul l'hôte appelle `dire`.
 
 Les couleurs se surchargent avec les variables `--lia-bg`, `--lia-surface`, `--lia-text`, `--lia-accent`… sur `.lia-ui`.
 
