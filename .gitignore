@@ -1,3 +1,7 @@
 node_modules
 *.log
 .DS_Store
+
+# Graphe de code local (scripts/graphe.sh) : sorties de mesure, jamais committées
+graphify-out/
+.graphify_root
