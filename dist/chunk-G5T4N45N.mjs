@@ -6,10 +6,15 @@ function choisir(liste, hasard) {
   if (choix === void 0) throw new Error("liste vide");
   return choix;
 }
-function prochaineDecision(hasard) {
+function prochaineDecision(hasard, contexte) {
   const r = hasard();
   if (r < 0.35) return { type: "attendre", duree: 3 + hasard() * 3 };
   if (r < 0.85) {
+    if (contexte) {
+      const s = hasard();
+      if (s < 0.3 && contexte.curseurRecent) return { type: "suivre", duree: 6 + hasard() * 5 };
+      if (s < 0.55 && contexte.cibles > 0) return { type: "voir", rang: hasard(), duree: 8 + hasard() * 6 };
+    }
     return {
       type: "errer",
       u: hasard(),
@@ -31,6 +36,30 @@ function dansZone(zone, x, y, marge) {
   const minY = zone.y + marge;
   const maxY = Math.max(minY, zone.y + zone.h - marge);
   return { x: Math.min(maxX, Math.max(minX, x)), y: Math.min(maxY, Math.max(minY, y)) };
+}
+
+// src/attache.ts
+var limiter = (v, min, max) => Math.min(Math.max(max, min), Math.max(min, v));
+function pointPresDuCurseur(curseur, t, rayon, fenetre) {
+  const a = t * 0.7;
+  return {
+    x: limiter(curseur.x + Math.cos(a) * rayon * 1.3, rayon * 0.55, fenetre.w - rayon * 0.55),
+    y: limiter(curseur.y + Math.sin(a) * rayon * 0.9 - rayon * 1.05, rayon * 0.55, fenetre.h - rayon * 0.55)
+  };
+}
+function pointPresDeLElement(rect, rayon, fenetre) {
+  let x = rect.right + rayon * 0.85;
+  if (x + rayon * 0.6 > fenetre.w) x = rect.left - rayon * 0.85;
+  if (x - rayon * 0.6 < 0) x = (rect.left + rect.right) / 2;
+  const y = limiter((rect.top + rect.bottom) / 2, rayon * 0.6, fenetre.h - rayon * 0.6);
+  return { x, y };
+}
+function estRegarde(rect, fenetre) {
+  if (rect.right <= rect.left || rect.bottom <= rect.top) return false;
+  return rect.top < fenetre.h * 0.78 && rect.bottom > fenetre.h * 0.22 && rect.right > 0 && rect.left < fenetre.w;
+}
+function rangDe(u, n) {
+  return n > 0 ? Math.min(n - 1, Math.floor(u * n)) : -1;
 }
 
 // src/moteur/moteur.js
@@ -1669,7 +1698,7 @@ function injecterStyles() {
   s.textContent = CSS;
   document.head.appendChild(s);
 }
-var limiter = (x, a, b) => Math.max(a, Math.min(b, x));
+var limiter2 = (x, a, b) => Math.max(a, Math.min(b, x));
 function mountLia(options = {}) {
   if (typeof document === "undefined") throw new Error("mountLia : \xE0 appeler dans le navigateur uniquement");
   if (actif) throw new Error("mountLia : une seule LIA par page (appeler destroy() avant d'en remonter une)");
@@ -1720,6 +1749,9 @@ function mountLia(options = {}) {
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
   let errance = { jusqua: 0 };
+  let attention = null;
+  const pointeur = { x: 0, y: 0, ms: -1e9, fin: false };
+  const selecteurCibles = options.cibles ?? "[data-lia-cible]";
   let relache = 0;
   let glisse = null;
   let appui;
@@ -1771,8 +1803,8 @@ function mountLia(options = {}) {
     const lw = Math.max(1, z.w - 2 * marge);
     const lh = Math.max(1, z.h - 2 * marge);
     ecrireMemoire(cle, {
-      u: limiter((pos.x - z.x - marge) / lw, 0, 1),
-      v: limiter((pos.y - z.y - marge) / lh, 0, 1),
+      u: limiter2((pos.x - z.x - marge) / lw, 0, 1),
+      v: limiter2((pos.y - z.y - marge) / lh, 0, 1),
       vie
     });
   };
@@ -1905,7 +1937,7 @@ function mountLia(options = {}) {
     const h = boite.offsetHeight;
     const aDroite = pos.x + rayon * 0.9 + w + 8 <= z.x + z.w;
     const x = aDroite ? pos.x + rayon * 0.9 : pos.x - rayon * 0.9 - w;
-    const y = limiter(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
+    const y = limiter2(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
     boite.style.left = `${Math.max(z.x + 8, x)}px`;
     boite.style.top = `${y}px`;
   };
@@ -2036,8 +2068,8 @@ function mountLia(options = {}) {
     const r = couche.getBoundingClientRect();
     const lx = x - r.left;
     const ly = y - r.top;
-    menu.style.left = `${limiter(lx, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
-    menu.style.top = `${limiter(ly, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
+    menu.style.left = `${limiter2(lx, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${limiter2(ly, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
     menu.querySelector("[role=menuitem]")?.focus();
   };
   function fermerMenu() {
@@ -2048,6 +2080,7 @@ function mountLia(options = {}) {
   }
   function setVieAutonome(actifVie) {
     vie = actifVie && !sansMouvement;
+    if (!vie) finAttention();
     memoriser();
   }
   const fixerDepuisEvenement = (e) => {
@@ -2121,8 +2154,12 @@ function mountLia(options = {}) {
     }
   });
   const surCurseur = (e) => {
+    pointeur.x = e.clientX;
+    pointeur.y = e.clientY;
+    pointeur.ms = performance.now();
+    pointeur.fin = e.pointerType !== "touch";
     const r = couche.getBoundingClientRect();
-    regarder(limiter((e.clientX - r.left - pos.x) / 400, -1, 1), limiter((e.clientY - r.top - pos.y) / 400, -1, 1));
+    regarder(limiter2((e.clientX - r.left - pos.x) / 400, -1, 1), limiter2((e.clientY - r.top - pos.y) / 400, -1, 1));
   };
   window.addEventListener("pointermove", surCurseur, { passive: true });
   const surClicHors = (e) => {
@@ -2137,13 +2174,81 @@ function mountLia(options = {}) {
     if (sansMouvement) dessinerUneFois();
   };
   window.addEventListener("resize", surRedim);
+  const fenetre = () => ({ w: window.innerWidth, h: window.innerHeight });
+  const curseurRecent = () => pointeur.fin && performance.now() - pointeur.ms < 4e3;
+  const regardables = () => {
+    let liste;
+    try {
+      liste = [...document.querySelectorAll(selecteurCibles)];
+    } catch {
+      return [];
+    }
+    const f = fenetre();
+    return liste.filter((x) => !couche.contains(x) && estRegarde(x.getBoundingClientRect(), f));
+  };
+  const peutBouger = () => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
+  function finAttention() {
+    if (!attention) return;
+    attention = null;
+    cible = { x: pos.x, y: pos.y };
+    errance = { jusqua: t + 4 };
+    choisir2(etatForce ?? "repos");
+  }
+  function suivreCurseur(secondes = 8) {
+    if (!peutBouger() || !curseurRecent()) return false;
+    attention = { type: "curseur", jusqua: t + secondes };
+    errance = { jusqua: t + secondes };
+    choisir2(etatForce ?? "repos");
+    return true;
+  }
+  function allerVoir(element, secondes = 10) {
+    if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
+    attention = { type: "element", el: element, jusqua: t + secondes, colle: false };
+    errance = { jusqua: t + secondes };
+    choisir2(etatForce ?? "surveille");
+    return true;
+  }
+  function venirPres() {
+    if (!peutBouger()) return false;
+    attention = null;
+    const r = couche.getBoundingClientRect();
+    const z = zoneVie();
+    const point = curseurRecent() ? { x: pointeur.x + 90 - r.left, y: pointeur.y - 60 - r.top } : { x: z.x + z.w - rayon * 1.6, y: z.y + z.h - rayon * 1.6 };
+    cible = dansZone(z, point.x, point.y, rayon);
+    errance = { jusqua: t + 5 };
+    return true;
+  }
+  function majAttention() {
+    const a = attention;
+    if (!a) return;
+    if (!peutBouger() || t > a.jusqua) return finAttention();
+    const r = couche.getBoundingClientRect();
+    const f = fenetre();
+    if (a.type === "curseur") {
+      if (!curseurRecent()) return finAttention();
+      const p2 = pointPresDuCurseur(pointeur, t, rayon, f);
+      cible = { x: p2.x - r.left, y: p2.y - r.top };
+      return;
+    }
+    const rect = a.el.isConnected ? a.el.getBoundingClientRect() : null;
+    if (!rect || !estRegarde(rect, f)) return finAttention();
+    const p = pointPresDeLElement(rect, rayon, f);
+    cible = { x: p.x - r.left, y: p.y - r.top };
+    if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
+  }
   const penser = () => {
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
     if (t < errance.jusqua || t - dernierMot < 14) return;
-    const d = prochaineDecision(Math.random);
-    if (d.type === "attendre") {
+    const vues = regardables();
+    const d = prochaineDecision(Math.random, { curseurRecent: curseurRecent(), cibles: vues.length });
+    if (d.type === "suivre") {
+      suivreCurseur(d.duree);
+    } else if (d.type === "voir") {
+      const el2 = vues[rangDe(d.rang, vues.length)];
+      if (el2) allerVoir(el2, d.duree);
+    } else if (d.type === "attendre") {
       errance = { jusqua: t + d.duree };
       choisir2("repos");
     } else if (d.type === "errer") {
@@ -2156,10 +2261,12 @@ function mountLia(options = {}) {
   };
   const minuterieVie = setInterval(penser, 1200);
   const dessinerImage = (still, dt) => {
+    if (!still) majAttention();
     const z = zoneVie();
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
-    if (sansMouvement || still) {
+    const colle = attention?.type === "element" && attention.colle;
+    if (sansMouvement || still || colle) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
@@ -2176,7 +2283,7 @@ function mountLia(options = {}) {
       }
     }
     const vitesse = Math.hypot(pos.vx, pos.vy);
-    const v = limiter(vitesse / (Math.max(60, rayon) * 5), 0, 1);
+    const v = limiter2(vitesse / (Math.max(60, rayon) * 5), 0, 1);
     const k2 = still ? 1 : 1 - Math.exp(-dt * 3.5);
     for (const id of ST) {
       const w = etatMoteur.W[id] ?? 0;
@@ -2219,7 +2326,7 @@ function mountLia(options = {}) {
     if (!bulle.hidden) {
       const w = bulle.offsetWidth;
       const h = bulle.offsetHeight;
-      bulle.style.left = `${limiter(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
+      bulle.style.left = `${limiter2(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
     if (chat) placerAutour(chat);
@@ -2229,7 +2336,7 @@ function mountLia(options = {}) {
   }
   const boucle = (maintenant) => {
     if (detruit) return;
-    const dt = Math.min(0.05, (maintenant - dernier) / 1e3 || 0);
+    const dt = Math.max(0, Math.min(0.05, (maintenant - dernier) / 1e3 || 0));
     dernier = maintenant;
     if (!document.hidden) {
       t += dt;
@@ -2259,6 +2366,10 @@ function mountLia(options = {}) {
       choisir2(e ?? "repos");
     },
     setVieAutonome,
+    suivreCurseur,
+    allerVoir,
+    venirPres,
+    rester: finAttention,
     destroy() {
       if (detruit) return;
       detruit = true;
@@ -2284,4 +2395,4 @@ export {
   dansZone,
   mountLia
 };
-//# sourceMappingURL=chunk-HMD6PPOF.mjs.map
+//# sourceMappingURL=chunk-G5T4N45N.mjs.map

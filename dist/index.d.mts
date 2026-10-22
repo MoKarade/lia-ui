@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle, H as HumeurLia } from './types-CSbitNRl.mjs';
-export { A as ActionLia, a as HUMEURS_LIA, b as LIBELLE_HUMEUR, P as PuceLia, R as ReponseLia, Z as ZoneVie } from './types-CSbitNRl.mjs';
+import { O as OptionsLia, L as LiaHandle, H as HumeurLia } from './types-CYiEYwnB.mjs';
+export { A as ActionLia, a as HUMEURS_LIA, b as LIBELLE_HUMEUR, P as PuceLia, R as ReponseLia, Z as ZoneVie } from './types-CYiEYwnB.mjs';
 
 /**
  * Fait vivre LIA : 100 traits en canvas 2D, vie propre, discussion au clic, menu au clic droit.
@@ -19,15 +19,30 @@ type Decision = {
     duree: number;
     etat: string;
 } | {
+    type: "suivre";
+    duree: number;
+} | {
+    type: "voir";
+    rang: number;
+    duree: number;
+} | {
     type: "humeur";
     humeur: HumeurLia;
 };
+/** Ce que LIA peut faire en ce moment : suivre le curseur (bougé récemment) ou aller voir un des éléments désignés. */
+interface ContexteVie {
+    curseurRecent: boolean;
+    cibles: number;
+}
 /**
  * Ce que LIA décide de faire quand rien ne se passe. Pure : le hasard est injecté.
  * `u` et `v` sont des fractions (0..1) de la zone de vie ; l'appelant les convertit en pixels
  * en gardant une marge égale au rayon. Elle ne décide jamais de parler : seul l'hôte la fait parler.
+ * Sans `contexte`, seul le hasard décide (errer, attendre, humeur) ; avec lui, une part de l'errance
+ * devient « suivre le curseur » ou « aller voir un élément » quand c'est possible. `rang` est un tirage
+ * dans [0, 1[ que l'appelant convertit en rang parmi les éléments qu'il connaît.
  */
-declare function prochaineDecision(hasard: Hasard): Decision;
+declare function prochaineDecision(hasard: Hasard, contexte?: ContexteVie): Decision;
 /** Convertit une fraction de la zone en position, en gardant `marge` pixels du bord. */
 declare function pointDansZone(zone: {
     x: number;

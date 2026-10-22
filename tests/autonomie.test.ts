@@ -58,3 +58,41 @@ describe("zones", () => {
     expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
   });
 });
+
+describe("prochaineDecision avec contexte", () => {
+  it("suit le curseur quand il a bougé récemment", () => {
+    const d = prochaineDecision(suite([0.5, 0.1, 0.5]), { curseurRecent: true, cibles: 0 });
+    expect(d).toEqual({ type: "suivre", duree: 8.5 });
+  });
+
+  it("ne suit pas un curseur immobile ou absent : elle erre", () => {
+    const d = prochaineDecision(suite([0.5, 0.1, 0.5, 0.5, 0.5, 0.5, 0.2]), { curseurRecent: false, cibles: 0 });
+    expect(d.type).toBe("errer");
+  });
+
+  it("va voir un élément désigné, avec un rang à convertir", () => {
+    const d = prochaineDecision(suite([0.5, 0.4, 0.75, 0.5]), { curseurRecent: false, cibles: 3 });
+    expect(d).toEqual({ type: "voir", rang: 0.75, duree: 11 });
+  });
+
+  it("n'invente pas d'élément quand il n'y en a pas", () => {
+    const d = prochaineDecision(suite([0.5, 0.4, 0.5, 0.5, 0.5, 0.5, 0.2]), { curseurRecent: false, cibles: 0 });
+    expect(d.type).toBe("errer");
+  });
+
+  it("sans contexte, rien ne change : le même tirage donne la même décision qu'avant", () => {
+    expect(prochaineDecision(suite([0.5, 0.25, 0.75, 0.5, 0.2])).type).toBe("errer");
+  });
+
+  it("ne décide jamais de parler, même avec un contexte riche", () => {
+    let seed = 11;
+    const hasard = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const vus = new Set<string>();
+    for (let i = 0; i < 800; i++) vus.add(prochaineDecision(hasard, { curseurRecent: true, cibles: 4 }).type);
+    expect([...vus].sort()).toEqual(["attendre", "errer", "humeur", "suivre", "voir"]);
+  });
+});
+

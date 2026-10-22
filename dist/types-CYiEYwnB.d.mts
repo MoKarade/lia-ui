@@ -63,6 +63,11 @@ interface OptionsLia {
     vieAutonome?: boolean;
     /** Message de bienvenue à l'arrivée ; défaut : aucun. */
     salut?: string;
+    /**
+     * Sélecteur CSS des éléments que LIA peut aller voir (elle s'en approche et reste collée à eux
+     * pendant qu'ils défilent). Défaut : `[data-lia-cible]`. Elle ne fait jamais défiler la page.
+     */
+    cibles?: string;
 }
 interface LiaHandle {
     /** Fait parler LIA (bulle + voix). Sans effet si le chat est ouvert ou si on la déplace. */
@@ -75,6 +80,14 @@ interface LiaHandle {
     /** Force une silhouette (« lit », « cherche »…) ; `null` la rend à sa vie. */
     setEtat(etat: string | null): void;
     setVieAutonome(actif: boolean): void;
+    /** Suit le curseur un moment (souris ou stylet : sans effet au tactile). `secondes` : défaut 8. */
+    suivreCurseur(secondes?: number): boolean;
+    /** Va se coller à cet élément, sans faire défiler la page. `secondes` : défaut 10. */
+    allerVoir(element: Element, secondes?: number): boolean;
+    /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
+    venirPres(): boolean;
+    /** Arrête de suivre ou de regarder : elle reste où elle est. */
+    rester(): void;
     destroy(): void;
 }
 
