@@ -1,0 +1,44 @@
+"use client";
+import {
+  mountLia
+} from "./chunk-HMD6PPOF.mjs";
+
+// src/react.tsx
+import { useEffect, useRef } from "react";
+function Lia(props) {
+  const derniere = useRef(props);
+  derniere.current = props;
+  useEffect(() => {
+    const p = derniere.current;
+    const lia = mountLia({
+      ...p.container ? { container: p.container } : {},
+      ...p.rayon !== void 0 ? { rayon: p.rayon } : {},
+      ...p.cle !== void 0 ? { cle: p.cle } : {},
+      ...p.vieAutonome !== void 0 ? { vieAutonome: p.vieAutonome } : {},
+      ...p.salut !== void 0 ? { salut: p.salut } : {},
+      ...p.bounds ? { bounds: () => derniere.current.bounds?.() ?? { x: 0, y: 0, w: 0, h: 0 } } : {},
+      ...p.ask ? {
+        ask: (q, signal) => {
+          const ask = derniere.current.ask;
+          return ask ? ask(q, signal) : Promise.reject(new Error("LIA : ask retir\xE9"));
+        }
+      } : {},
+      get actions() {
+        return derniere.current.actions ?? [];
+      },
+      onChip: (id, contexte) => derniere.current.onChip?.(id, contexte),
+      onHumeur: (h) => derniere.current.onHumeur?.(h),
+      renderBlocks: (b, dans) => derniere.current.renderBlocks?.(b, dans)
+    });
+    derniere.current.onPret?.(lia);
+    return () => {
+      derniere.current.onPret?.(null);
+      lia.destroy();
+    };
+  }, []);
+  return null;
+}
+export {
+  Lia
+};
+//# sourceMappingURL=react.mjs.map
