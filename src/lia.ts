@@ -1,5 +1,13 @@
 import { estRegarde, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./attache.js";
-import { dansZone, pointDansZone, prochaineDecision } from "./autonomie.js";
+import {
+  PERIODE_DERIVE_HUMEUR_MS,
+  dansZone,
+  deriveHumeur,
+  enSilence,
+  jourLocal,
+  pointDansZone,
+  prochaineDecision,
+} from "./autonomie.js";
 import {
   ST,
   brut,
@@ -14,13 +22,15 @@ import {
   THK,
   type EtatMoteur,
 } from "./moteur/moteur.js";
-import { ecrireMemoire, lireMemoire } from "./stockage.js";
+import { ecrireMemoire, ecrireRelances, lireMemoire, lireRelances } from "./stockage.js";
 import { CSS } from "./styles.js";
 import {
   type ActionLia,
   type HumeurLia,
   type LiaHandle,
+  type MotifSpontane,
   type OptionsLia,
+  type ParoleSpontanee,
   type PuceLia,
   type ReponseLia,
   type ZoneVie,
@@ -670,18 +680,60 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   }
 
   /* ── vie propre ── */
+  const LONGUEUR_MAX_SPONTANE = 280;
+  const silence = options.silence ?? [22, 7];
+  const relancesMax = options.relancesParJour ?? 2;
+  const peutParlerSeule = (): boolean => !enSilence(new Date().getHours(), silence);
+  const relancesRestantes = (): boolean => lireRelances(cle, jourLocal(new Date())) < relancesMax;
+
+  /** Ce que l'hôte la fait dire seule. Son échec ne doit jamais arrêter sa vie : elle se tait et le dit dans la console. */
+  const direSpontane = (motif: MotifSpontane): boolean => {
+    if (!options.onSpontane || !peutParlerSeule()) return false;
+    let rep: string | ParoleSpontanee | null | undefined;
+    try {
+      rep = options.onSpontane(motif);
+    } catch (e) {
+      console.error("LIA : onSpontane a échoué, elle se tait", e);
+      return false;
+    }
+    const parole: ParoleSpontanee | null = typeof rep === "string" ? { text: rep } : (rep ?? null);
+    const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (!parole || !texte) return false;
+    return dire(texte, parole.chips ? { chips: parole.chips } : undefined);
+  };
+
+  const visiter = (el: Element, secondes: number): void => {
+    if (!allerVoir(el, secondes)) return;
+    // Comme dans la maquette : elle arrive, puis dit sa phrase au bout d'une seconde et demie si elle y est encore.
+    setTimeout(() => {
+      if (detruit || chatOuvert || glisse || parle || !peutParlerSeule()) return;
+      if (attention?.type !== "element" || attention.el !== el) return;
+      const dit = el.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+      if (dit) dire(dit);
+    }, 1500);
+  };
+
   const penser = (): void => {
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
     if (t < errance.jusqua || t - dernierMot < 14) return;
     const vues = regardables();
-    const d = prochaineDecision(Math.random, { curseurRecent: curseurRecent(), cibles: vues.length });
+    const d = prochaineDecision(Math.random, {
+      curseurRecent: curseurRecent(),
+      cibles: vues.length,
+      parole: !!options.onSpontane && peutParlerSeule(),
+      relance: relancesRestantes(),
+    });
     if (d.type === "suivre") {
       suivreCurseur(d.duree);
     } else if (d.type === "voir") {
       const el = vues[rangDe(d.rang, vues.length)];
-      if (el) allerVoir(el, d.duree);
+      if (el) visiter(el, d.duree);
+    } else if (d.type === "parler") {
+      direSpontane(d.motif);
+    } else if (d.type === "relance") {
+      if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(new Date()), n: lireRelances(cle, jourLocal(new Date())) + 1 });
     } else if (d.type === "attendre") {
       errance = { jusqua: t + d.duree };
       choisir("repos");
@@ -693,6 +745,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       setHumeur(d.humeur);
     }
   };
+  const minuterieHumeur = setInterval(() => {
+    if (!vie || document.hidden || chatOuvert) return;
+    const h = deriveHumeur(Math.random);
+    if (h) setHumeur(h);
+  }, PERIODE_DERIVE_HUMEUR_MS);
   const minuterieVie = setInterval(penser, 1200);
 
   /* ── image par image ── */
@@ -819,6 +876,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       detruit = true;
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
+      clearInterval(minuterieHumeur);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);
