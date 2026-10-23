@@ -18,5 +18,7 @@ export type {
 export type { Decision, Hasard } from "./autonomie.js";
 export { composerQuestion, decrireParDefaut, ENTREES_MENU, SELECTEUR_ELEMENTS } from "./ecran.js";
 export { GESTES, HUMEURS_MENU } from "./gestes.js";
+export { ENVIES_DEPART, apresComportement, candidats, choisirComportement, majEnvies } from "./cerveau.js";
+export type { Candidat, Comportement, Envies, FaitLia } from "./cerveau.js";
 export type { ModeElement } from "./ecran.js";
 export type { GesteLia } from "./gestes.js";

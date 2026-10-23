@@ -60,16 +60,16 @@ describe("mouvement réduit : mode « doux » (défaut)", () => {
 
   it("parle seule et sa bulle s'écrit d'un coup", () => {
     vi.useFakeTimers();
-    const hasard = vi.spyOn(Math, "random").mockReturnValue(0.5); // 0,46 à 0,68 : elle veut parler
+    const hasard = vi.spyOn(Math, "random").mockReturnValue(0.3); // choix pondéré : causer, motif « rien »
     lia = mountLia({ onSpontane: () => "Il est calme ici.", silence: [3, 3] });
-    vi.advanceTimersByTime(20_000);
+    vi.advanceTimersByTime(4_000); // sa première parole, avant le délai de 90 s entre deux remarques
     expect(document.querySelector(".lia-ui__bulle")?.textContent).toBe("Il est calme ici.");
     hasard.mockRestore();
   });
 
-  it("l'errance et le suivi deviennent des gestes sur place, jamais un déplacement", () => {
+  it("elle joue sur place : jamais un déplacement", () => {
     vi.useFakeTimers();
-    const hasard = vi.spyOn(Math, "random").mockReturnValue(0.3); // 0,28 à 0,46 : elle erre
+    const hasard = vi.spyOn(Math, "random").mockReturnValue(0.1); // choix pondéré : jouer (une silhouette sur place)
     lia = mountLia();
     vi.advanceTimersByTime(100);
     const avant = position();

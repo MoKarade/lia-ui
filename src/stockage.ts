@@ -1,4 +1,5 @@
-/** Mémoire locale de LIA (position, vie autonome). Jamais indispensable : tout est en try/catch. */
+/** Mémoire locale de LIA (position, vie autonome, envies). Jamais indispensable : tout est en try/catch. */
+import { COMPORTEMENTS, JOURNAL_MAX, type Envies, type FaitLia } from "./cerveau.js";
 
 export interface MemoireLia {
   /** Position en fractions (0..1) de la zone de vie. */
@@ -59,5 +60,44 @@ export function ecrireRelances(cle: string, r: RelancesLia): void {
     localStorage.setItem(`${PREFIXE}${cle}:relances`, JSON.stringify(r));
   } catch {
     /* sans stockage, le plafond ne vaut que pour cette page : mieux que rien */
+  }
+}
+
+/** Ce que le cerveau garde entre deux pages : ses envies et le journal de ce qu'elle a fait. */
+export interface CerveauLia {
+  envies: Envies;
+  journal: FaitLia[];
+}
+
+const NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"] as const;
+
+export function lireCerveau(cle: string): CerveauLia | null {
+  try {
+    const brut = localStorage.getItem(`${PREFIXE}${cle}:cerveau`);
+    if (brut === null) return null;
+    const j: unknown = JSON.parse(brut);
+    if (typeof j !== "object" || j === null) return null;
+    const { envies, journal } = j as Record<string, unknown>;
+    if (typeof envies !== "object" || envies === null || !Array.isArray(journal)) return null;
+    const e = envies as Record<string, unknown>;
+    if (!NOMS_ENVIES.every((k) => estFraction(e[k]))) return null;
+    const faits = journal.filter(
+      (f): f is FaitLia =>
+        typeof f === "object" &&
+        f !== null &&
+        Number.isFinite((f as FaitLia).t) &&
+        COMPORTEMENTS.includes((f as FaitLia).quoi),
+    );
+    return { envies: e as unknown as Envies, journal: faits.slice(-JOURNAL_MAX) };
+  } catch {
+    return null;
+  }
+}
+
+export function ecrireCerveau(cle: string, c: CerveauLia): void {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:cerveau`, JSON.stringify(c));
+  } catch {
+    /* sans stockage, elle repart de ses envies de départ à chaque page */
   }
 }

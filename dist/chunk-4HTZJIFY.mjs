@@ -75,6 +75,87 @@ function dansZone(zone, x, y, marge) {
   return { x: Math.min(maxX, Math.max(minX, x)), y: Math.min(maxY, Math.max(minY, y)) };
 }
 
+// src/cerveau.ts
+var ENVIES_DEPART = { energie: 0.85, curiosite: 0.35, social: 0.45, inquiet: 0, joie: 0.3, ennui: 0.15 };
+var COMPORTEMENTS = ["voir", "suivre", "promener", "causer", "relancer", "jouer", "rentrer", "dormir", "repos"];
+var borne = (x) => Math.max(0, Math.min(1, x));
+function majEnvies(e, dt, c) {
+  const energie = c.dort ? e.energie + 0.05 * dt : e.energie + (c.auRepos ? 14e-4 : c.occupee ? -25e-4 : 6e-4) * dt;
+  const social = e.social + 4e-3 * dt * (c.secondesDepuisDecision > 30 ? 1.6 : 0.6);
+  const retour = Math.min(1, dt * 0.35);
+  return {
+    energie: borne(energie),
+    curiosite: borne(e.curiosite + 3e-3 * dt),
+    social: borne(social),
+    inquiet: e.inquiet + (borne(c.inquietude) - e.inquiet) * retour,
+    joie: e.joie + (0.25 - e.joie) * Math.min(1, dt * 0.02),
+    ennui: borne(e.ennui + (c.occupee && !c.auRepos ? -3e-3 : 3e-3) * dt)
+  };
+}
+function apresComportement(e, id) {
+  switch (id) {
+    case "jouer":
+      return { ...e, joie: borne(e.joie - 0.05) };
+    case "promener":
+      return { ...e, ennui: borne(e.ennui - 0.4), energie: borne(e.energie - 0.03) };
+    case "suivre":
+      return { ...e, social: borne(e.social - 0.25), ennui: borne(e.ennui - 0.25) };
+    case "causer":
+    case "relancer":
+      return { ...e, social: borne(e.social - 0.35) };
+    case "voir":
+      return { ...e, curiosite: borne(e.curiosite - 0.2) };
+    default:
+      return { ...e };
+  }
+}
+function candidats(e, c) {
+  const liste = [];
+  const bouge = c.deplacement && !c.tranquille;
+  if (bouge && c.cibles > 0 && e.curiosite > 0.35) liste.push({ id: "voir", poids: e.curiosite * 0.9 + 0.2 });
+  if (bouge && c.curseurRecent && c.humeur !== "fatigue") {
+    liste.push({ id: "suivre", poids: e.social * 0.9 + (c.humeur === "espiegle" ? 0.3 : 0) - 0.2 });
+  }
+  if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) });
+  if (c.parole && c.secondesDepuisParole > 90) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 });
+  if (c.parole && c.relance && c.secondesDepuisParole > 90) liste.push({ id: "relancer", poids: 0.15 });
+  liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.1 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
+  if (c.deplacement && c.loinDeLaMaison && !c.tranquille) liste.push({ id: "rentrer", poids: 1.6 });
+  if (e.energie < 0.3) liste.push({ id: "dormir", poids: (0.5 - e.energie) * 5 });
+  liste.push({ id: "repos", poids: 0.9 });
+  return liste;
+}
+function choisirComportement(liste, hasard, courant = null) {
+  const w = liste.map((c) => Math.exp((c.poids - (c.id === courant ? 0.5 : 0)) * 2.4));
+  const total = w.reduce((s, x) => s + x, 0);
+  let r = hasard() * total;
+  for (let i = 0; i < liste.length; i++) {
+    r -= w[i] ?? 0;
+    const c = liste[i];
+    if (r <= 0 && c) return c.id;
+  }
+  return liste[liste.length - 1]?.id ?? "repos";
+}
+var SILHOUETTES_JEU = {
+  joyeux: ["musique", "content", "salue"],
+  excite: ["content", "musique", "surpris"],
+  espiegle: ["musique", "salue", "cherche"],
+  curieux: ["cherche", "surveille", "lit", "apprend"],
+  calme: ["reflexion", "souvient", "musique", "attend"],
+  neutre: ["reflexion", "attend", "surveille"],
+  fatigue: ["attend", "reflexion"],
+  inquiet: ["surveille", "attend", "securise"],
+  triste: ["triste", "souvient", "attend"],
+  concentre: ["concentre", "code", "calcule"],
+  fier: ["content", "reussi"],
+  timide: ["reflexion", "attend"]
+};
+var entre = (hasard, a, b) => a + hasard() * (b - a);
+var JOURNAL_MAX = 20;
+function ajouterFait(journal, fait) {
+  return [...journal, fait].slice(-JOURNAL_MAX);
+}
+
 // src/ecran.ts
 var ENTREES_MENU = [
   { mode: "expliquer", libelle: "Explique-moi \xE7a" },
@@ -1800,6 +1881,31 @@ function ecrireRelances(cle, r) {
   } catch {
   }
 }
+var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
+function lireCerveau(cle) {
+  try {
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:cerveau`);
+    if (brut2 === null) return null;
+    const j = JSON.parse(brut2);
+    if (typeof j !== "object" || j === null) return null;
+    const { envies, journal } = j;
+    if (typeof envies !== "object" || envies === null || !Array.isArray(journal)) return null;
+    const e = envies;
+    if (!NOMS_ENVIES.every((k) => estFraction(e[k]))) return null;
+    const faits = journal.filter(
+      (f) => typeof f === "object" && f !== null && Number.isFinite(f.t) && COMPORTEMENTS.includes(f.quoi)
+    );
+    return { envies: e, journal: faits.slice(-JOURNAL_MAX) };
+  } catch {
+    return null;
+  }
+}
+function ecrireCerveau(cle, c) {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:cerveau`, JSON.stringify(c));
+  } catch {
+  }
+}
 
 // src/styles.ts
 var CSS = `
@@ -1904,6 +2010,7 @@ function mountLia(options = {}) {
   const sansMouvement = modeReduit === "fixe";
   const doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
+  const cerveauMemoire = lireCerveau(cle);
   let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
   const conteneur = options.container ?? null;
   const posConteneur = conteneur ? getComputedStyle(conteneur).position : "";
@@ -1965,6 +2072,14 @@ function mountLia(options = {}) {
   let chatOuvert = false;
   let menuOuvert = false;
   let detruit = false;
+  let envies = { ...cerveauMemoire?.envies ?? ENVIES_DEPART };
+  let faits = cerveauMemoire?.journal ?? [];
+  let comportement = null;
+  let tranquilleJusqua = 0;
+  let derniereDecision = -999;
+  let derniereParole = -999;
+  let dort = false;
+  let finEtatTemp = 0;
   let raf = 0;
   const zoneVie = () => {
     const r = couche.getBoundingClientRect();
@@ -1999,6 +2114,7 @@ function mountLia(options = {}) {
     }
     cible = { x: pos.x, y: pos.y };
   }
+  const maison = { x: pos.x, y: pos.y };
   const memoriser = () => {
     const z = zoneVie();
     const marge = rayon;
@@ -2031,6 +2147,7 @@ function mountLia(options = {}) {
   };
   const dire = (texte, o) => {
     if (detruit || chatOuvert || glisse) return false;
+    reveiller();
     bulle.replaceChildren();
     const p = el("p");
     p.style.margin = "0";
@@ -2146,6 +2263,7 @@ function mountLia(options = {}) {
   };
   const ouvrirChat = () => {
     if (detruit || chatOuvert) return;
+    reveiller();
     fermerMenu();
     tais();
     derniereFocus = document.activeElement;
@@ -2259,6 +2377,7 @@ function mountLia(options = {}) {
   };
   const ouvrirMenu = (x, y, element) => {
     if (detruit) return;
+    reveiller();
     fermerMenu();
     tais();
     menuOuvert = true;
@@ -2408,6 +2527,7 @@ function mountLia(options = {}) {
     }
     const p = fixerDepuisEvenement(e);
     glisse = { x: p.x, y: p.y, x0: p.x, y0: p.y, deplace: false };
+    reveiller();
     tais();
     clearTimeout(appui);
     appui = setTimeout(() => {
@@ -2602,41 +2722,102 @@ function mountLia(options = {}) {
     }, dureeGeste(secondes) * 1e3);
     return true;
   }
+  const passagere = (etat2, secondes) => {
+    choisir2(etat2);
+    finEtatTemp = t + secondes;
+    errance = { jusqua: t + secondes };
+  };
+  const finirPassagere = () => {
+    finEtatTemp = 0;
+    if (!parle && !etatForce && !chatOuvert && !attention && !dort) choisir2("repos");
+  };
+  function reveiller() {
+    if (!dort) return;
+    dort = false;
+    passagere("reveille", 2.6);
+  }
+  const lancer = (id, vues) => {
+    comportement = id;
+    derniereDecision = t;
+    faits = ajouterFait(faits, { t: Date.now(), quoi: id });
+    envies = apresComportement(envies, id);
+    const calme = (secondes) => {
+      tranquilleJusqua = t + secondes;
+    };
+    if (id === "jouer") {
+      const pool = SILHOUETTES_JEU[humeurId] ?? ["repos"];
+      passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 3.6, 5.6));
+    } else if (id === "promener") {
+      cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
+      errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
+      choisir2("repos");
+      calme(30);
+    } else if (id === "suivre") {
+      suivreCurseur(entre(Math.random, 6, 11));
+      calme(40);
+    } else if (id === "voir") {
+      const el2 = vues[rangDe(Math.random(), vues.length)];
+      if (el2) visiter(el2, 6.5);
+      calme(20);
+    } else if (id === "rentrer") {
+      cible = { x: maison.x, y: maison.y };
+      errance = { jusqua: t + 5.7 };
+      choisir2("repos");
+      calme(30);
+    } else if (id === "dormir") {
+      dort = true;
+      errance = { jusqua: t + 1e9 };
+      choisir2("veille");
+    } else if (id === "causer" || id === "relancer") {
+      derniereParole = t;
+      const parole = id === "relancer" ? direSpontane("relance") : direSpontane(Math.random() < 0.2 ? "salut" : "rien");
+      if (parole && id === "relancer") {
+        ecrireRelances(cle, { jour: jourLocal(/* @__PURE__ */ new Date()), n: lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) + 1 });
+      }
+      errance = { jusqua: t + 4 };
+    } else {
+      errance = { jusqua: t + entre(Math.random, 8, 16) };
+      choisir2("repos");
+    }
+  };
   const penser = () => {
+    if (finEtatTemp && t > finEtatTemp) finirPassagere();
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
-    if (t < errance.jusqua || t - dernierMot < 14) return;
+    if (dort || t < errance.jusqua || t - dernierMot < 14) return;
     const vues = regardables();
-    const d = prochaineDecision(Math.random, {
-      curseurRecent: curseurRecent(),
-      cibles: vues.length,
-      parole: !!options.onSpontane && peutParlerSeule(),
-      relance: relancesRestantes()
-    });
-    if (doux && (d.type === "suivre" || d.type === "voir")) {
-      errance = { jusqua: t + d.duree };
-      choisir2("repos");
-    } else if (d.type === "suivre") {
-      suivreCurseur(d.duree);
-    } else if (d.type === "voir") {
-      const el2 = vues[rangDe(d.rang, vues.length)];
-      if (el2) visiter(el2, d.duree);
-    } else if (d.type === "parler") {
-      direSpontane(d.motif);
-    } else if (d.type === "relance") {
-      if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(/* @__PURE__ */ new Date()), n: lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) + 1 });
-    } else if (d.type === "attendre") {
-      errance = { jusqua: t + d.duree };
-      choisir2("repos");
-    } else if (d.type === "errer") {
-      if (!doux) cible = pointDansZone(zoneVie(), d.u, d.v, rayon * 1.3);
-      errance = { jusqua: t + d.duree };
-      choisir2(d.etat);
-    } else {
-      setHumeur2(d.humeur);
-    }
+    const z = zoneVie();
+    const id = choisirComportement(
+      candidats(envies, {
+        curseurRecent: curseurRecent(),
+        cibles: vues.length,
+        parole: !!options.onSpontane && peutParlerSeule(),
+        relance: relancesRestantes(),
+        humeur: humeurId,
+        tranquille: t < tranquilleJusqua,
+        loinDeLaMaison: z.w > 0 && z.h > 0 && Math.hypot(pos.x - maison.x, pos.y - maison.y) > 0.3 * Math.hypot(z.w, z.h),
+        deplacement: !doux,
+        secondesDepuisParole: t - derniereParole
+      }),
+      Math.random,
+      comportement
+    );
+    lancer(id, vues);
   };
+  let tics = 0;
+  const minuterieEnvies = setInterval(() => {
+    if (document.hidden || detruit) return;
+    envies = majEnvies(envies, 1, {
+      dort,
+      occupee: t < errance.jusqua,
+      auRepos: comportement === null || comportement === "repos",
+      secondesDepuisDecision: t - derniereDecision,
+      inquietude: 0
+    });
+    if (dort && envies.energie >= 0.85) reveiller();
+    if (++tics % 10 === 0) ecrireCerveau(cle, { envies, journal: faits });
+  }, 1e3);
   const minuterieHumeur = setInterval(() => {
     if (!vie || document.hidden || chatOuvert) return;
     const h = deriveHumeur(Math.random);
@@ -2752,6 +2933,8 @@ function mountLia(options = {}) {
     setVieAutonome,
     suivreCurseur,
     allerVoir,
+    envies: () => ({ ...envies }),
+    journal: () => faits.map((f) => ({ ...f })),
     envoyer: envoyerVers,
     geste,
     venirPres,
@@ -2761,6 +2944,8 @@ function mountLia(options = {}) {
       detruit = true;
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
+      clearInterval(minuterieEnvies);
+      ecrireCerveau(cle, { envies, journal: faits });
       document.removeEventListener("contextmenu", surClicDroitPage);
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
@@ -2784,6 +2969,11 @@ export {
   prochaineDecision,
   pointDansZone,
   dansZone,
+  ENVIES_DEPART,
+  majEnvies,
+  apresComportement,
+  candidats,
+  choisirComportement,
   ENTREES_MENU,
   SELECTEUR_ELEMENTS,
   decrireParDefaut,
@@ -2792,4 +2982,4 @@ export {
   HUMEURS_MENU,
   mountLia
 };
-//# sourceMappingURL=chunk-6OIIMBR3.mjs.map
+//# sourceMappingURL=chunk-4HTZJIFY.mjs.map
