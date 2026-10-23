@@ -2685,15 +2685,15 @@ var BLAGUES = [
   "Un jour, quelqu'un va me dire \xAB juste un petit changement \xBB. Ce jour-l\xE0, je d\xE9missionne.",
   "Pourquoi les nanobots n'ont jamais froid ? Parce qu'ils se serrent les coudes. Je sais, je sais.",
   "Un octet entre dans un bar et dit : \xAB Un bit de plus, s'il vous pla\xEEt. \xBB",
-  "Ma plus grande peur : un jour, quelqu'un me demande de \xAB juste faire un petit changement \xBB."
+  "Combien faut-il de d\xE9veloppeurs pour changer une ampoule ? Aucun, c'est un probl\xE8me de mat\xE9riel."
 ];
 var SUITES = {
-  "Le matin": "Le matin, donc. Je le note : je serai plus douce avec toi le soir.",
-  "Le soir": "Le soir. Je m'en doutais un peu.",
+  "Le matin": "Le matin, donc. Moi, je n'ai pas d'heure pr\xE9f\xE9r\xE9e, mais le calme du matin me pla\xEEt.",
+  "Le soir": "Le soir. Tout ralentit, c'est vrai.",
   "\xC7a d\xE9pend": "\xC7a d\xE9pend : la bonne r\xE9ponse, honn\xEAtement.",
   "Des p\xE2tes": "Des p\xE2tes. Valeur s\xFBre.",
   "Du riz": "Du riz : simple et efficace. J'approuve.",
-  "Une surprise": "Une surprise ! Tu es plus aventurier que tu ne le laisses croire.",
+  "Une surprise": "Une surprise ! \xC7a change, au moins.",
   Beau: "Du beau temps. Profites-en.",
   Gris: "Gris. \xC7a tombe bien, il y a de quoi regarder ici.",
   "Il pleut": "De la pluie. Moi je suis bien au sec dans ton \xE9cran.",
@@ -2701,8 +2701,19 @@ var SUITES = {
   "Pas encore": "Alors vas-y, je reste l\xE0 pendant ce temps.",
   Haha: "Merci. \xC7a fait un petit saut de joie.",
   "Une autre": null,
-  Bof: "Je note : l'humour, je dois encore progresser.",
-  "Non merci": "D'accord. Je garde \xE7a pour moi."
+  Bof: "Bon. L'humour, je dois encore progresser.",
+  "Non merci": "D'accord. Je garde \xE7a pour moi.",
+  "Les listes": "Les listes : tout est \xE0 sa place.",
+  "Les courbes": "Les courbes, surtout celles qui montent doucement.",
+  "Les deux": "Les deux. Rien n'emp\xEAche de tout aimer.",
+  Caf\u00E9: "Un caf\xE9. Moi je tourne \xE0 la lumi\xE8re de l'\xE9cran.",
+  Th\u00E9: "Du th\xE9. \xC7a se boit lentement, comme j'aime.",
+  Rien: "Rien du tout, c'est un choix aussi.",
+  "Une blague": null,
+  Chut: "D'accord, chut.",
+  Bien: "Content de l'entendre.",
+  "Comme ci comme \xE7a": "\xC7a arrive. Je reste l\xE0, sans faire de bruit.",
+  Fatigu\u00E9: "Alors je reste discr\xE8te."
 };
 var puces = (...labels) => labels.map((label) => ({ id: `lia:${label}`, label }));
 var estPuceLia = (id) => id.startsWith("lia:");
@@ -2736,7 +2747,16 @@ var PAROLES = [
   {
     id: "heure",
     poids: () => 1,
-    dit: ({ heure }) => heure < 6 ? "Il est tard, ou tr\xE8s t\xF4t. Moi je ne dors qu'en veille, mais toi, tu devrais peut-\xEAtre." : heure < 11 ? "Bon matin. Le matin, tous mes traits sont bien align\xE9s." : heure < 14 ? "Presque l'heure de manger. Je n'ai pas faim, mais je suis curieuse de ton assiette." : heure < 18 ? "L'apr\xE8s-midi, la page se calme. J'aime bien ce moment." : "Le soir, tout ralentit. Je fais pareil."
+    dit: ({ heure }, h) => choisir2(
+      heure < 6 ? [
+        "Il est tard, ou tr\xE8s t\xF4t. Moi je ne dors qu'en veille, mais toi, tu devrais peut-\xEAtre.",
+        "La nuit, la page est silencieuse. Je veille."
+      ] : heure < 11 ? ["Bon matin. Le matin, tous mes traits sont bien align\xE9s.", "Le matin, j'ai l'impression que tout est \xE0 refaire, et \xE7a me pla\xEEt."] : heure < 14 ? [
+        "Presque l'heure de manger. Je n'ai pas faim, mais je suis curieuse de ton assiette.",
+        "Midi approche. Je n'ai pas d'estomac, mais je respecte l'institution."
+      ] : heure < 18 ? ["L'apr\xE8s-midi, la page se calme. J'aime bien ce moment.", "L'apr\xE8s-midi, la lumi\xE8re change. Moi, je ne la vois pas, mais je l'imagine."] : ["Le soir, tout ralentit. Je fais pareil.", "Le soir, j'ai envie de parler moins fort."],
+      h
+    )
   },
   { id: "humeur", poids: () => 1.6, dit: ({ humeur: humeur2 }) => PHRASES_HUMEUR[humeur2] ?? "Calme, tranquille." },
   { id: "ennui", poids: ({ envies }) => envies.ennui > 0.55 ? 2 : 0, dit: () => "Je m'ennuie un peu. Un clic droit sur quelque chose de la page, \xE7a m'occuperait." },
@@ -2753,6 +2773,22 @@ var PAROLES = [
   { id: "meteo", poids: () => 1, dit: () => "Il fait quel temps chez toi ? Je ne vois pas dehors, je ne vois que cette page.", chips: puces("Beau", "Gris", "Il pleut") },
   { id: "manger", poids: () => 0.8, dit: () => "Tu as mang\xE9 ? Rien \xE0 voir avec la page, je demande juste.", chips: puces("Oui", "Pas encore") },
   { id: "blague", poids: () => 0.9, dit: (_c, h) => `${choisir2(BLAGUES, h)} \xC7a va, c'est de moi.`, chips: puces("Haha", "Une autre", "Bof") },
+  { id: "gout-courbes", poids: () => 0.7, dit: () => "Ce que j'aime : les courbes qui montent doucement." },
+  { id: "gout-clic", poids: () => 0.7, dit: () => "Je pr\xE9f\xE8re un clic doux \xE0 un clic press\xE9, mais je ne juge pas." },
+  { id: "gout-vert", poids: () => 0.7, dit: () => "Ma couleur pr\xE9f\xE9r\xE9e est celle qui dit que tout va bien." },
+  { id: "venus", poids: () => 0.6, dit: () => "Un jour sur V\xE9nus dure plus longtemps que son ann\xE9e. Je trouve \xE7a reposant." },
+  { id: "banane", poids: () => 0.6, dit: () => "Botaniquement, la banane est une baie, mais pas la fraise. Voil\xE0." },
+  { id: "miel", poids: () => 0.6, dit: () => "Le miel ne se p\xE9rime pour ainsi dire pas. J'aimerais en dire autant de mes id\xE9es." },
+  {
+    id: "promenee",
+    poids: ({ faits, maintenant }) => faits.some((f) => f.quoi === "promener" && maintenant - f.t < 6e5) ? 2 : 0,
+    dit: () => "Je viens de me promener, \xE7a fait du bien."
+  },
+  { id: "energie", poids: ({ envies }) => envies.energie > 0.7 ? 1.4 : 0, dit: () => "J'ai de l'\xE9nergie, l\xE0. \xC7a se sent dans mes traits." },
+  { id: "et-toi", poids: () => 0.9, dit: ({ humeur: humeur2 }) => `Moi, je suis \xAB ${LIBELLES_HUMEURS[humeur2] ?? humeur2} \xBB. Et toi ?`, chips: puces("Bien", "Comme ci comme \xE7a", "Fatigu\xE9") },
+  { id: "listes", poids: () => 0.8, dit: () => "Les listes ou les courbes ?", chips: puces("Les listes", "Les courbes", "Les deux") },
+  { id: "cafe", poids: () => 0.8, dit: () => "Caf\xE9, th\xE9 ou rien ?", chips: puces("Caf\xE9", "Th\xE9", "Rien") },
+  { id: "silence", poids: () => 0.6, dit: () => "Une blague ou le silence ?", chips: puces("Une blague", "Chut") },
   { id: "resume", poids: ({ faits }) => faits.length > 2 ? 1 : 0, dit: () => "Tu veux que je te raconte ce que j'ai fait depuis tout \xE0 l'heure ?", chips: puces("Oui", "Non merci") },
   {
     id: "rien",
@@ -2769,7 +2805,9 @@ var PAROLES = [
   }
 ];
 function choisirParole(c, hasard) {
-  const candidates = PAROLES.map((p) => ({ p, w: p.poids(c) * (c.recentes.includes(p.id) ? 0.12 : 1) })).filter((x) => x.w > 0);
+  const derniere = c.recentes[c.recentes.length - 1];
+  const tout = PAROLES.map((p) => ({ p, w: p.poids(c) * (c.recentes.includes(p.id) ? 0.12 : 1) })).filter((x) => x.w > 0);
+  const candidates = tout.some((x) => x.p.id !== derniere) ? tout.filter((x) => x.p.id !== derniere) : tout;
   const total = candidates.reduce((s, x) => s + x.w, 0);
   let r = hasard() * total;
   let pris = candidates[candidates.length - 1]?.p ?? PAROLES[0];
@@ -2783,7 +2821,7 @@ function choisirParole(c, hasard) {
   return { id: pris.id, text: pris.dit(c, hasard), ...pris.chips ? { chips: pris.chips } : {} };
 }
 function suiteParole(label, c, hasard) {
-  if (label === "Une autre") return { id: "blague", text: choisir2(BLAGUES, hasard), chips: puces("Haha", "Bof") };
+  if (label === "Une autre" || label === "Une blague") return { id: "blague", text: choisir2(BLAGUES, hasard), chips: puces("Haha", "Bof") };
   if (label === "Oui" && c.recentes[c.recentes.length - 1] === "resume") return { id: "resume-suite", text: resumeJournal(c.faits, c.maintenant) };
   const t = SUITES[label];
   return t ? { id: "suite", text: t } : null;
