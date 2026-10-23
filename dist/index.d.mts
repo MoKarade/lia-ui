@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle } from './types-CKj643lW.mjs';
-export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, E as ENVIES_DEPART, c as Envies, d as EnvoiLia, F as FaitLia, G as GESTES, e as GesteLia, H as HUMEURS_LIA, f as HUMEURS_MENU, g as Hasard, h as HumeurLia, i as LIBELLE_HUMEUR, M as MotifMonde, j as MotifSpontane, k as OptionsElements, P as ParoleSpontanee, l as PropositionMonde, m as PuceLia, R as ReponseLia, Z as ZoneVie, n as apresComportement, o as candidats, p as choisirComportement, q as dansZone, r as majEnvies, s as pointDansZone, t as prochaineDecision } from './types-CKj643lW.mjs';
+import { O as OptionsLia, L as LiaHandle } from './types-DA0ZKDr8.mjs';
+export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, E as ENVIES_DEPART, c as Envies, d as EnvoiLia, F as FaitLia, G as GESTES, e as GesteLia, H as HUMEURS_LIA, f as HUMEURS_MENU, g as Hasard, h as HumeurLia, i as LIBELLE_HUMEUR, M as MotifMonde, j as MotifSpontane, k as OptionsElements, P as ParoleSpontanee, l as PropositionMonde, m as PuceLia, R as ReponseLia, Z as ZoneVie, n as apresComportement, o as candidats, p as choisirComportement, q as dansZone, r as majEnvies, s as pointDansZone, t as prochaineDecision } from './types-DA0ZKDr8.mjs';
 
 declare function mountLia(options?: OptionsLia): LiaHandle;
 

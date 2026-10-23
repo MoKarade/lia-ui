@@ -58,6 +58,12 @@ describe("choix : les comportements du monde", () => {
     expect(poids("feliciter", ENVIES_DEPART, c)).toBeCloseTo(0.2 + 0.6, 10);
   });
 
+  it("accompagner : quand Marc regarde un élément depuis un moment, fort (2,1 + curiosité × 0,6), sans demander qu'il soit actif", () => {
+    expect(poids("accompagner", ENVIES_DEPART, { monde: ["accompagner"] })).toBeCloseTo(2.1 + 0.35 * 0.6, 10);
+    expect(poids("accompagner", ENVIES_DEPART, { monde: ["accompagner"], tranquille: true })).toBeUndefined();
+    expect(poids("accompagner", ENVIES_DEPART, {})).toBeUndefined();
+  });
+
   it("veiller : seulement quand la nuit ou l'absence le permet", () => {
     expect(poids("veiller", ENVIES_DEPART, {})).toBeUndefined();
     expect(poids("veiller", ENVIES_DEPART, { veille: true, intentions: { veiller: 0.5 } })).toBeCloseTo(0.1 + 0.6, 10);
@@ -229,5 +235,73 @@ describe("veiller, sans l'hôte", () => {
       seconde(5);
     }
     expect(lia.journal().some((f) => f.quoi === "veiller")).toBe(false);
+  });
+});
+
+describe("elle vient regarder avec Marc (accompagner)", () => {
+  let regard: HTMLElement;
+  beforeEach(() => {
+    document.body.insertAdjacentHTML("beforeend", `<article id="regard" data-lia-cible>JobAI</article><article id="autre" data-lia-cible>CarAI</article>`);
+    regard = document.getElementById("regard") as HTMLElement;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("lia-ui")) return rectDe({ left: 0, top: 0, right: 1000, bottom: 800 });
+      if (this.id === "regard" || this.id === "autre") return rectDe({ left: 500, top: 300, right: 800, bottom: 500 });
+      return rectDe({ left: 0, top: 0, right: 0, bottom: 0 });
+    });
+  });
+  const survoler = (el: Element): void => void el.dispatchEvent(new Event("pointermove", { bubbles: true }));
+  const phrase = { text: "Tu regardes JobAI depuis un moment : trois offres sont arrivées." };
+
+  it("après 4 s sur un élément, elle demande à l'hôte avec cet élément, vient et dit sa phrase", () => {
+    const monde = vi.fn((m: MotifMonde, el?: Element) => (m === "accompagner" && el === regard ? phrase : null));
+    lia = mountLia({ monde });
+    survoler(regard);
+    seconde(3);
+    expect(monde.mock.calls.some(([m]) => m === "accompagner")).toBe(false);
+    expect(attendreDit(phrase.text, 20)).toBe(true);
+    expect(monde).toHaveBeenCalledWith("accompagner", regard);
+  });
+
+  it("marque l'élément regardé (data-regard) tant qu'elle est là, puis l'efface", () => {
+    lia = mountLia({ monde: (m) => (m === "accompagner" ? phrase : null) });
+    survoler(regard);
+    expect(attendreDit(phrase.text, 20)).toBe(true);
+    expect(regard.hasAttribute("data-regard")).toBe(true);
+    lia.destroy();
+    lia = null;
+    expect(regard.hasAttribute("data-regard")).toBe(false);
+  });
+
+  it("n'y revient pas avant 3 minutes pour le même élément", () => {
+    const monde = vi.fn((m: MotifMonde) => (m === "accompagner" ? phrase : null));
+    lia = mountLia({ monde });
+    survoler(regard);
+    expect(attendreDit(phrase.text, 20)).toBe(true);
+    const appels = monde.mock.calls.filter(([m]) => m === "accompagner").length;
+    seconde(120);
+    expect(monde.mock.calls.filter(([m]) => m === "accompagner").length).toBe(appels);
+    seconde(80);
+    expect(monde.mock.calls.filter(([m]) => m === "accompagner").length).toBeGreaterThan(appels);
+  });
+
+  it("changer d'élément remet le compte à zéro ; quitter les éléments l'arrête", () => {
+    const monde = vi.fn((m: MotifMonde) => (m === "accompagner" ? phrase : null));
+    lia = mountLia({ monde });
+    survoler(regard);
+    seconde(3);
+    survoler(document.getElementById("autre") as Element);
+    seconde(3);
+    expect(monde.mock.calls.some(([m]) => m === "accompagner")).toBe(false);
+    survoler(document.body);
+    seconde(10);
+    expect(monde.mock.calls.some(([m]) => m === "accompagner")).toBe(false);
+  });
+
+  it("l'hôte qui n'a rien à dire (null) : elle ne vient pas", () => {
+    lia = mountLia({ monde: () => null });
+    survoler(regard);
+    seconde(30);
+    expect(dit()).toBe("");
+    expect(regard.hasAttribute("data-regard")).toBe(false);
   });
 });

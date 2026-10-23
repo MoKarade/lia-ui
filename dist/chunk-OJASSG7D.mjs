@@ -71,7 +71,7 @@ function dansZone(zone, x, y, marge) {
 
 // src/cerveau.ts
 var ENVIES_DEPART = { energie: 0.85, curiosite: 0.35, social: 0.45, inquiet: 0, joie: 0.3, ennui: 0.15 };
-var MOTIFS_MONDE = ["appeler", "resumer", "feliciter", "rappeler", "souvenir"];
+var MOTIFS_MONDE = ["appeler", "resumer", "feliciter", "rappeler", "souvenir", "accompagner"];
 var COMPORTEMENTS = ["voir", "suivre", "promener", "causer", "relancer", "jouer", "rentrer", "dormir", "repos", ...MOTIFS_MONDE, "veiller"];
 var borne = (x) => Math.max(0, Math.min(1, x));
 function majEnvies(e, dt, c) {
@@ -124,6 +124,7 @@ function candidats(e, c) {
     if (monde.includes("rappeler")) liste.push({ id: "rappeler", poids: 0.2 + veut("rappeler") * 1.1 });
     if (monde.includes("souvenir")) liste.push({ id: "souvenir", poids: 0.1 + veut("souvenir") * 1.1 });
   }
+  if (!c.tranquille && monde.includes("accompagner")) liste.push({ id: "accompagner", poids: 2.1 + e.curiosite * 0.6 });
   if (c.present && monde.includes("feliciter")) liste.push({ id: "feliciter", poids: 0.2 + veut("feliciter") * 1.2 });
   if (c.veille) liste.push({ id: "veiller", poids: 0.1 + veut("veiller") * 1.2 });
   liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.1 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
@@ -2512,8 +2513,10 @@ function injecterStyles() {
   document.head.appendChild(s);
 }
 var limiter2 = (x, a, b) => Math.max(a, Math.min(b, x));
-var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, veiller: 240 };
-var ETAT_MONDE = { appeler: "alerte", resumer: "surveille", feliciter: "reussi", rappeler: "surveille", souvenir: "content" };
+var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
+var SURVOL_MS = 4e3;
+var DELAI_ACCOMPAGNER_MS = 18e4;
+var ETAT_MONDE = { appeler: "alerte", resumer: "surveille", feliciter: "reussi", rappeler: "surveille", souvenir: "content", accompagner: "surveille" };
 var etatSur = (etat) => ST.includes(etat) ? etat : "repos";
 function mountLia(options = {}) {
   if (typeof document === "undefined") throw new Error("mountLia : \xE0 appeler dans le navigateur uniquement");
@@ -2610,6 +2613,19 @@ function mountLia(options = {}) {
   let propositions = {};
   let entreesCourantes = {};
   let erreurMondeDite = false;
+  let survol = null;
+  const dernierAccompagne = /* @__PURE__ */ new WeakMap();
+  let elementSurvole = null;
+  let regarde = null;
+  const retirerRegard = () => {
+    regarde?.removeAttribute("data-regard");
+    regarde = null;
+  };
+  const marquerRegard = (el2) => {
+    retirerRegard();
+    el2.setAttribute("data-regard", "");
+    regarde = el2;
+  };
   let derniereDecision = -999;
   let derniereParole = -999;
   let dort = false;
@@ -3062,8 +3078,15 @@ function mountLia(options = {}) {
     if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
-  const surGesteMarc = () => {
+  const surGesteMarc = (e) => {
     dernierMarc = Date.now();
+    if (e.type !== "pointermove") return;
+    let sous = null;
+    try {
+      sous = e.target instanceof Element && !couche.contains(e.target) ? e.target.closest(selecteurCibles) : null;
+    } catch {
+    }
+    if (sous !== survol?.el) survol = sous ? { el: sous, depuis: dernierMarc } : null;
   };
   const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"];
   for (const ev of GESTES_MARC) window.addEventListener(ev, surGesteMarc, { passive: true });
@@ -3179,6 +3202,7 @@ function mountLia(options = {}) {
   };
   const peutBouger = () => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
   function finAttention() {
+    retirerRegard();
     if (!attention) return;
     attention = null;
     cible = { x: pos.x, y: pos.y };
@@ -3255,6 +3279,7 @@ function mountLia(options = {}) {
   };
   const visiter = (el2, secondes) => {
     if (!allerVoir(el2, secondes)) return;
+    marquerRegard(el2);
     const dit = el2.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (dit) direLa(el2, dit, true);
   };
@@ -3298,6 +3323,7 @@ function mountLia(options = {}) {
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el2 = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
     if (el2 && allerVoir(el2, 9)) {
+      if (motif === "accompagner") marquerRegard(el2);
       if (!etatForce) choisir2(etatSur(ETAT_MONDE[motif]));
     } else {
       if (motif === "appeler") venirPres();
@@ -3344,10 +3370,11 @@ function mountLia(options = {}) {
       dernierMotif["veiller"] = Date.now();
       passagere(etatSur("surveille"), entre(Math.random, 7, 12));
       calme(30);
-    } else if (id === "appeler" || id === "resumer" || id === "feliciter" || id === "rappeler" || id === "souvenir") {
+    } else if (id === "appeler" || id === "resumer" || id === "feliciter" || id === "rappeler" || id === "souvenir" || id === "accompagner") {
       const p = propositions[id];
       dernierMotif[id] = Date.now();
-      if (p) direMonde(id, p);
+      if (id === "accompagner" && elementSurvole) dernierAccompagne.set(elementSurvole, Date.now());
+      if (p) direMonde(id, id === "accompagner" && !p.element ? { ...p, element: elementSurvole } : p);
       if (id === "feliciter" && reseauActif) impulsion(reseau, "bon", 0.6);
       calme(40);
     } else if (id === "causer" || id === "relancer") {
@@ -3367,10 +3394,16 @@ function mountLia(options = {}) {
     propositions = {};
     if (!options.monde || !peutParlerSeule()) return [];
     const maintenant = Date.now();
+    elementSurvole = null;
     for (const m of MOTIFS_MONDE) {
       if (maintenant - (dernierMotif[m] ?? 0) < DELAI_MONDE[m] * 1e3) continue;
+      if (m === "accompagner") {
+        const s = survol;
+        if (t < tranquilleJusqua || !s || !s.el.isConnected || maintenant - s.depuis < SURVOL_MS || maintenant - (dernierAccompagne.get(s.el) ?? 0) < DELAI_ACCOMPAGNER_MS) continue;
+        elementSurvole = s.el;
+      }
       try {
-        const p = options.monde(m);
+        const p = m === "accompagner" && elementSurvole ? options.monde(m, elementSurvole) : options.monde(m);
         if (p?.text.trim()) propositions[m] = p;
       } catch (e) {
         if (!erreurMondeDite) console.error("LIA : monde a \xE9chou\xE9, elle n'a rien \xE0 dire sur ce sujet", e);
@@ -3574,6 +3607,7 @@ function mountLia(options = {}) {
     destroy() {
       if (detruit) return;
       detruit = true;
+      retirerRegard();
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
       clearInterval(minuterieEnvies);
@@ -3617,4 +3651,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-4UWPVTS3.mjs.map
+//# sourceMappingURL=chunk-OJASSG7D.mjs.map

@@ -51,7 +51,7 @@ export function Lia(props: LiaProps): null {
               },
             }
           : {}),
-      ...(p.monde ? { monde: (m) => derniere.current.monde?.(m) } : {}),
+      ...(p.monde ? { monde: (m, el) => derniere.current.monde?.(m, el) } : {}),
       ...(p.entrees ? { entrees: () => derniere.current.entrees?.() ?? {} } : {}),
       ...(p.bounds ? { bounds: () => derniere.current.bounds?.() ?? { x: 0, y: 0, w: 0, h: 0 } } : {}),
       ...(p.ask

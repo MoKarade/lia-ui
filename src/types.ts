@@ -141,12 +141,13 @@ export interface OptionsLia {
   entrees?: () => Readonly<Record<string, number>>;
   /**
    * Ce que l'hôte a de vrai à lui faire dire sur le monde, un motif à la fois : `appeler` (un problème à signaler),
-   * `resumer` (une tendance), `feliciter` (une bonne nouvelle), `rappeler` (une chose à ne pas oublier), `souvenir`.
+   * `resumer` (une tendance), `feliciter` (une bonne nouvelle), `rappeler` (une chose à ne pas oublier), `souvenir`, et
+   * `accompagner` : Marc regarde un élément `[data-lia-cible]` depuis 4 s, `element` est cet élément (une fois par élément toutes les 3 min).
    * Renvoie la proposition, ou `null` quand il n'y a rien de vrai : elle n'a alors aucune raison de choisir ce comportement.
    * Elle seule décide du moment (délais de 90 s à 30 min, ses envies, ses intentions) ; elle respecte les heures de `silence`.
    * Appelée sans effet de bord, au plus une fois par motif toutes les 1,2 s.
    */
-  monde?: (motif: MotifMonde) => PropositionMonde | null | undefined;
+  monde?: (motif: MotifMonde, element?: Element) => PropositionMonde | null | undefined;
   /** Zone où LIA a le droit de se déplacer ; par défaut toute la couche. */
   bounds?: () => ZoneVie;
   /** Rayon du corps en pixels CSS ; défaut 56. */

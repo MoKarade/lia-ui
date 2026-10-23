@@ -137,6 +137,7 @@ describe("visite d'un élément : sa phrase après une seconde et demie", () => 
     document.body.appendChild(carte);
     lia = mountLia({});
     await vi.waitFor(() => expect(bulle().textContent).toContain("souper"), { timeout: 5000 });
+    expect(carte.hasAttribute("data-regard")).toBe(true); // l'hôte peut la montrer (la maquette : liseré)
   });
 
   it("sans data-lia-dit, elle visite en silence", async () => {

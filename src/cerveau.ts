@@ -21,9 +21,9 @@ export const ENVIES_DEPART: Readonly<Envies> = { energie: 0.85, curiosite: 0.35,
 /** Ce qu'elle choisit de faire quand rien ne se passe. `relancer` : une remarque que l'hôte voulait lui voir répéter (2 par jour au plus). */
 export type Comportement = "repos" | "suivre" | "promener" | "causer" | "relancer" | "jouer" | "voir" | "rentrer" | "dormir" | MotifMonde | "veiller";
 
-/** Ce que l'hôte sait lui faire dire de vrai : `appeler` (un problème), `resumer` (une tendance), `feliciter`, `rappeler`, `souvenir`. */
-export type MotifMonde = "appeler" | "resumer" | "feliciter" | "rappeler" | "souvenir";
-export const MOTIFS_MONDE: readonly MotifMonde[] = ["appeler", "resumer", "feliciter", "rappeler", "souvenir"];
+/** Ce que l'hôte sait lui faire dire de vrai : `appeler` (un problème), `resumer` (une tendance), `feliciter`, `rappeler`, `souvenir`, `accompagner` (ce que Marc regarde). */
+export type MotifMonde = "appeler" | "resumer" | "feliciter" | "rappeler" | "souvenir" | "accompagner";
+export const MOTIFS_MONDE: readonly MotifMonde[] = ["appeler", "resumer", "feliciter", "rappeler", "souvenir", "accompagner"];
 
 export const COMPORTEMENTS: readonly Comportement[] = ["voir", "suivre", "promener", "causer", "relancer", "jouer", "rentrer", "dormir", "repos", ...MOTIFS_MONDE, "veiller"];
 
@@ -131,6 +131,7 @@ export function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[] {
     if (monde.includes("rappeler")) liste.push({ id: "rappeler", poids: 0.2 + veut("rappeler") * 1.1 });
     if (monde.includes("souvenir")) liste.push({ id: "souvenir", poids: 0.1 + veut("souvenir") * 1.1 });
   }
+  if (!c.tranquille && monde.includes("accompagner")) liste.push({ id: "accompagner", poids: 2.1 + e.curiosite * 0.6 });
   if (c.present && monde.includes("feliciter")) liste.push({ id: "feliciter", poids: 0.2 + veut("feliciter") * 1.2 });
   if (c.veille) liste.push({ id: "veiller", poids: 0.1 + veut("veiller") * 1.2 });
   liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.1 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
