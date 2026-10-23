@@ -116,6 +116,7 @@ afterEach(() => {
 
 const monter = (extra: Parameters<typeof mountLia>[0] = {}): LiaHandle => {
   vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 9, 23, 15, 0, 0)); // hors des heures de silence (22 h à 7 h) : ces tests ne dépendent pas de l'heure de la machine
   const base = Date.now();
   vi.spyOn(performance, "now").mockImplementation(() => Date.now() - base);
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => setTimeout(() => cb(performance.now()), 1000 / 30) as unknown as number);

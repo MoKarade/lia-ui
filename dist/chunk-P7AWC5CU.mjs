@@ -3867,7 +3867,8 @@ function mountLia(options = {}) {
     setTimeout(() => {
       if (detruit || chatOuvert || glisse || parle || respecterSilence && !peutParlerSeule()) return;
       if (attention?.type !== "element" || attention.el !== el2) return;
-      dire(texte);
+      if (respecterSilence && parolePropre && hoteDeSuite >= 1) return;
+      if (dire(texte)) hoteDeSuite++;
     }, 1500);
   };
   const visiter = (el2, secondes) => {
@@ -3918,7 +3919,7 @@ function mountLia(options = {}) {
     passagere("reveille", 2.6);
   }
   const direMonde = (motif, p) => {
-    if (motif !== "accompagner") hoteDeSuite++;
+    hoteDeSuite++;
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el2 = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
     const etat2 = etatSur(p.etat && estAction(p.etat) ? p.etat : ETAT_MONDE[motif]);
@@ -4008,7 +4009,7 @@ function mountLia(options = {}) {
     const maintenant = Date.now();
     elementSurvole = null;
     for (const m of MOTIFS_MONDE) {
-      if (sansProjets && m !== "accompagner") continue;
+      if (sansProjets) continue;
       if (maintenant - (dernierMotif[m] ?? 0) < DELAI_MONDE[m] * 1e3) continue;
       if (m === "accompagner") {
         const s = survol;
@@ -4434,4 +4435,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-46TJ2WAJ.mjs.map
+//# sourceMappingURL=chunk-P7AWC5CU.mjs.map
