@@ -621,14 +621,6 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     chat = el("div", "lia-ui__chat");
     chat.setAttribute("role", "dialog");
     chat.setAttribute("aria-label", "Discussion avec LIA");
-    const entete = el("div", "lia-ui__entete");
-    entete.appendChild(el("span", "lia-ui__titre", "LIA"));
-    const fermer = el("button", "lia-ui__btn");
-    fermer.type = "button";
-    fermer.setAttribute("aria-label", "Fermer la discussion");
-    fermer.appendChild(icone(ICONE_FERMER));
-    fermer.addEventListener("click", fermerChat);
-    entete.appendChild(fermer);
     journal = el("div", "lia-ui__journal");
     journal.setAttribute("role", "log");
     journal.setAttribute("aria-live", "polite");
@@ -644,7 +636,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     envoyer.type = "submit";
     envoyer.setAttribute("aria-label", "Envoyer");
     envoyer.appendChild(icone(ICONE_ENVOYER));
-    form.append(champ, envoyer);
+    const fermer = el("button", "lia-ui__btn lia-ui__btn--doux");
+    fermer.type = "button";
+    fermer.setAttribute("aria-label", "Fermer la discussion");
+    fermer.appendChild(icone(ICONE_FERMER));
+    fermer.addEventListener("click", fermerChat);
+    form.append(champ, envoyer, fermer);
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const q = champ?.value.trim() ?? "";
@@ -658,7 +655,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (echanges.length > 20) echanges.shift();
       void poser(q, ctx ? composerQuestion("question", ctx.d, q) : q);
     });
-    chat.append(entete, journal, form);
+    chat.append(journal, form);
     for (const evenement of ["keydown", "input", "pointerdown", "focusin"]) chat.addEventListener(evenement, () => (activiteChat = t));
     chat.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
