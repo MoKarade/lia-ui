@@ -1155,7 +1155,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     setTimeout(() => {
       if (detruit || chatOuvert || glisse || parle || (respecterSilence && !peutParlerSeule())) return;
       if (attention?.type !== "element" || attention.el !== el) return;
-      dire(texte);
+      // Une visite qu'elle décide seule ne répète pas un projet juste après un autre : elle regarde, sans le dire (c'est son tour de parler d'elle).
+      if (respecterSilence && parolePropre && hoteDeSuite >= 1) return;
+      if (dire(texte)) hoteDeSuite++;
     }, 1500);
   };
 
@@ -1218,7 +1220,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /** Elle va près de l'élément de l'hôte s'il est dans la bande regardée (sinon elle le dit sur place, près du curseur pour une alerte), prend sa silhouette et dit SA phrase au bout d'une seconde et demie. */
   const direMonde = (motif: MotifMonde, p: PropositionMonde): void => {
-    if (motif !== "accompagner") hoteDeSuite++; // accompagner répond à Marc qui regarde un élément : il ne compte pas
+    hoteDeSuite++;
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
     const etat = etatSur(p.etat && estAction(p.etat) ? p.etat : ETAT_MONDE[motif]);
@@ -1316,7 +1318,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const maintenant = Date.now();
     elementSurvole = null;
     for (const m of MOTIFS_MONDE) {
-      if (sansProjets && m !== "accompagner") continue;
+      if (sansProjets) continue;
       if (maintenant - (dernierMotif[m] ?? 0) < DELAI_MONDE[m] * 1000) continue;
       if (m === "accompagner") {
         const s = survol;
@@ -1344,7 +1346,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const vues = regardables();
     const z = zoneVie();
     const maintenant = Date.now();
-    // L'hôte vient de parler (projet, alerte) : c'est son tour à elle ; seul « accompagner » (Marc regarde un élément) passe devant.
+    // L'hôte vient de parler (projet, alerte, visite d'une carte) : c'est son tour à elle ; « accompagner » attend aussi (Marc regarde toujours l'élément).
     const sonTour = parolePropre && hoteDeSuite >= 1;
     const id = choisirComportement(
       candidats(envies, {

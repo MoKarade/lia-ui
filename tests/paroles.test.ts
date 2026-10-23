@@ -115,6 +115,7 @@ beforeEach(() => {
   Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     if (this.classList.contains("lia-ui")) return rectDe({ left: 0, top: 0, right: 1400, bottom: 900 });
+    if (this.hasAttribute("data-lia-cible")) return rectDe({ left: 300 + Number(this.id.slice(-1)) * 250, top: 300, right: 500 + Number(this.id.slice(-1)) * 250, bottom: 450 });
     return rectDe({ left: 0, top: 0, right: 0, bottom: 0 });
   });
   document.body.innerHTML = "";
@@ -169,6 +170,21 @@ describe("elle parle seule, même quand l'hôte n'a rien à dire", () => {
     expect(vus.length, vus.join(" | ")).toBeGreaterThanOrEqual(10);
     for (let i = 1; i < projet.length; i++) expect(projet[i - 1] && projet[i], `deux projets de suite : ${vus[i - 1]} | ${vus[i]}`).toBe(false);
     expect(projet.filter((x) => !x).length, vus.join(" | ")).toBeGreaterThanOrEqual(Math.floor(vus.length / 2) - 1);
+  });
+
+  it("ses visites de cartes qui portent une phrase de l'hôte (data-lia-dit) comptent aussi : jamais deux projets de suite", () => {
+    document.body.innerHTML = ["A CarAI : trajet du jour.", "B DriveAI : quota à 81 %.", "C BatchChef : liste prête."]
+      .map((dit, i) => `<section id="carte${i}" data-lia-cible data-lia-dit="${dit}">Carte</section>`)
+      .join("");
+    monter({
+      entrees: () => ({ alerte: 0.5, nbAlertes: 1 }),
+      monde: (motif, element) => (motif === "accompagner" && element ? { text: "D CarAI : tu regardes ceci.", element } : motif === "accompagner" ? null : { text: "E DriveAI : une alerte." }),
+      onSpontane: () => "F CarAI : une relance.",
+    });
+    const vus = dits(1200);
+    const projet = vus.map((v) => /CarAI|DriveAI|BatchChef/.test(v));
+    expect(projet.filter(Boolean).length, vus.join(" | ")).toBeGreaterThanOrEqual(3);
+    for (let i = 1; i < projet.length; i++) expect(projet[i - 1] && projet[i], `deux projets de suite : ${vus[i - 1]} | ${vus[i]}`).toBe(false);
   });
 
   it("parolePropre: false : elle se tait quand l'hôte n'a rien (comme avant)", () => {
