@@ -84,3 +84,50 @@ describe("à la demande : elle arrive près de l'élément même quand l'écran 
     expect(Math.hypot(a3[0] - fin[0], a3[1] - fin[1]), `${fps} i/s`).toBeLessThan(150);
   });
 });
+
+describe("une discussion laissée ouverte ne la fige pas", () => {
+  const avecChat = (fps: number, ouvert: boolean): number => {
+    vi.useFakeTimers();
+    const base = Date.now();
+    vi.spyOn(performance, "now").mockImplementation(() => Date.now() - base);
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => setTimeout(() => cb(performance.now()), 1000 / fps) as unknown as number);
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => clearTimeout(id));
+    lia = mountLia({ quandMouvementReduit: "complet", entrees: () => ({ alerte: 0.37, nbAlertes: 0.5 }), ask: () => new Promise(() => undefined) });
+    vi.advanceTimersByTime(1000);
+    lia.ouvrirChat();
+    if (!ouvert) return 0;
+    let n = 0;
+    let ancre = position();
+    for (let s = 0; s < 300; s++) {
+      vi.advanceTimersByTime(1000);
+      const p = position();
+      if (Math.hypot(p[0] - ancre[0], p[1] - ancre[1]) > 40) {
+        n++;
+        ancre = p;
+      }
+    }
+    return n;
+  };
+
+  it("vide et sans question en attente : elle la referme après 2 minutes et se remet à bouger", () => {
+    expect(avecChat(60, true)).toBeGreaterThanOrEqual(2);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+  });
+
+  it("avec une question en attente de réponse, la discussion reste ouverte", () => {
+    avecChat(60, false);
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ");
+    champ!.value = "Que se passe-t-il ?";
+    champ!.form!.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    vi.advanceTimersByTime(300_000);
+    expect(document.querySelector(".lia-ui__chat")).not.toBeNull();
+  });
+
+  it("une phrase commencée dans le champ la garde ouverte", () => {
+    avecChat(60, false);
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ");
+    champ!.value = "Je réfléchis";
+    vi.advanceTimersByTime(300_000);
+    expect(document.querySelector(".lia-ui__chat")).not.toBeNull();
+  });
+});
