@@ -164,6 +164,102 @@ function ajouterFait(journal, fait) {
   return [...journal, fait].slice(-JOURNAL_MAX);
 }
 
+// src/humeurs.ts
+var PROFILS_V9 = {
+  confiant: { bs: 0.85, ba: 1, blr: 0.8, ga: 0.9, en: 1, tint: 0.08, sag: 0, jit: 0.5, tc: [170, 215, 200] },
+  reconnaissant: { bs: 0.8, ba: 0.9, blr: 0.9, ga: 0.7, en: 1, tint: 0.12, sag: 0.01, jit: 0.5, tc: [255, 205, 160] },
+  amuse: { bs: 1.15, ba: 1, blr: 1.2, ga: 1.3, en: 1.1, tint: 0.15, sag: 0, jit: 1.3, tc: [255, 190, 140], wigI: 9, hopI: 20, hopV: 2 },
+  dubitatif: { bs: 0.95, ba: 0.6, blr: 1, ga: 1.2, en: 0.85, tint: 0.05, sag: 0.01, jit: 1, tc: [190, 185, 225], wigI: 20 },
+  impatient: { bs: 1.35, ba: 0.8, blr: 0.6, ga: 1.2, en: 1.1, tint: 0.12, sag: 0, jit: 1.8, tc: [255, 175, 120], hopI: 25, hopV: 2 },
+  compatissant: { bs: 0.75, ba: 0.9, blr: 1, ga: 0.7, en: 0.9, tint: 0.12, sag: 0.02, jit: 0.4, tc: [255, 185, 205] },
+  euphorique: { bs: 1.4, ba: 1.4, blr: 0.4, ga: 1.6, en: 1.4, tint: 0.25, sag: -0.04, jit: 1.6, tc: [255, 220, 140], hopI: 7, hopV: 4 },
+  paisible: { bs: 0.7, ba: 0.8, blr: 1, ga: 0.5, en: 0.85, tint: -0.08, sag: 0.01, jit: 0.3, tc: [160, 215, 205], yawnI: 70 },
+  pensif: { bs: 0.75, ba: 0.85, blr: 1.3, ga: 0.5, en: 0.8, tint: -0.1, sag: 0.01, jit: 0.6, tc: [185, 175, 235] },
+  empresse: { bs: 1.35, ba: 1.2, blr: 0.5, ga: 1.5, en: 1.2, tint: 0.15, sag: -0.03, jit: 1.2, tc: [255, 185, 120] },
+  solidaire: { bs: 0.95, ba: 1.1, blr: 0.7, ga: 0.9, en: 1.1, tint: 0.1, sag: 0, jit: 0.5, tc: [200, 190, 255] },
+  optimiste: { bs: 1, ba: 1.1, blr: 0.7, ga: 1, en: 1.15, tint: 0.12, sag: -0.01, jit: 0.8, tc: [190, 225, 255], hopI: 40, hopV: 2 },
+  serein: { bs: 0.75, ba: 0.75, blr: 0.8, ga: 0.7, en: 0.85, tint: -0.05, sag: 0, jit: 0.4, tc: [150, 215, 200], yawnI: 90 },
+  attentif: { bs: 1, ba: 0.8, blr: 0.6, ga: 1.3, en: 1, tint: 0.05, sag: 0, jit: 0.8 },
+  vigilant: { bs: 1.3, ba: 0.6, blr: 0.5, ga: 1.8, en: 1, tint: 0.1, sag: -0.01, jit: 1.1, tc: [255, 215, 150] },
+  protecteur: { bs: 1, ba: 1.1, blr: 0.6, ga: 1, en: 1.2, tint: 0.15, sag: -0.03, jit: 0.6, tc: [255, 190, 120] },
+  mefiant: { bs: 1.1, ba: 0.6, blr: 0.8, ga: 1.4, en: 0.9, tint: 0.05, sag: 0.01, jit: 1.3, tc: [190, 170, 230], shivI: 30 },
+  boudeur: { bs: 0.8, ba: 0.6, blr: 1.3, ga: 0.3, en: 0.6, tint: -0.1, sag: 0.03, jit: 0.5, tc: [200, 150, 200] },
+  nostalgique: { bs: 0.7, ba: 0.8, blr: 1.1, ga: 0.6, en: 0.7, tint: -0.15, sag: 0.02, jit: 0.5, tc: [220, 185, 150], yawnI: 80 },
+  reveur: { bs: 0.7, ba: 0.9, blr: 1.5, ga: 0.5, en: 0.85, tint: -0.05, sag: 0, jit: 0.8, tc: [190, 170, 255], wigI: 25 },
+  ennuye: { bs: 0.75, ba: 0.5, blr: 1.4, ga: 0.8, en: 0.65, tint: -0.15, sag: 0.02, jit: 0.6, yawnI: 28 },
+  taquin: { bs: 1.2, ba: 1, blr: 1.1, ga: 1.5, en: 1.15, tint: 0.18, sag: 0, jit: 1.5, tc: [255, 170, 120], wigI: 7, hopI: 16, hopV: 2.5 },
+  soulage: { bs: 0.85, ba: 1.1, blr: 0.9, ga: 0.8, en: 0.95, tint: 0.1, sag: 0.03, jit: 0.5, tc: [160, 230, 190], yawnI: 40 },
+  emerveille: { bs: 1.2, ba: 1.3, blr: 0.5, ga: 1.5, en: 1.35, tint: 0.25, sag: -0.02, jit: 1.3, tc: [180, 230, 255], hopI: 12, hopV: 3.5 },
+  gene: { bs: 1.3, ba: 0.6, blr: 1.7, ga: 0.4, en: 0.8, tint: 0.15, sag: 0.02, jit: 1.5, tc: [255, 150, 160], wigI: 10 },
+  determine: { bs: 1.1, ba: 1.3, blr: 0.4, ga: 1, en: 1.2, tint: 0.05, sag: -0.05, jit: 0.3, tc: [255, 180, 110] },
+  agace: { bs: 1.4, ba: 0.8, blr: 1, ga: 1.1, en: 1.1, tint: 0.2, sag: 0, jit: 2.2, tc: [255, 130, 110], shivI: 12 },
+  tendre: { bs: 0.8, ba: 0.9, blr: 1, ga: 0.7, en: 1, tint: 0.12, sag: 0, jit: 0.5, tc: [255, 185, 205] }
+};
+var LIBELLES_HUMEURS = {
+  neutre: "neutre",
+  joyeux: "joie",
+  calme: "calme",
+  curieux: "curiosit\xE9",
+  fatigue: "fatigue",
+  inquiet: "inqui\xE9tude",
+  excite: "excitation",
+  triste: "tristesse",
+  concentre: "concentration",
+  espiegle: "espi\xE8glerie",
+  fier: "fiert\xE9",
+  timide: "timidit\xE9",
+  serein: "s\xE9r\xE9nit\xE9",
+  attentif: "attention",
+  vigilant: "vigilance",
+  protecteur: "protection",
+  mefiant: "m\xE9fiance",
+  boudeur: "bouderie",
+  nostalgique: "nostalgie",
+  reveur: "r\xEAverie",
+  ennuye: "ennui",
+  taquin: "taquinerie",
+  soulage: "soulagement",
+  emerveille: "\xE9merveillement",
+  gene: "g\xEAne",
+  determine: "d\xE9termination",
+  agace: "agacement",
+  tendre: "tendresse",
+  confiant: "confiance",
+  reconnaissant: "gratitude",
+  amuse: "amusement",
+  dubitatif: "doute",
+  impatient: "impatience",
+  compatissant: "compassion",
+  euphorique: "euphorie",
+  paisible: "paix",
+  pensif: "songerie",
+  empresse: "empressement",
+  solidaire: "solidarit\xE9",
+  optimiste: "optimisme"
+};
+var COULEURS_12 = {
+  neutre: "#A7AEBD",
+  joyeux: "#E3A23B",
+  calme: "#5CC8B6",
+  curieux: "#93A0FF",
+  fatigue: "#8A8F98",
+  inquiet: "#E5675B",
+  excite: "#FB923C",
+  triste: "#6E8CE6",
+  concentre: "#9B7BE0",
+  espiegle: "#F472B6",
+  fier: "#FCD34D",
+  timide: "#FDA4AF"
+};
+var hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+var libelleHumeur = (nom) => LIBELLES_HUMEURS[nom] ?? nom;
+function couleurHumeur(nom) {
+  const d12 = COULEURS_12[nom];
+  if (d12) return d12;
+  const tc = PROFILS_V9[nom]?.tc;
+  return tc ? `#${hex2(tc[0])}${hex2(tc[1])}${hex2(tc[2])}` : COULEURS_12["neutre"] ?? "#A7AEBD";
+}
+
 // src/ecran.ts
 var ENTREES_MENU = [
   { mode: "expliquer", libelle: "Explique-moi \xE7a" },
@@ -377,38 +473,6 @@ function entreesLocales(c) {
     rythme: borne2(recents.length / 6)
   };
 }
-
-// src/humeurs.ts
-var PROFILS_V9 = {
-  confiant: { bs: 0.85, ba: 1, blr: 0.8, ga: 0.9, en: 1, tint: 0.08, sag: 0, jit: 0.5, tc: [170, 215, 200] },
-  reconnaissant: { bs: 0.8, ba: 0.9, blr: 0.9, ga: 0.7, en: 1, tint: 0.12, sag: 0.01, jit: 0.5, tc: [255, 205, 160] },
-  amuse: { bs: 1.15, ba: 1, blr: 1.2, ga: 1.3, en: 1.1, tint: 0.15, sag: 0, jit: 1.3, tc: [255, 190, 140], wigI: 9, hopI: 20, hopV: 2 },
-  dubitatif: { bs: 0.95, ba: 0.6, blr: 1, ga: 1.2, en: 0.85, tint: 0.05, sag: 0.01, jit: 1, tc: [190, 185, 225], wigI: 20 },
-  impatient: { bs: 1.35, ba: 0.8, blr: 0.6, ga: 1.2, en: 1.1, tint: 0.12, sag: 0, jit: 1.8, tc: [255, 175, 120], hopI: 25, hopV: 2 },
-  compatissant: { bs: 0.75, ba: 0.9, blr: 1, ga: 0.7, en: 0.9, tint: 0.12, sag: 0.02, jit: 0.4, tc: [255, 185, 205] },
-  euphorique: { bs: 1.4, ba: 1.4, blr: 0.4, ga: 1.6, en: 1.4, tint: 0.25, sag: -0.04, jit: 1.6, tc: [255, 220, 140], hopI: 7, hopV: 4 },
-  paisible: { bs: 0.7, ba: 0.8, blr: 1, ga: 0.5, en: 0.85, tint: -0.08, sag: 0.01, jit: 0.3, tc: [160, 215, 205], yawnI: 70 },
-  pensif: { bs: 0.75, ba: 0.85, blr: 1.3, ga: 0.5, en: 0.8, tint: -0.1, sag: 0.01, jit: 0.6, tc: [185, 175, 235] },
-  empresse: { bs: 1.35, ba: 1.2, blr: 0.5, ga: 1.5, en: 1.2, tint: 0.15, sag: -0.03, jit: 1.2, tc: [255, 185, 120] },
-  solidaire: { bs: 0.95, ba: 1.1, blr: 0.7, ga: 0.9, en: 1.1, tint: 0.1, sag: 0, jit: 0.5, tc: [200, 190, 255] },
-  optimiste: { bs: 1, ba: 1.1, blr: 0.7, ga: 1, en: 1.15, tint: 0.12, sag: -0.01, jit: 0.8, tc: [190, 225, 255], hopI: 40, hopV: 2 },
-  serein: { bs: 0.75, ba: 0.75, blr: 0.8, ga: 0.7, en: 0.85, tint: -0.05, sag: 0, jit: 0.4, tc: [150, 215, 200], yawnI: 90 },
-  attentif: { bs: 1, ba: 0.8, blr: 0.6, ga: 1.3, en: 1, tint: 0.05, sag: 0, jit: 0.8 },
-  vigilant: { bs: 1.3, ba: 0.6, blr: 0.5, ga: 1.8, en: 1, tint: 0.1, sag: -0.01, jit: 1.1, tc: [255, 215, 150] },
-  protecteur: { bs: 1, ba: 1.1, blr: 0.6, ga: 1, en: 1.2, tint: 0.15, sag: -0.03, jit: 0.6, tc: [255, 190, 120] },
-  mefiant: { bs: 1.1, ba: 0.6, blr: 0.8, ga: 1.4, en: 0.9, tint: 0.05, sag: 0.01, jit: 1.3, tc: [190, 170, 230], shivI: 30 },
-  boudeur: { bs: 0.8, ba: 0.6, blr: 1.3, ga: 0.3, en: 0.6, tint: -0.1, sag: 0.03, jit: 0.5, tc: [200, 150, 200] },
-  nostalgique: { bs: 0.7, ba: 0.8, blr: 1.1, ga: 0.6, en: 0.7, tint: -0.15, sag: 0.02, jit: 0.5, tc: [220, 185, 150], yawnI: 80 },
-  reveur: { bs: 0.7, ba: 0.9, blr: 1.5, ga: 0.5, en: 0.85, tint: -0.05, sag: 0, jit: 0.8, tc: [190, 170, 255], wigI: 25 },
-  ennuye: { bs: 0.75, ba: 0.5, blr: 1.4, ga: 0.8, en: 0.65, tint: -0.15, sag: 0.02, jit: 0.6, yawnI: 28 },
-  taquin: { bs: 1.2, ba: 1, blr: 1.1, ga: 1.5, en: 1.15, tint: 0.18, sag: 0, jit: 1.5, tc: [255, 170, 120], wigI: 7, hopI: 16, hopV: 2.5 },
-  soulage: { bs: 0.85, ba: 1.1, blr: 0.9, ga: 0.8, en: 0.95, tint: 0.1, sag: 0.03, jit: 0.5, tc: [160, 230, 190], yawnI: 40 },
-  emerveille: { bs: 1.2, ba: 1.3, blr: 0.5, ga: 1.5, en: 1.35, tint: 0.25, sag: -0.02, jit: 1.3, tc: [180, 230, 255], hopI: 12, hopV: 3.5 },
-  gene: { bs: 1.3, ba: 0.6, blr: 1.7, ga: 0.4, en: 0.8, tint: 0.15, sag: 0.02, jit: 1.5, tc: [255, 150, 160], wigI: 10 },
-  determine: { bs: 1.1, ba: 1.3, blr: 0.4, ga: 1, en: 1.2, tint: 0.05, sag: -0.05, jit: 0.3, tc: [255, 180, 110] },
-  agace: { bs: 1.4, ba: 0.8, blr: 1, ga: 1.1, en: 1.1, tint: 0.2, sag: 0, jit: 2.2, tc: [255, 130, 110], shivI: 12 },
-  tendre: { bs: 0.8, ba: 0.9, blr: 1, ga: 0.7, en: 1, tint: 0.12, sag: 0, jit: 0.5, tc: [255, 185, 205] }
-};
 
 // src/poids.ts
 var APP_IDS = ["financeai", "batchchef", "jobai", "driveai", "carai", "memoryai"];
@@ -2474,6 +2538,8 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__item{min-height:44px;display:flex;align-items:center;gap:.6rem;padding:0 .8rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;text-align:left;cursor:pointer}
 .lia-ui__item:hover{background:var(--lia-surface-2)}
 .lia-ui__item[aria-checked=true]::after{content:"";margin-left:auto;width:.55rem;height:.55rem;border-radius:50%;background:var(--lia-accent)}
+.lia-ui__etat-humeur{position:absolute;left:0;top:0;transform:translateX(-50%);display:flex;align-items:center;gap:.4rem;padding:.2rem .6rem;border-radius:999px;border:1px solid var(--lia-border);background:var(--lia-glass);color:var(--lia-soft);font-size:.72rem;line-height:1.2;white-space:nowrap;pointer-events:none;opacity:.9}
+.lia-ui__etat-humeur i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--lia-point,var(--lia-accent))}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
 .lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
 .lia-ui__menu:not(.lia-ui__menu--element){min-width:264px}
@@ -2561,6 +2627,14 @@ function mountLia(options = {}) {
   hit.setAttribute("aria-label", "LIA : ouvrir la discussion");
   hit.setAttribute("aria-haspopup", "dialog");
   corpsEl.append(toile, hit);
+  const puceHumeur = options.humeurVisible === false ? null : el("div", "lia-ui__etat-humeur");
+  const pointHumeur = puceHumeur ? el("i") : null;
+  const texteHumeur = puceHumeur ? el("span") : null;
+  if (puceHumeur && pointHumeur && texteHumeur) {
+    pointHumeur.setAttribute("aria-hidden", "true");
+    puceHumeur.append(pointHumeur, texteHumeur);
+    corpsEl.appendChild(puceHumeur);
+  }
   couche.appendChild(corpsEl);
   const bulle = el("div", "lia-ui__bulle");
   bulle.hidden = true;
@@ -2657,9 +2731,18 @@ function mountLia(options = {}) {
     if (e !== etat) debut[e] = sansMouvement ? -1.6 : t;
     etat = e;
   };
+  const afficherHumeur = (nom) => {
+    if (!puceHumeur || !pointHumeur || !texteHumeur) return;
+    const libelle = libelleHumeur(nom);
+    texteHumeur.textContent = libelle.charAt(0).toUpperCase() + libelle.slice(1);
+    puceHumeur.style.setProperty("--lia-point", couleurHumeur(nom));
+    puceHumeur.setAttribute("aria-label", `Humeur : ${libelle}`);
+  };
+  afficherHumeur(humeurNom);
   const appliquerHumeur = (nom) => {
     if (nom === humeurNom) return;
     humeurNom = nom;
+    afficherHumeur(nom);
     if (HUMEURS_LIA.includes(nom)) {
       humeurId = nom;
       options.onHumeur?.(humeurId);
@@ -3572,6 +3655,11 @@ function mountLia(options = {}) {
       });
     }
     corpsEl.style.transform = `translate(${pos.x.toFixed(1)}px,${pos.y.toFixed(1)}px)`;
+    if (puceHumeur) {
+      puceHumeur.hidden = chatOuvert;
+      const dessous = Math.min(rayon * 1.05, Math.max(rayon * 0.6, z.y + z.h - pos.y - 26));
+      puceHumeur.style.top = `${dessous.toFixed(1)}px`;
+    }
     const diametreHit = Math.round(rayon * 1.5);
     hit.style.width = hit.style.height = `${Math.max(44, diametreHit)}px`;
     if (!bulle.hidden) {
@@ -3613,6 +3701,7 @@ function mountLia(options = {}) {
     ouvrirChat,
     fermerChat,
     setHumeur: setHumeur2,
+    humeur: () => ({ nom: humeurNom, libelle: libelleHumeur(humeurNom), couleur: couleurHumeur(humeurNom) }),
     setEtat(e) {
       etatForce = e;
       choisir2(e ?? "repos");
@@ -3668,6 +3757,9 @@ export {
   apresComportement,
   candidats,
   choisirComportement,
+  LIBELLES_HUMEURS,
+  libelleHumeur,
+  couleurHumeur,
   ENTREES_MENU,
   SELECTEUR_ELEMENTS,
   decrireParDefaut,
@@ -3678,4 +3770,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-D5QVQ6FR.mjs.map
+//# sourceMappingURL=chunk-UXP55X2G.mjs.map

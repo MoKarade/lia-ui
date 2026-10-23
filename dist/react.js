@@ -231,6 +231,70 @@ var PROFILS_V9 = {
   agace: { bs: 1.4, ba: 0.8, blr: 1, ga: 1.1, en: 1.1, tint: 0.2, sag: 0, jit: 2.2, tc: [255, 130, 110], shivI: 12 },
   tendre: { bs: 0.8, ba: 0.9, blr: 1, ga: 0.7, en: 1, tint: 0.12, sag: 0, jit: 0.5, tc: [255, 185, 205] }
 };
+var LIBELLES_HUMEURS = {
+  neutre: "neutre",
+  joyeux: "joie",
+  calme: "calme",
+  curieux: "curiosit\xE9",
+  fatigue: "fatigue",
+  inquiet: "inqui\xE9tude",
+  excite: "excitation",
+  triste: "tristesse",
+  concentre: "concentration",
+  espiegle: "espi\xE8glerie",
+  fier: "fiert\xE9",
+  timide: "timidit\xE9",
+  serein: "s\xE9r\xE9nit\xE9",
+  attentif: "attention",
+  vigilant: "vigilance",
+  protecteur: "protection",
+  mefiant: "m\xE9fiance",
+  boudeur: "bouderie",
+  nostalgique: "nostalgie",
+  reveur: "r\xEAverie",
+  ennuye: "ennui",
+  taquin: "taquinerie",
+  soulage: "soulagement",
+  emerveille: "\xE9merveillement",
+  gene: "g\xEAne",
+  determine: "d\xE9termination",
+  agace: "agacement",
+  tendre: "tendresse",
+  confiant: "confiance",
+  reconnaissant: "gratitude",
+  amuse: "amusement",
+  dubitatif: "doute",
+  impatient: "impatience",
+  compatissant: "compassion",
+  euphorique: "euphorie",
+  paisible: "paix",
+  pensif: "songerie",
+  empresse: "empressement",
+  solidaire: "solidarit\xE9",
+  optimiste: "optimisme"
+};
+var COULEURS_12 = {
+  neutre: "#A7AEBD",
+  joyeux: "#E3A23B",
+  calme: "#5CC8B6",
+  curieux: "#93A0FF",
+  fatigue: "#8A8F98",
+  inquiet: "#E5675B",
+  excite: "#FB923C",
+  triste: "#6E8CE6",
+  concentre: "#9B7BE0",
+  espiegle: "#F472B6",
+  fier: "#FCD34D",
+  timide: "#FDA4AF"
+};
+var hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+var libelleHumeur = (nom) => LIBELLES_HUMEURS[nom] ?? nom;
+function couleurHumeur(nom) {
+  const d12 = COULEURS_12[nom];
+  if (d12) return d12;
+  const tc = PROFILS_V9[nom]?.tc;
+  return tc ? `#${hex2(tc[0])}${hex2(tc[1])}${hex2(tc[2])}` : COULEURS_12["neutre"] ?? "#A7AEBD";
+}
 
 // src/poids.ts
 var APP_IDS = ["financeai", "batchchef", "jobai", "driveai", "carai", "memoryai"];
@@ -2423,6 +2487,8 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__item{min-height:44px;display:flex;align-items:center;gap:.6rem;padding:0 .8rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;text-align:left;cursor:pointer}
 .lia-ui__item:hover{background:var(--lia-surface-2)}
 .lia-ui__item[aria-checked=true]::after{content:"";margin-left:auto;width:.55rem;height:.55rem;border-radius:50%;background:var(--lia-accent)}
+.lia-ui__etat-humeur{position:absolute;left:0;top:0;transform:translateX(-50%);display:flex;align-items:center;gap:.4rem;padding:.2rem .6rem;border-radius:999px;border:1px solid var(--lia-border);background:var(--lia-glass);color:var(--lia-soft);font-size:.72rem;line-height:1.2;white-space:nowrap;pointer-events:none;opacity:.9}
+.lia-ui__etat-humeur i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--lia-point,var(--lia-accent))}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
 .lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
 .lia-ui__menu:not(.lia-ui__menu--element){min-width:264px}
@@ -2526,6 +2592,14 @@ function mountLia(options = {}) {
   hit.setAttribute("aria-label", "LIA : ouvrir la discussion");
   hit.setAttribute("aria-haspopup", "dialog");
   corpsEl.append(toile, hit);
+  const puceHumeur = options.humeurVisible === false ? null : el("div", "lia-ui__etat-humeur");
+  const pointHumeur = puceHumeur ? el("i") : null;
+  const texteHumeur = puceHumeur ? el("span") : null;
+  if (puceHumeur && pointHumeur && texteHumeur) {
+    pointHumeur.setAttribute("aria-hidden", "true");
+    puceHumeur.append(pointHumeur, texteHumeur);
+    corpsEl.appendChild(puceHumeur);
+  }
   couche.appendChild(corpsEl);
   const bulle = el("div", "lia-ui__bulle");
   bulle.hidden = true;
@@ -2622,9 +2696,18 @@ function mountLia(options = {}) {
     if (e !== etat) debut[e] = sansMouvement ? -1.6 : t;
     etat = e;
   };
+  const afficherHumeur = (nom) => {
+    if (!puceHumeur || !pointHumeur || !texteHumeur) return;
+    const libelle = libelleHumeur(nom);
+    texteHumeur.textContent = libelle.charAt(0).toUpperCase() + libelle.slice(1);
+    puceHumeur.style.setProperty("--lia-point", couleurHumeur(nom));
+    puceHumeur.setAttribute("aria-label", `Humeur : ${libelle}`);
+  };
+  afficherHumeur(humeurNom);
   const appliquerHumeur = (nom) => {
     if (nom === humeurNom) return;
     humeurNom = nom;
+    afficherHumeur(nom);
     if (HUMEURS_LIA.includes(nom)) {
       humeurId = nom;
       options.onHumeur?.(humeurId);
@@ -3537,6 +3620,11 @@ function mountLia(options = {}) {
       });
     }
     corpsEl.style.transform = `translate(${pos.x.toFixed(1)}px,${pos.y.toFixed(1)}px)`;
+    if (puceHumeur) {
+      puceHumeur.hidden = chatOuvert;
+      const dessous = Math.min(rayon * 1.05, Math.max(rayon * 0.6, z.y + z.h - pos.y - 26));
+      puceHumeur.style.top = `${dessous.toFixed(1)}px`;
+    }
     const diametreHit = Math.round(rayon * 1.5);
     hit.style.width = hit.style.height = `${Math.max(44, diametreHit)}px`;
     if (!bulle.hidden) {
@@ -3578,6 +3666,7 @@ function mountLia(options = {}) {
     ouvrirChat,
     fermerChat,
     setHumeur: setHumeur2,
+    humeur: () => ({ nom: humeurNom, libelle: libelleHumeur(humeurNom), couleur: couleurHumeur(humeurNom) }),
     setEtat(e) {
       etatForce = e;
       choisir(e ?? "repos");
@@ -3639,6 +3728,7 @@ function Lia(props) {
       ...p.cibles !== void 0 ? { cibles: p.cibles } : {},
       ...p.silence ? { silence: p.silence } : {},
       ...p.quandMouvementReduit ? { quandMouvementReduit: p.quandMouvementReduit } : {},
+      ...p.humeurVisible !== void 0 ? { humeurVisible: p.humeurVisible } : {},
       ...p.relancesParJour !== void 0 ? { relancesParJour: p.relancesParJour } : {},
       ...p.onSpontane ? { onSpontane: (m) => derniere.current.onSpontane?.(m) ?? null } : {},
       ...p.elements === false ? { elements: false } : p.elements ? {

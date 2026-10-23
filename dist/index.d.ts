@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle } from './types-DFfnKJ6R.js';
-export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, E as ENVIES_DEPART, c as Envies, d as EnvoiLia, F as FaitLia, G as GESTES, e as GesteLia, H as HUMEURS_LIA, f as HUMEURS_MENU, g as Hasard, h as HumeurLia, i as LIBELLE_HUMEUR, M as MotifMonde, j as MotifSpontane, k as OptionsElements, P as ParoleSpontanee, l as PropositionMonde, m as PuceLia, R as ReponseLia, Z as ZoneVie, n as apresComportement, o as candidats, p as choisirComportement, q as dansZone, r as majEnvies, s as pointDansZone, t as prochaineDecision } from './types-DFfnKJ6R.js';
+import { O as OptionsLia, L as LiaHandle } from './types-CwkoBftp.js';
+export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, E as ENVIES_DEPART, c as Envies, d as EnvoiLia, F as FaitLia, G as GESTES, e as GesteLia, H as HUMEURS_LIA, f as HUMEURS_MENU, g as Hasard, h as HumeurLia, i as LIBELLE_HUMEUR, M as MotifMonde, j as MotifSpontane, k as OptionsElements, P as ParoleSpontanee, l as PropositionMonde, m as PuceLia, R as ReponseLia, Z as ZoneVie, n as apresComportement, o as candidats, p as choisirComportement, q as dansZone, r as majEnvies, s as pointDansZone, t as prochaineDecision } from './types-CwkoBftp.js';
 
 declare function mountLia(options?: OptionsLia): LiaHandle;
 
@@ -36,4 +36,9 @@ declare function decrireParDefaut(cible: Element): ElementDecrit;
  */
 declare function composerQuestion(mode: ModeElement, d: ElementDecrit, question?: string): string;
 
-export { ENTREES_MENU, LiaHandle, type ModeElement, OptionsLia, SELECTEUR_ELEMENTS, composerQuestion, decrireParDefaut, mountLia };
+/** Le nom de chacune des 40 humeurs (noms, pas d'accord : « Humeur : sérénité »), pour la pastille que LIA dessine. */
+declare const LIBELLES_HUMEURS: Readonly<Record<string, string>>;
+declare const libelleHumeur: (nom: string) => string;
+declare function couleurHumeur(nom: string): string;
+
+export { ENTREES_MENU, LIBELLES_HUMEURS, LiaHandle, type ModeElement, OptionsLia, SELECTEUR_ELEMENTS, composerQuestion, couleurHumeur, decrireParDefaut, libelleHumeur, mountLia };

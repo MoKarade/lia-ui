@@ -51,3 +51,32 @@ export const PROFILS_V9: Readonly<Record<string, ProfilHumeur>> = {
  agace:{bs:1.4,ba:.8,blr:1,ga:1.1,en:1.1,tint:.2,sag:0,jit:2.2,tc:[255,130,110],shivI:12},
  tendre:{bs:.8,ba:.9,blr:1,ga:.7,en:1,tint:.12,sag:0,jit:.5,tc:[255,185,205]}
 };
+
+/** Le nom de chacune des 40 humeurs (noms, pas d'accord : « Humeur : sérénité »), pour la pastille que LIA dessine. */
+export const LIBELLES_HUMEURS: Readonly<Record<string, string>> = {
+  neutre: "neutre", joyeux: "joie", calme: "calme", curieux: "curiosité", fatigue: "fatigue", inquiet: "inquiétude",
+  excite: "excitation", triste: "tristesse", concentre: "concentration", espiegle: "espièglerie", fier: "fierté", timide: "timidité",
+  serein: "sérénité", attentif: "attention", vigilant: "vigilance", protecteur: "protection", mefiant: "méfiance",
+  boudeur: "bouderie", nostalgique: "nostalgie", reveur: "rêverie", ennuye: "ennui", taquin: "taquinerie",
+  soulage: "soulagement", emerveille: "émerveillement", gene: "gêne", determine: "détermination", agace: "agacement",
+  tendre: "tendresse", confiant: "confiance", reconnaissant: "gratitude", amuse: "amusement", dubitatif: "doute",
+  impatient: "impatience", compatissant: "compassion", euphorique: "euphorie", paisible: "paix", pensif: "songerie",
+  empresse: "empressement", solidaire: "solidarité", optimiste: "optimisme",
+};
+
+/** Les 12 humeurs d'origine ont la couleur de la maquette v5 (`HLIB`) ; les 28 autres, la teinte de leur profil. */
+const COULEURS_12: Readonly<Record<string, string>> = {
+  neutre: "#A7AEBD", joyeux: "#E3A23B", calme: "#5CC8B6", curieux: "#93A0FF", fatigue: "#8A8F98", inquiet: "#E5675B",
+  excite: "#FB923C", triste: "#6E8CE6", concentre: "#9B7BE0", espiegle: "#F472B6", fier: "#FCD34D", timide: "#FDA4AF",
+};
+
+const hex2 = (n: number): string => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+
+export const libelleHumeur = (nom: string): string => LIBELLES_HUMEURS[nom] ?? nom;
+
+export function couleurHumeur(nom: string): string {
+  const d12 = COULEURS_12[nom];
+  if (d12) return d12;
+  const tc = PROFILS_V9[nom]?.tc;
+  return tc ? `#${hex2(tc[0])}${hex2(tc[1])}${hex2(tc[2])}` : COULEURS_12["neutre"] ?? "#A7AEBD";
+}
