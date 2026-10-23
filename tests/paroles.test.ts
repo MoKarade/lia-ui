@@ -199,7 +199,7 @@ describe("elle parle seule, même quand l'hôte n'a rien à dire", () => {
     vi.advanceTimersByTime(2000);
     document.querySelector<HTMLButtonElement>(".lia-ui__puce")?.click();
     vi.advanceTimersByTime(2500);
-    expect(bulle()).toContain("Le soir. Je m'en doutais");
+    expect(bulle()).toContain("Le soir. Tout ralentit");
     expect(onChip).not.toHaveBeenCalled();
   });
 
@@ -210,5 +210,41 @@ describe("elle parle seule, même quand l'hôte n'a rien à dire", () => {
     vi.advanceTimersByTime(2000);
     document.querySelector<HTMLButtonElement>(".lia-ui__puce")?.click();
     expect(onChip).toHaveBeenCalledWith("regarder", "bulle");
+  });
+});
+
+describe("sa parole est honnête et variée", () => {
+  const dites = (): string[] => [...Object.values(SUITES).filter((x): x is string => !!x), ...BLAGUES];
+
+  it("aucune suite ne promet de noter quoi que ce soit ni ne juge Marc", () => {
+    for (const t of dites()) expect(t, t).not.toMatch(/je (le )?note|je m'en doutais|tu es plus|tu ne le laisses/i);
+  });
+
+  it("ses quatre blagues sont différentes", () => {
+    expect(new Set(BLAGUES).size).toBe(BLAGUES.length);
+  });
+
+  it("sur 400 tirages elle dit au moins 24 phrases différentes et ne répète jamais la même deux fois de suite", () => {
+    let graine = 12345;
+    const hasard = (): number => {
+      graine = (graine * 1664525 + 1013904223) % 4294967296;
+      return graine / 4294967296;
+    };
+    const textes: string[] = [];
+    const recentes: string[] = [];
+    for (let i = 0; i < 400; i++) {
+      const p = choisirParole(ctx({ heure: 9, envies: { ...ENVIES_DEPART, energie: 0.9 }, recentes: recentes.slice(-6) }), hasard);
+      textes.push(p.text);
+      recentes.push(p.id);
+    }
+    expect(new Set(textes).size).toBeGreaterThanOrEqual(24);
+    for (let i = 1; i < textes.length; i++) expect(textes[i]).not.toBe(textes[i - 1]);
+  });
+
+  it("« Et toi ? » donne son humeur réelle et ses réponses rapides ont une suite", () => {
+    const p = choisirParole(ctx({ humeur: "triste" }), () => 0);
+    expect(p.id).toBeTruthy();
+    for (const label of ["Bien", "Comme ci comme ça", "Fatigué", "Les listes", "Café", "Chut"]) expect(suiteParole(label, ctx(), () => 0.1), label).not.toBe(null);
+    expect(suiteParole("Une blague", ctx(), () => 0.1)?.id).toBe("blague");
   });
 });
