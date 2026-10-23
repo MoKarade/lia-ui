@@ -292,7 +292,35 @@ var ACTIVITES_JEU = {
   triste: ["triste", "souvient", "attend"],
   concentre: ["concentre", "code", "calcule", "analyse", "verifie", "ecrit", "traduit"],
   fier: ["content", "reussi", "envoie", "remercie"],
-  timide: ["reflexion", "attend", "lit", "apprend"]
+  timide: ["reflexion", "attend", "lit", "apprend"],
+  serein: ["reflexion", "attend", "musique"],
+  attentif: ["surveille", "lit", "attend"],
+  vigilant: ["surveille", "securise", "attend"],
+  protecteur: ["securise", "surveille", "verifie"],
+  mefiant: ["surveille", "verifie"],
+  boudeur: ["triste", "attend"],
+  nostalgique: ["souvient", "reflexion"],
+  reveur: ["reflexion", "souvient", "musique"],
+  ennuye: ["attend", "cherche", "musique"],
+  taquin: ["musique", "salue", "cherche"],
+  soulage: ["content", "reussi"],
+  emerveille: ["surpris", "content", "apprend"],
+  gene: ["attend", "reflexion"],
+  determine: ["concentre", "planifie", "verifie"],
+  agace: ["attend", "securise"],
+  tendre: ["salue", "content", "remercie"],
+  confiant: ["content", "reussi", "attend"],
+  reconnaissant: ["remercie", "content"],
+  amuse: ["musique", "salue", "content"],
+  dubitatif: ["verifie", "reflexion", "surveille"],
+  impatient: ["attend", "cherche"],
+  compatissant: ["remercie", "attend", "reflexion"],
+  euphorique: ["musique", "content", "reussi"],
+  paisible: ["reflexion", "attend", "musique"],
+  pensif: ["reflexion", "souvient"],
+  empresse: ["planifie", "organise", "cherche"],
+  solidaire: ["salue", "content", "verifie"],
+  optimiste: ["content", "reussi", "musique"]
 };
 
 // src/cerveau.ts
@@ -507,6 +535,14 @@ function couleurHumeur(nom) {
   const tc = PROFILS_V9[nom]?.tc;
   return tc ? `#${hex2(tc[0])}${hex2(tc[1])}${hex2(tc[2])}` : COULEURS_12["neutre"] ?? "#A7AEBD";
 }
+var PHRASES_MENU = {
+  curieux: "Je regarde partout.",
+  calme: "On respire.",
+  joyeux: "\xC7a va bien !",
+  concentre: "Je me concentre.",
+  espiegle: "Tu vas voir.",
+  fatigue: "Un peu fatigu\xE9e."
+};
 
 // src/etat.ts
 var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
@@ -3021,7 +3057,8 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__item{min-height:44px;display:flex;align-items:center;gap:.6rem;padding:0 .8rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;text-align:left;cursor:pointer}
 .lia-ui__item:hover{background:var(--lia-surface-2)}
 .lia-ui__item[aria-checked=true]::after{content:"";margin-left:auto;width:.55rem;height:.55rem;border-radius:50%;background:var(--lia-accent)}
-.lia-ui__etat-humeur{position:absolute;left:0;top:0;transform:translateX(-50%);display:flex;align-items:center;gap:.4rem;padding:.2rem .6rem;border-radius:999px;border:1px solid var(--lia-border);background:var(--lia-glass);color:var(--lia-soft);font-size:.72rem;line-height:1.2;white-space:nowrap;pointer-events:none;opacity:.9}
+.lia-ui__etat-humeur{position:absolute;left:0;top:0;transform:translateX(-50%);display:flex;align-items:center;gap:.4rem;padding:.25rem .7rem;border-radius:999px;border:1px solid color-mix(in srgb,var(--lia-point,var(--lia-accent)) 55%,var(--lia-border));background:var(--lia-glass);color:color-mix(in srgb,var(--lia-point,var(--lia-accent)) 70%,var(--lia-text));font-size:.8rem;line-height:1.2;white-space:nowrap;pointer-events:none;transition:border-color 1.2s ease,color 1.2s ease}
+.lia-ui__etat-humeur[hidden]{display:none}
 .lia-ui__etat-humeur i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--lia-point,var(--lia-accent))}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
 .lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
@@ -3279,6 +3316,7 @@ function mountLia(options = {}) {
     if (sansMouvement) dessinerUneFois();
   };
   const setHumeur2 = (h) => {
+    if (!LIBELLES_HUMEURS[h]) return;
     if (reseauActif) {
       forcee = { jusqua: Date.now() + 1e5 };
       pousserHumeur(reseau, h, Date.now(), 1.6);
@@ -3617,7 +3655,11 @@ function mountLia(options = {}) {
     rangee.setAttribute("role", "group");
     rangee.setAttribute("aria-label", "Son humeur");
     for (const h of HUMEURS_MENU) {
-      const b = item(h.libelle, () => setHumeur2(h.id));
+      const b = item(h.libelle, () => {
+        setHumeur2(h.id);
+        const phrase = PHRASES_MENU[h.id];
+        if (phrase) dire(phrase);
+      });
       b.classList.add("lia-ui__humeur");
       b.setAttribute("role", "menuitemradio");
       b.setAttribute("aria-checked", String(h.id === humeurNom));

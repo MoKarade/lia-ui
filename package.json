@@ -1,10 +1,6 @@
 {
   "name": "@mokarade/lia-ui",
-<<<<<<< HEAD
-  "version": "0.17.1",
-=======
   "version": "0.17.2",
->>>>>>> 02b9fdc (feat: humeurs visibles, jeu des 40, pastille colorée, phrase au clic (v0.17.2))
   "description": "LIA vivante : composant partagé du hub et des apps (corps de 100 traits, discussion, menu d'actions)",
   "license": "UNLICENSED",
   "repository": {
