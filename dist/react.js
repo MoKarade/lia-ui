@@ -3186,6 +3186,7 @@ function mountLia(options = {}) {
     attention = { type: "element", el: element, jusqua: t + secondes, colle: false };
     errance = { jusqua: t + secondes };
     choisir(etatForce ?? "surveille");
+    marquerRegard(element);
     return true;
   }
   function venirPres() {
@@ -3244,7 +3245,6 @@ function mountLia(options = {}) {
   };
   const visiter = (el2, secondes) => {
     if (!allerVoir(el2, secondes)) return;
-    marquerRegard(el2);
     const dit = el2.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (dit) direLa(el2, dit, true);
   };
@@ -3288,7 +3288,6 @@ function mountLia(options = {}) {
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el2 = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
     if (el2 && allerVoir(el2, 9)) {
-      if (motif === "accompagner") marquerRegard(el2);
       if (!etatForce) choisir(etatSur(ETAT_MONDE[motif]));
     } else {
       if (motif === "appeler") venirPres();

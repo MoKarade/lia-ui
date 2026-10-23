@@ -170,6 +170,19 @@ describe("envoyer(element)", () => {
     expect(plusLongTexte(2000)).toContain("Regarde cette carte."); // la bulle s'écrit lettre par lettre
   });
 
+  it("pose data-regard sur la carte visée (allerVoir comme envoyer) et l'ôte quand elle s'en va", () => {
+    lia = mountLia({ vieAutonome: false });
+    expect(lia.allerVoir(carte)).toBe(true);
+    expect(carte.hasAttribute("data-regard")).toBe(true);
+    lia.rester();
+    expect(carte.hasAttribute("data-regard")).toBe(false);
+    expect(lia.envoyer(carte)).toBe(true);
+    expect(carte.hasAttribute("data-regard")).toBe(true);
+    lia.destroy();
+    lia = null;
+    expect(carte.hasAttribute("data-regard")).toBe(false);
+  });
+
   it("ne dit rien si elle n'y est plus (rester) ni sans texte", () => {
     vi.useFakeTimers();
     lia = mountLia({ vieAutonome: false });

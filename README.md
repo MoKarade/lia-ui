@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.9.0
+npm i github:MoKarade/lia-ui#v0.9.1
 ```
 
 ## Utiliser
@@ -65,7 +65,7 @@ Son corps n'a plus une humeur au tirage : un réseau de 225 neurones (reprise du
 
 - Ses intentions pèsent sur ce qu'elle décide de faire (`causer`, `jouer`, `voir`…) ; une mémoire lente de vingt minutes lui fait garder une humeur d'une page à l'autre (`lia-ui:<cle>:reseau`).
 - `lia.ressent()` rend ses humeurs du moment, de la plus forte à la plus faible (trois au plus, `[["inquiet", 0.55], …]`). `lia.impulsion("bon" | "mauvais" | "touche" | "parle" | "reponse" | "rejet" | "scroll" | "demande", valeur?)` lui donne une nouvelle ; elle retombe d'elle-même. Elle en reçoit aussi toute seule (défilement, clic sur son corps, parole, message de Marc).
-- Avec `monde`, son inquiétude monte quand `entrees().alerte` est haute : alors `appeler` devient son choix presque certain (poids 3,2 de la maquette), elle vient près du curseur et dit la phrase de l'hôte. `resumer`, `rappeler`, `souvenir` et `feliciter` demandent que Marc ait bougé depuis moins d'une minute. Elle met `data-regard` sur l'élément qu'elle regarde (visite ou accompagnement) : à l'hôte de le styler (liseré). Sans l'hôte, elle `veille` (silhouette « surveille » 7 à 12 s) la nuit ou quand Marc est parti. Chaque choix entre dans `lia.journal()` (`appeler`, `resumer`…).
+- Avec `monde`, son inquiétude monte quand `entrees().alerte` est haute : alors `appeler` devient son choix presque certain (poids 3,2 de la maquette), elle vient près du curseur et dit la phrase de l'hôte. `resumer`, `rappeler`, `souvenir` et `feliciter` demandent que Marc ait bougé depuis moins d'une minute. Elle met `data-regard` sur l'élément qu'elle regarde (visite, accompagnement, `allerVoir`, `envoyer`, clic droit sur un élément) et l'ôte quand elle s'en va : à l'hôte de le styler (liseré). Sans l'hôte, elle `veille` (silhouette « surveille » 7 à 12 s) la nuit ou quand Marc est parti. Chaque choix entre dans `lia.journal()` (`appeler`, `resumer`…).
 - `setHumeur(h)` et le menu de son corps poussent une humeur pendant cent secondes ; le réseau reprend ensuite la main.
 - `quandMouvementReduit: "fixe"` n'a aucun réseau (image unique) ; « doux » le garde, sur place.
 
