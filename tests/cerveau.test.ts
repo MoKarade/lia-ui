@@ -9,6 +9,7 @@ import {
   candidats,
   choisirComportement,
   entre,
+  envieDeBouger,
   majEnvies,
   type ContexteChoix,
   type ContexteEnvies,
@@ -139,6 +140,25 @@ describe("candidats", () => {
     );
     for (const id of tout) expect(COMPORTEMENTS).toContain(id);
     expect(new Set(tout).size).toBe(tout.length);
+  });
+});
+
+describe("envie de bouger avec l'immobilité", () => {
+  it("rien avant 40 s, puis elle monte jusqu'à 1,2", () => {
+    expect(envieDeBouger(undefined)).toBe(0);
+    expect(envieDeBouger(40)).toBe(0);
+    expect(envieDeBouger(65)).toBeCloseTo(0.5);
+    expect(envieDeBouger(1000)).toBe(1.2);
+  });
+
+  it("après 100 s sans bouger, se promener pèse plus que se reposer ; avant 40 s, non", () => {
+    const poids = (s: number, id: string): number => candidats(ENVIES_DEPART, { ...choix, secondesImmobile: s }).find((c) => c.id === id)?.poids ?? 0;
+    expect(poids(10, "promener")).toBeLessThan(poids(10, "repos"));
+    expect(poids(100, "promener")).toBeGreaterThan(poids(100, "repos"));
+  });
+
+  it("elle ne s'applique pas quand elle n'a pas le droit de se déplacer", () => {
+    expect(ids({ ...choix, deplacement: false, secondesImmobile: 200 })).not.toContain("promener");
   });
 });
 

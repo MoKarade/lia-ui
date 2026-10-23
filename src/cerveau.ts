@@ -105,7 +105,12 @@ export interface ContexteChoix {
   veille?: boolean;
   /** Ses intentions (0 à 1) ; absent = aucune. */
   intentions?: Readonly<Record<string, number>>;
+  /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 40 s, l'envie de bouger monte. */
+  secondesImmobile?: number;
 }
+
+/** Envie de bouger qui monte avec l'immobilité : rien avant 40 s, puis jusqu'à +1,2 à 100 s (promener devient alors le choix le plus probable). */
+export const envieDeBouger = (secondesImmobile: number | undefined): number => Math.min(1.2, Math.max(0, ((secondesImmobile ?? 0) - 40) / 50));
 
 export interface Candidat {
   id: Comportement;
@@ -120,7 +125,7 @@ export function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[] {
   if (bouge && c.curseurRecent && c.humeur !== "fatigue") {
     liste.push({ id: "suivre", poids: e.social * 0.9 + (c.humeur === "espiegle" ? 0.3 : 0) - 0.2 });
   }
-  if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) });
+  if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) + envieDeBouger(c.secondesImmobile) });
   if (c.parole && c.secondesDepuisParole > 90) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 });
   if (c.parole && c.relance && c.secondesDepuisParole > 90) liste.push({ id: "relancer", poids: 0.15 });
   const monde = c.monde ?? [];

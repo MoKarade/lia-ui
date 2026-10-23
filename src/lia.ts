@@ -1,4 +1,4 @@
-import { estRegarde, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./attache.js";
+import { estRegarde, estVisible, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./attache.js";
 import { dansZone, enSilence, jourLocal, pointDansZone } from "./autonomie.js";
 import {
   ENVIES_DEPART,
@@ -227,6 +227,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
+  let dernierDeplacement = 0;
+  let ancreDeplacement = { x: 0, y: 0 };
   let errance = { jusqua: 0 };
   /** Ce qu'elle suit ou regarde en ce moment (rien = elle fait sa vie). Jamais de défilement de la page. */
   type Attention =
@@ -774,7 +776,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const guetter = (): void => {
       const a = attention;
       const arrivee = a?.type === "element" && a.el === cible && a.colle;
-      if (arrivee || essais++ >= 30 || detruit) return demarrer();
+      if (arrivee || essais++ >= 60 || detruit) return demarrer();
       attenteElement = setTimeout(guetter, 100);
     };
     guetter();
@@ -987,7 +989,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       return;
     }
     const rect = a.el.isConnected ? a.el.getBoundingClientRect() : null;
-    if (!rect || !estRegarde(rect, f)) return finAttention();
+    // La bande centrale ne filtre que ce qu'elle choisit seule (`regardables`, `direMonde`) : une demande explicite vers un élément en haut ou en bas de page doit l'y mener.
+    if (!rect || !estVisible(rect, f)) return finAttention();
     const p = pointPresDeLElement(rect, rayon, f);
     cible = { x: p.x - r.left, y: p.y - r.top };
     if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
@@ -1196,6 +1199,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         present: maintenant - dernierMarc < 60_000,
         veille: maintenant - (dernierMotif["veiller"] ?? 0) > DELAI_MONDE["veiller"] * 1000 && ((entreesCourantes["nuit"] ?? 0) > 0.4 || (entreesCourantes["absent"] ?? 0) > 0.5),
         intentions: reseauActif ? reseau.int : {},
+        secondesImmobile: t - dernierDeplacement,
       }),
       Math.random,
       comportement,
@@ -1269,6 +1273,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         pos.x += pos.vx * h;
         pos.y += pos.vy * h;
       }
+    }
+    // Elle a vraiment bougé quand elle s'écarte de plus d'un demi-rayon du dernier point où elle s'est posée.
+    if (Math.hypot(pos.x - ancreDeplacement.x, pos.y - ancreDeplacement.y) > rayon * 0.5) {
+      ancreDeplacement = { x: pos.x, y: pos.y };
+      dernierDeplacement = t;
     }
     const vitesse = Math.hypot(pos.vx, pos.vy);
     const v = limiter(vitesse / (Math.max(60, rayon) * 5), 0, 1);

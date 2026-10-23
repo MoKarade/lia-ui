@@ -59,6 +59,10 @@ function pointPresDeLElement(rect, rayon, fenetre) {
   const y = limiter((rect.top + rect.bottom) / 2, rayon * 0.6, fenetre.h - rayon * 0.6);
   return { x, y };
 }
+function estVisible(rect, fenetre) {
+  if (rect.right <= rect.left || rect.bottom <= rect.top) return false;
+  return rect.top < fenetre.h && rect.bottom > 0 && rect.right > 0 && rect.left < fenetre.w;
+}
 function estRegarde(rect, fenetre) {
   if (rect.right <= rect.left || rect.bottom <= rect.top) return false;
   return rect.top < fenetre.h * 0.78 && rect.bottom > fenetre.h * 0.22 && rect.right > 0 && rect.left < fenetre.w;
@@ -175,6 +179,7 @@ function apresComportement(e, id) {
       return { ...e };
   }
 }
+var envieDeBouger = (secondesImmobile) => Math.min(1.2, Math.max(0, ((secondesImmobile ?? 0) - 40) / 50));
 function candidats(e, c) {
   const liste = [];
   const bouge = c.deplacement && !c.tranquille;
@@ -182,7 +187,7 @@ function candidats(e, c) {
   if (bouge && c.curseurRecent && c.humeur !== "fatigue") {
     liste.push({ id: "suivre", poids: e.social * 0.9 + (c.humeur === "espiegle" ? 0.3 : 0) - 0.2 });
   }
-  if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) });
+  if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) + envieDeBouger(c.secondesImmobile) });
   if (c.parole && c.secondesDepuisParole > 90) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 });
   if (c.parole && c.relance && c.secondesDepuisParole > 90) liste.push({ id: "relancer", poids: 0.15 });
   const monde = c.monde ?? [];
@@ -2720,6 +2725,8 @@ function mountLia(options = {}) {
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
+  let dernierDeplacement = 0;
+  let ancreDeplacement = { x: 0, y: 0 };
   let errance = { jusqua: 0 };
   let attention = null;
   const pointeur = { x: 0, y: 0, ms: -1e9, fin: false };
@@ -3210,7 +3217,7 @@ function mountLia(options = {}) {
     const guetter = () => {
       const a = attention;
       const arrivee = a?.type === "element" && a.el === cible2 && a.colle;
-      if (arrivee || essais++ >= 30 || detruit) return demarrer();
+      if (arrivee || essais++ >= 60 || detruit) return demarrer();
       attenteElement = setTimeout(guetter, 100);
     };
     guetter();
@@ -3403,7 +3410,7 @@ function mountLia(options = {}) {
       return;
     }
     const rect = a.el.isConnected ? a.el.getBoundingClientRect() : null;
-    if (!rect || !estRegarde(rect, f)) return finAttention();
+    if (!rect || !estVisible(rect, f)) return finAttention();
     const p = pointPresDeLElement(rect, rayon, f);
     cible = { x: p.x - r.left, y: p.y - r.top };
     if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
@@ -3590,7 +3597,8 @@ function mountLia(options = {}) {
         monde: proposerMonde(),
         present: maintenant - dernierMarc < 6e4,
         veille: maintenant - (dernierMotif["veiller"] ?? 0) > DELAI_MONDE["veiller"] * 1e3 && ((entreesCourantes["nuit"] ?? 0) > 0.4 || (entreesCourantes["absent"] ?? 0) > 0.5),
-        intentions: reseauActif ? reseau.int : {}
+        intentions: reseauActif ? reseau.int : {},
+        secondesImmobile: t - dernierDeplacement
       }),
       Math.random,
       comportement,
@@ -3660,6 +3668,10 @@ function mountLia(options = {}) {
         pos.x += pos.vx * h;
         pos.y += pos.vy * h;
       }
+    }
+    if (Math.hypot(pos.x - ancreDeplacement.x, pos.y - ancreDeplacement.y) > rayon * 0.5) {
+      ancreDeplacement = { x: pos.x, y: pos.y };
+      dernierDeplacement = t;
     }
     const vitesse = Math.hypot(pos.vx, pos.vy);
     const v = limiter2(vitesse / (Math.max(60, rayon) * 5), 0, 1);

@@ -44,6 +44,12 @@ export function pointPresDeLElement(rect: Rect, rayon: number, fenetre: Fenetre)
   return { x, y };
 }
 
+/** Un élément est visible quand une part de lui est dans la fenêtre : assez pour aller vers lui quand on le lui demande. */
+export function estVisible(rect: Rect, fenetre: Fenetre): boolean {
+  if (rect.right <= rect.left || rect.bottom <= rect.top) return false;
+  return rect.top < fenetre.h && rect.bottom > 0 && rect.right > 0 && rect.left < fenetre.w;
+}
+
 /** Un élément est « regardé » quand sa partie visible touche la bande centrale de la fenêtre (comme sur l'accueil v2). */
 export function estRegarde(rect: Rect, fenetre: Fenetre): boolean {
   if (rect.right <= rect.left || rect.bottom <= rect.top) return false;
