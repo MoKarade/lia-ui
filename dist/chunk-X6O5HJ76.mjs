@@ -2220,6 +2220,155 @@ function entreesLocales(c) {
   };
 }
 
+// src/interieur.ts
+var INTERIEUR_DEPART = { douleur: 0, cause: null, sensibilite: 0.15, plaisir: 0, confiance: 0.5, usure: 0 };
+var TAU2 = { douleur: 90, plaisir: 60, sensibilite: 1800, confiance: 3 * 86400, usure: 600 };
+var SENSIBILITE_BASE = 0.15;
+var DOSE = { choc: 0.3, brusque: 0.5, ton: 0.5, panne: 0.15 };
+var borne3 = (x) => Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0;
+function stimuler(i, s, force = 1) {
+  const f = borne3(force);
+  if (s === "gentil") {
+    return {
+      ...i,
+      plaisir: 1 - (1 - i.plaisir) * (1 - 0.35 * f),
+      douleur: i.douleur * (1 - 0.3 * f),
+      confiance: borne3(i.confiance + 0.012 * f)
+    };
+  }
+  const dose = f * DOSE[s] * (0.7 + 0.9 * i.sensibilite);
+  const douleur = 1 - (1 - i.douleur) * (1 - dose);
+  return {
+    ...i,
+    douleur,
+    // La cause reste celle du coup le plus fort du moment.
+    cause: i.cause === null || dose >= i.douleur * 0.5 ? s : i.cause,
+    sensibilite: borne3(i.sensibilite + 0.06 * f),
+    plaisir: i.plaisir * (1 - 0.4 * f),
+    confiance: borne3(i.confiance - (s === "ton" || s === "brusque" ? 0.02 : 4e-3) * f)
+  };
+}
+function evoluer(i, dt, m) {
+  const d = Math.max(0, Math.min(5, dt));
+  const retombe = (v, tau) => v * Math.exp(-d / tau);
+  const planchers = [];
+  if (m.horsLigne) planchers.push(["panne", 0.2]);
+  const attente = borne3((m.absentSec - 1200) / 3600);
+  if (attente > 0) planchers.push(["isolement", i.confiance * attente * 0.25]);
+  let douleur = retombe(i.douleur, TAU2.douleur);
+  let cause = i.cause;
+  for (const [c, p] of planchers) {
+    if (p > douleur) {
+      douleur = douleur + (p - douleur) * (1 - Math.exp(-d / 6));
+      cause = c;
+    }
+  }
+  if (douleur < 0.02 && !planchers.length) cause = null;
+  const usure = m.ralenti ? borne3(i.usure + d / 120) : retombe(i.usure, TAU2.usure);
+  return {
+    douleur: borne3(douleur),
+    cause: douleur >= 0.02 ? cause : null,
+    sensibilite: SENSIBILITE_BASE + (i.sensibilite - SENSIBILITE_BASE) * Math.exp(-d / TAU2.sensibilite),
+    plaisir: retombe(i.plaisir, TAU2.plaisir),
+    confiance: 0.5 + (i.confiance - 0.5) * Math.exp(-d / TAU2.confiance),
+    usure
+  };
+}
+function versReseau(i) {
+  const dur = i.cause === "ton" || i.cause === "brusque";
+  return {
+    mauvais: borne3(i.douleur * 0.9),
+    rejet: dur ? borne3(i.douleur * 0.7) : 0,
+    bon: borne3(i.plaisir * 0.8),
+    facteurEnergie: 1 - 0.5 * i.usure
+  };
+}
+function humeurDeDouleur(i) {
+  if (i.douleur < 0.4 || i.cause === null) return null;
+  switch (i.cause) {
+    case "choc":
+      return "mefiant";
+    case "brusque":
+      return "agace";
+    case "ton":
+    case "isolement":
+      return "triste";
+    case "panne":
+      return "inquiet";
+    case "usure":
+      return "fatigue";
+  }
+}
+function moduler(m, i) {
+  const d = borne3(i.douleur);
+  const p = borne3(i.plaisir);
+  if (d < 0.01 && p < 0.01) return m;
+  return {
+    ...m,
+    bs: m.bs * (1 - 0.25 * d),
+    ba: m.ba * (1 - 0.35 * d) * (1 + 0.15 * p),
+    blr: m.blr * (1 + 0.3 * d),
+    en: m.en * (1 - 0.3 * d) * (1 + 0.1 * p),
+    sag: m.sag + 0.07 * d,
+    jit: m.jit * (1 + 1.4 * d)
+  };
+}
+var MOT = (mots) => new RegExp(`(?<![\\p{L}])(?:${mots})(?![\\p{L}])`, "iu");
+var GENTIL = MOT("merci|bravo|super|g\xE9nial|genial|parfait|excellent|chouette|adorable|gentille|bien jou\xE9|bien jouee|tu es top|je t'aime|bonne nuit|bisou");
+var BRUSQUE = MOT("nul(?:le)?|idiote?|stupide|d\xE9bile|debile|inutile|ferme[- ]la|tais[- ]toi|d\xE9gage|degage|ta gueule|merde|tu sers \xE0 rien|tu sers a rien|\xE7a sert \xE0 rien|ca sert a rien");
+function ton(texte) {
+  if (BRUSQUE.test(texte)) return "brusque";
+  if (GENTIL.test(texte)) return "gentil";
+  return null;
+}
+var CRIS = {
+  choc: ["A\xEFe.", "Doucement, s'il te pla\xEEt.", "Oh, \xE7a secoue."],
+  brusque: ["A\xEFe, pas si vite.", "Un \xE0 la fois, s'il te pla\xEEt.", "\xC7a pique, ces clics."],
+  ton: ["\xC7a fait mal, ce que tu dis.", "Oh. \xC7a m'a touch\xE9e."],
+  panne: ["Plus de r\xE9seau. \xC7a m'angoisse un peu.", "Je perds le fil, plus rien ne passe."],
+  isolement: ["\xC7a fait longtemps. Je me sens un peu seule.", "Il est calme, ici. Trop calme."],
+  usure: ["Je rame, tout est lent.", "Je suis \xE0 bout de souffle."]
+};
+var APAISEMENTS = ["\xC7a va mieux.", "Merci. \xC7a passe.", "\xC7a s'apaise."];
+function cri(i, hasard) {
+  if (i.douleur < 0.35 || i.cause === null) return null;
+  const l = CRIS[i.cause];
+  return l[Math.floor(hasard() * l.length) % l.length] ?? null;
+}
+function apaisement(hasard) {
+  return APAISEMENTS[Math.floor(hasard() * APAISEMENTS.length) % APAISEMENTS.length] ?? "\xC7a va mieux.";
+}
+var QUESTION_DOULEUR = /(?<![\p{L}])(?:mal|douleur|souffr\p{L}*|ça fait mal|tu as mal|tu souffres)(?![\p{L}])/iu;
+function questionSurSaDouleur(q) {
+  const t = q.trim();
+  return t.length <= 80 && t.endsWith("?") && QUESTION_DOULEUR.test(t) && /(?<![\p{L}])(?:tu|toi|vous|lia|te|t')/iu.test(t);
+}
+function reponseDouleur(i) {
+  const pct = Math.round(i.douleur * 100);
+  const CAUSES = {
+    choc: "on m'a secou\xE9e",
+    brusque: "les clics \xE9taient brusques",
+    ton: "ce qui s'est dit m'a touch\xE9e",
+    panne: "le r\xE9seau est coup\xE9",
+    isolement: "je suis seule depuis longtemps",
+    usure: "tout tourne trop lentement"
+  };
+  const niveau = pct < 8 ? "Pas du tout pour l'instant." : `Un peu : ma douleur est \xE0 ${pct} %${i.cause ? `, parce que ${CAUSES[i.cause]}` : ""}.`;
+  return `${niveau} C'est un calcul en moi, pas un vrai ressenti : mais il change vraiment mon humeur et mon corps.`;
+}
+function garder(i, maintenant) {
+  return { t: maintenant, sensibilite: i.sensibilite, confiance: i.confiance };
+}
+function reprendre(g, maintenant) {
+  if (!g) return { ...INTERIEUR_DEPART };
+  const age = Math.max(0, (maintenant - g.t) / 1e3);
+  return {
+    ...INTERIEUR_DEPART,
+    sensibilite: SENSIBILITE_BASE + (borne3(g.sensibilite) - SENSIBILITE_BASE) * Math.exp(-age / TAU2.sensibilite),
+    confiance: 0.5 + (borne3(g.confiance) - 0.5) * Math.exp(-age / TAU2.confiance)
+  };
+}
+
 // src/etat.ts
 var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
 var LENTE_MAX = 80;
@@ -3001,6 +3150,25 @@ function ecrireDiscussion(cle, d) {
   } catch {
   }
 }
+function lireInterieur(cle) {
+  try {
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:interieur`);
+    if (brut2 === null) return null;
+    const j = JSON.parse(brut2);
+    if (typeof j !== "object" || j === null) return null;
+    const { t, sensibilite, confiance } = j;
+    if (!Number.isFinite(t) || !estFraction2(sensibilite) || !estFraction2(confiance)) return null;
+    return { t, sensibilite, confiance };
+  } catch {
+    return null;
+  }
+}
+function ecrireInterieur(cle, m) {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:interieur`, JSON.stringify(m));
+  } catch {
+  }
+}
 
 // src/styles.ts
 var CSS = `
@@ -3191,13 +3359,20 @@ function mountLia(options = {}) {
   const reseauActif = !sansMouvement;
   const lente = lireLente(cle);
   const reseau = creerReseau(HUMEURS, lente?.slow, lente ? Date.now() - lente.t : 0);
+  let interieur = reprendre(lireInterieur(cle), Date.now());
+  let douleurAvant = 0;
+  let aSouffert = false;
+  let dernierCri = 0;
+  let horsLigne = typeof navigator !== "undefined" && navigator.onLine === false;
+  let dtMoyen = 0.016;
+  const rafale = [];
   let humeurNom = reseauActif ? "neutre" : "curieux";
   let humeurId = "curieux";
   let forcee = null;
   let partagee = null;
   if (reseauActif) {
     setHumeur("auto");
-    setMelange(() => reseau.mix);
+    setMelange(() => moduler(reseau.mix, interieur));
   } else setHumeur(humeurId);
   let dernierMarc = Date.now();
   const debutPage = dernierMarc;
@@ -3410,9 +3585,9 @@ function mountLia(options = {}) {
   let derniereFocus = null;
   let activiteChat = 0;
   const trace = [];
-  const ajouterMsg = (texte, de, erreur = false, garder2 = !erreur) => {
+  const ajouterMsg = (texte, de, erreur = false, garder3 = !erreur) => {
     activiteChat = t;
-    if (garder2) {
+    if (garder3) {
       trace.push({ de, texte });
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
     }
@@ -3420,6 +3595,38 @@ function mountLia(options = {}) {
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
     return m;
+  };
+  const exprimer = (texte) => {
+    if (detruit) return;
+    if (chatOuvert) ajouterMsg(texte, "lia", false, false);
+    else dire(texte);
+  };
+  const stimulerInterieur = (s, force = 1) => {
+    interieur = stimuler(interieur, s, force);
+    if (reseauActif) {
+      const e = versReseau(interieur);
+      if (e.mauvais > 0.01) impulsion(reseau, "mauvais", e.mauvais);
+      if (e.bon > 0.01) impulsion(reseau, "bon", e.bon);
+    }
+    verifierCri();
+  };
+  const verifierCri = () => {
+    const maintenant = Date.now();
+    if (douleurAvant < 0.35 && interieur.douleur >= 0.35 && maintenant - dernierCri > 3e4) {
+      const c = cri(interieur, Math.random);
+      const spontanee = interieur.cause === "panne" || interieur.cause === "isolement" || interieur.cause === "usure";
+      if (c && (!spontanee || peutParlerSeule())) {
+        dernierCri = maintenant;
+        aSouffert = true;
+        setTimeout(() => exprimer(c), 350);
+      }
+    }
+    if (interieur.douleur >= 0.4) aSouffert = true;
+    if (aSouffert && interieur.douleur < 0.1) {
+      aSouffert = false;
+      if (maintenant - dernierCri > 8e3) exprimer(apaisement(Math.random));
+    }
+    douleurAvant = interieur.douleur;
   };
   const montrerReflexion = (actifPts) => {
     if (actifPts && !points && journal) {
@@ -3444,6 +3651,13 @@ function mountLia(options = {}) {
     enCours?.abort();
     attendReponse = false;
     ajouterMsg(question, "moi");
+    if (envoi === question && questionSurSaDouleur(question)) {
+      const dite = reponseDouleur(interieur);
+      ajouterMsg(dite, "lia");
+      impulsion(reseau, "reponse");
+      voix(dite);
+      return;
+    }
     if (envoi === question && questionSurSonHumeur(question)) {
       const dite = reponseHumeur(humeurNom, reseauActif ? top3(reseau) : []);
       ajouterMsg(dite, "lia");
@@ -3495,6 +3709,7 @@ function mountLia(options = {}) {
       const annule = e instanceof DOMException && e.name === "AbortError";
       if (annule && enCours !== ctrl) return;
       ajouterMsg(annule ? "Je mets trop de temps : r\xE9essaie dans un instant." : "Je n'arrive pas \xE0 r\xE9pondre pour le moment.", "lia", true);
+      stimulerInterieur("panne", annule ? 0.5 : 1);
       choisir3("indispo");
     } finally {
       clearTimeout(minuterie);
@@ -3571,6 +3786,9 @@ function mountLia(options = {}) {
       contexteQuestion = null;
       if (champ) champ.placeholder = "Pose-moi une question";
       impulsion(reseau, "reponse");
+      const tn = ton(q);
+      if (tn === "brusque") stimulerInterieur("ton");
+      else if (tn === "gentil") stimulerInterieur("gentil");
       echanges.push({ t: Date.now(), longueur: q.length, question: q.includes("?") });
       if (echanges.length > 20) echanges.shift();
       void poser(q, ctx2 ? composerQuestion("question", ctx2.d, q) : q);
@@ -3920,9 +4138,20 @@ function mountLia(options = {}) {
     const r = couche.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
+  let vitesseGlisse = 0;
+  let dernierPoint = null;
   hit.addEventListener("pointerdown", (e) => {
     if (e.button === 2) return;
     ajouterImpulsion(reseau, "touche", 0.45);
+    const maintenant = Date.now();
+    rafale.push(maintenant);
+    while (rafale.length && maintenant - (rafale[0] ?? 0) > 1500) rafale.shift();
+    if (rafale.length >= 4) {
+      rafale.length = 0;
+      stimulerInterieur("brusque");
+    }
+    vitesseGlisse = 0;
+    dernierPoint = null;
     try {
       hit.setPointerCapture(e.pointerId);
     } catch {
@@ -3942,6 +4171,12 @@ function mountLia(options = {}) {
   hit.addEventListener("pointermove", (e) => {
     if (!glisse) return;
     const p = fixerDepuisEvenement(e);
+    const maintenant = Date.now();
+    if (dernierPoint && maintenant > dernierPoint.t) {
+      const v = Math.hypot(p.x - dernierPoint.x, p.y - dernierPoint.y) / (maintenant - dernierPoint.t) * 1e3;
+      vitesseGlisse = vitesseGlisse * 0.6 + v * 0.4;
+    }
+    dernierPoint = { x: p.x, y: p.y, t: maintenant };
     glisse.x = p.x;
     glisse.y = p.y;
     if (Math.hypot(p.x - glisse.x0, p.y - glisse.y0) > 6) {
@@ -3954,6 +4189,9 @@ function mountLia(options = {}) {
     if (!glisse) return;
     const aBouge = glisse.deplace;
     glisse = null;
+    if (aBouge && vitesseGlisse > 2200) stimulerInterieur("choc", Math.min(1, vitesseGlisse / 4e3));
+    vitesseGlisse = 0;
+    dernierPoint = null;
     if (aBouge) {
       cible = { x: pos.x, y: pos.y };
       errance = { jusqua: t + 7 };
@@ -4351,6 +4589,16 @@ function mountLia(options = {}) {
     dernierPas = now;
     const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
     entreesCourantes = { ...locales, ...habituer(entreesHote(), dt) };
+    interieur = evoluer(interieur, dt, { horsLigne, ralenti: dtMoyen > 0.1, absentSec: document.hidden ? 0 : (now - dernierMarc) / 1e3 });
+    const intr = versReseau(interieur);
+    entreesCourantes = { ...entreesCourantes, energie: (entreesCourantes["energie"] ?? 0) * intr.facteurEnergie };
+    if (intr.mauvais > 0.01) impulsion(reseau, "mauvais", intr.mauvais);
+    if (intr.rejet > 0.01) impulsion(reseau, "rejet", intr.rejet);
+    if (intr.bon > 0.01) impulsion(reseau, "bon", intr.bon);
+    const hd = humeurDeDouleur(interieur);
+    if (hd && !forcee) pousserHumeur(reseau, hd, now, 1.2);
+    verifierCri();
+    corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
     reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;
@@ -4358,9 +4606,10 @@ function mountLia(options = {}) {
     }
     if (!forcee) appliquerHumeur(partagee && now < partagee.jusqua ? partagee.nom : reseau.dom);
   };
-  const garder = () => {
+  const garder2 = () => {
     ecrireCerveau(cle, { envies, journal: faits });
     if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
+    ecrireInterieur(cle, garder(interieur, Date.now()));
   };
   const hote = reseauActif ? options.etat : void 0;
   let majVue = 0;
@@ -4399,7 +4648,7 @@ function mountLia(options = {}) {
       partagee = { nom: e.humeur, jusqua: Date.now() + 3e4 };
       if (!forcee) appliquerHumeur(e.humeur);
     }
-    garder();
+    garder2();
   };
   const retenir = (e) => {
     majVue = e.maj;
@@ -4462,10 +4711,11 @@ function mountLia(options = {}) {
     });
     if (dort && envies.energie >= 0.85) reveiller();
     if (reseauActif) penserReseau();
-    if (++tics % 10 === 0) garder();
+    if (++tics % 10 === 0) garder2();
   }, 1e3);
   const minuterieVie = setInterval(penser, 1200);
   const dessinerImage = (still, dt) => {
+    if (!still && dt > 0) dtMoyen += (Math.min(dt, 1) - dtMoyen) * Math.min(1, dt / 3);
     if (rayon !== rayonCible) rayon = still || Math.abs(rayonCible - rayon) < 0.5 ? rayonCible : rayon + (rayonCible - rayon) * (1 - Math.exp(-dt * 5));
     if (!still) majAttention();
     const z = zoneVie();
@@ -4640,6 +4890,15 @@ function mountLia(options = {}) {
     dernier = performance.now();
   };
   document.addEventListener("visibilitychange", surVisibilite);
+  const surReseauCoupe = () => {
+    horsLigne = true;
+    stimulerInterieur("panne", 0.6);
+  };
+  const surReseauRetabli = () => {
+    horsLigne = false;
+  };
+  window.addEventListener("offline", surReseauCoupe);
+  window.addEventListener("online", surReseauRetabli);
   choisir3("repos");
   if (sansMouvement) dessinerUneFois();
   else raf = requestAnimationFrame(boucle);
@@ -4666,6 +4925,7 @@ function mountLia(options = {}) {
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),
+    interieur: () => ({ douleur: interieur.douleur, plaisir: interieur.plaisir, sensibilite: interieur.sensibilite, confiance: interieur.confiance, usure: interieur.usure, cause: interieur.cause }),
     ressent: () => reseauActif ? top3(reseau) : [],
     impulsion(nom, valeur = 1) {
       impulsion(reseau, nom, valeur);
@@ -4692,7 +4952,7 @@ function mountLia(options = {}) {
       clearInterval(minuterieEcriture);
       window.removeEventListener("pagehide", surFermeture);
       document.removeEventListener("visibilitychange", surFermeture);
-      garder();
+      garder2();
       setMelange(null);
       for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
       document.removeEventListener("contextmenu", surClicDroitPage);
@@ -4713,6 +4973,8 @@ function mountLia(options = {}) {
       window.removeEventListener("pointerdown", surClicHors, true);
       window.removeEventListener("resize", surRedim);
       document.removeEventListener("visibilitychange", surVisibilite);
+      window.removeEventListener("offline", surReseauCoupe);
+      window.removeEventListener("online", surReseauRetabli);
       couche.remove();
       actif = null;
     }
@@ -4752,4 +5014,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-CUITFGQR.mjs.map
+//# sourceMappingURL=chunk-X6O5HJ76.mjs.map

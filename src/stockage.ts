@@ -195,3 +195,33 @@ export function ecrireDiscussion(cle: string, d: DiscussionLia | null): void {
     /* sans stockage de session : la discussion ne survit pas au rechargement, rien d'autre ne change */
   }
 }
+
+/** Ce que le monde intérieur garde d'une page à l'autre : sa sensibilité et sa confiance (voir `interieur.ts`). */
+export interface MemoireInterieure {
+  /** Millisecondes depuis 1970. */
+  t: number;
+  sensibilite: number;
+  confiance: number;
+}
+
+export function lireInterieur(cle: string): MemoireInterieure | null {
+  try {
+    const brut = localStorage.getItem(`${PREFIXE}${cle}:interieur`);
+    if (brut === null) return null;
+    const j: unknown = JSON.parse(brut);
+    if (typeof j !== "object" || j === null) return null;
+    const { t, sensibilite, confiance } = j as Record<string, unknown>;
+    if (!Number.isFinite(t) || !estFraction(sensibilite) || !estFraction(confiance)) return null;
+    return { t: t as number, sensibilite, confiance };
+  } catch {
+    return null;
+  }
+}
+
+export function ecrireInterieur(cle: string, m: MemoireInterieure): void {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:interieur`, JSON.stringify(m));
+  } catch {
+    /* sans stockage, sa sensibilité et sa confiance repartent du départ à chaque page */
+  }
+}

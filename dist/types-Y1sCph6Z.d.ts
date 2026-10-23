@@ -438,6 +438,18 @@ interface LiaHandle {
         libelle: string;
         couleur: string;
     };
+    /**
+     * Son monde intérieur du moment : douleur et plaisir (0 à 1, SIMULÉS : un calcul qui change son humeur et son corps, pas un ressenti réel),
+     * sa sensibilité (que des douleurs répétées font monter), sa confiance envers Marc, son usure, et ce qui la fait souffrir.
+     */
+    interieur(): {
+        douleur: number;
+        plaisir: number;
+        sensibilite: number;
+        confiance: number;
+        usure: number;
+        cause: "choc" | "brusque" | "ton" | "panne" | "isolement" | "usure" | null;
+    };
     /** Force une silhouette (« lit », « cherche »…) ; `null` la rend à sa vie. */
     setEtat(etat: string | null): void;
     setVieAutonome(actif: boolean): void;
