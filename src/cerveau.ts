@@ -108,6 +108,8 @@ export interface ContexteChoix {
   intentions?: Readonly<Record<string, number>>;
   /** Secondes de silence avant qu'elle reprenne la parole seule ; défaut 90 (40 quand elle a son propre répertoire). */
   delaiParole?: number;
+  /** Elle vient de laisser parler l'hôte (projets, alertes) : c'est son tour de dire quelque chose d'elle. */
+  parolePrioritaire?: boolean;
   /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 30 s, l'envie de bouger monte. */
   secondesImmobile?: number;
 }
@@ -129,7 +131,7 @@ export function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[] {
     liste.push({ id: "suivre", poids: e.social * 0.9 + (c.humeur === "espiegle" ? 0.3 : 0) - 0.2 });
   }
   if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) + envieDeBouger(c.secondesImmobile) });
-  if (c.parole && c.secondesDepuisParole > (c.delaiParole ?? 90)) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 + ((c.delaiParole ?? 90) < 90 ? 0.5 : 0) });
+  if (c.parole && c.secondesDepuisParole > (c.delaiParole ?? 90)) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 + ((c.delaiParole ?? 90) < 90 ? 0.5 : 0) + (c.parolePrioritaire ? 1.2 : 0) });
   if (c.parole && c.relance && c.secondesDepuisParole > 90) liste.push({ id: "relancer", poids: 0.15 });
   const monde = c.monde ?? [];
   const veut = (id: string): number => c.intentions?.[id] ?? 0;

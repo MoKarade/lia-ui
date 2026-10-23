@@ -410,6 +410,8 @@ interface ContexteChoix {
     intentions?: Readonly<Record<string, number>>;
     /** Secondes de silence avant qu'elle reprenne la parole seule ; défaut 90 (40 quand elle a son propre répertoire). */
     delaiParole?: number;
+    /** Elle vient de laisser parler l'hôte (projets, alertes) : c'est son tour de dire quelque chose d'elle. */
+    parolePrioritaire?: boolean;
     /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 30 s, l'envie de bouger monte. */
     secondesImmobile?: number;
 }
