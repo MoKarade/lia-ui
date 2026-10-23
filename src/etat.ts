@@ -4,6 +4,7 @@
  * Ce qui arrive de l'hôte est une DONNÉE : on le valide, on borne les nombres et on ne garde que des verbes de LIA.
  */
 import { COMPORTEMENTS, JOURNAL_MAX, type Envies, type FaitLia } from "./cerveau.js";
+import { CAUSES, type Interieur } from "./interieur.js";
 
 export interface RelancesPartagees {
   /** Date locale AAAA-MM-JJ. */
@@ -24,6 +25,8 @@ export interface EtatLia {
   /** Son humeur dominante (l'une des 40). */
   humeur: string;
   relances: RelancesPartagees;
+  /** Son monde intérieur SIMULÉ (v0.20.0, optionnel : un hôte plus ancien ne l'a pas). Adopté vieilli de l'âge de l'état. */
+  interieur?: Interieur;
 }
 
 /** Ce que l'hôte fournit. `ecrire` peut rendre l'état que l'hôte garde (plus récent que le nôtre), `lire` rend `null` s'il n'en a aucun. */
@@ -37,6 +40,15 @@ const LENTE_MAX = 80;
 const VERSION_MAX = 1_000_000_000;
 
 const estFraction = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
+
+/** Le monde intérieur d'un état partagé : retiré (jamais l'état entier) s'il n'est pas conforme. */
+function validerInterieur(brut: unknown): Interieur | undefined {
+  if (typeof brut !== "object" || brut === null) return undefined;
+  const { douleur, cause, sensibilite, plaisir, confiance, usure } = brut as Record<string, unknown>;
+  if (![douleur, sensibilite, plaisir, confiance, usure].every(estFraction)) return undefined;
+  if (cause !== null && !(typeof cause === "string" && (CAUSES as readonly string[]).includes(cause))) return undefined;
+  return { douleur, sensibilite, plaisir, confiance, usure, cause } as Interieur;
+}
 
 /** `null` si ce que l'hôte rend n'est pas un état valide : LIA garde alors le sien. Les clés inconnues sont retirées. */
 export function validerEtat(brut: unknown): EtatLia | null {
@@ -68,7 +80,8 @@ export function validerEtat(brut: unknown): EtatLia | null {
     }
   }
   const enviesPropres = Object.fromEntries(NOMS_ENVIES.map((k) => [k, e[k] as number])) as unknown as Envies;
-  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur, relances: { jour, n } };
+  const interieur = validerInterieur(o["interieur"]);
+  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur, relances: { jour, n }, ...(interieur ? { interieur } : {}) };
 }
 
 /** Faut-il adopter l'état de l'hôte ? Oui s'il est plus récent que le dernier que nous avons lu ou écrit ; à égalité de date, la version la plus haute. */
@@ -77,9 +90,11 @@ export function adopter(distant: EtatLia | null, majVue: number, versionVue: num
   return distant.maj > majVue || (distant.maj === majVue && distant.version > versionVue);
 }
 
-/** Une empreinte grossière de ce qui compte : ne réécrire que si quelque chose a vraiment changé (envies au vingtième près). */
-export function empreinte(e: Pick<EtatLia, "envies" | "journal" | "humeur" | "relances">): string {
+/** Une empreinte grossière de ce qui compte : ne réécrire que si quelque chose a vraiment changé (envies, douleur, plaisir et confiance au vingtième près). */
+export function empreinte(e: Pick<EtatLia, "envies" | "journal" | "humeur" | "relances" | "interieur">): string {
   const arrondi = NOMS_ENVIES.map((k) => Math.round(e.envies[k] * 20)).join(",");
   const dernier = e.journal[e.journal.length - 1];
-  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}`;
+  const i = e.interieur;
+  const dedans = i ? `${[i.douleur, i.plaisir, i.confiance].map((x) => Math.round(x * 20)).join(",")}:${i.cause ?? "-"}` : "-";
+  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}`;
 }

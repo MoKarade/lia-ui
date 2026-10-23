@@ -16,7 +16,7 @@ import {
   type MotifMonde,
 } from "./cerveau.js";
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
-import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, garder as garderInterieur, type Stimulus } from "./interieur.js";
+import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, vieillir, garder as garderInterieur, type Stimulus } from "./interieur.js";
 import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
@@ -1716,12 +1716,20 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       lente: etatLent(reseau),
       humeur: humeurNom,
       relances: { jour, n: lireRelances(cle, jour) },
+      interieur: { ...interieur },
     };
   };
   const appliquerEtat = (e: EtatLia): void => {
     envies = { ...e.envies };
     faits = e.journal.map((f) => ({ ...f }));
     chargerLente(reseau, e.lente, Date.now() - e.maj);
+    if (e.interieur) {
+      // UNE seule LIA : ce qu'elle a ressenti dans l'autre page est le sien, retombé du temps écoulé. Pas de cri ici pour un coup reçu ailleurs.
+      interieur = vieillir(e.interieur, (Date.now() - e.maj) / 1000);
+      douleurAvant = interieur.douleur;
+      if (interieur.douleur >= 0.4) aSouffert = true;
+      corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
+    }
     const jour = jourLocal(new Date());
     if (e.relances.jour === jour && e.relances.n > lireRelances(cle, jour)) ecrireRelances(cle, e.relances);
     if (e.humeur !== humeurNom && (HUMEURS_MOTEUR as Record<string, unknown>)[e.humeur]) {

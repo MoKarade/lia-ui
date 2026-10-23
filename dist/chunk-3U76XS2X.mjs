@@ -2221,6 +2221,7 @@ function entreesLocales(c) {
 }
 
 // src/interieur.ts
+var CAUSES = ["choc", "brusque", "ton", "panne", "isolement", "usure"];
 var INTERIEUR_DEPART = { douleur: 0, cause: null, sensibilite: 0.15, plaisir: 0, confiance: 0.5, usure: 0 };
 var TAU2 = { douleur: 90, plaisir: 60, sensibilite: 1800, confiance: 3 * 86400, usure: 600 };
 var SENSIBILITE_BASE = 0.15;
@@ -2272,6 +2273,19 @@ function evoluer(i, dt, m) {
     plaisir: retombe(i.plaisir, TAU2.plaisir),
     confiance: 0.5 + (i.confiance - 0.5) * Math.exp(-d / TAU2.confiance),
     usure
+  };
+}
+function vieillir(i, ageSec) {
+  const a = Number.isFinite(ageSec) ? Math.max(0, ageSec) : 0;
+  const k = (tau) => Math.exp(-a / tau);
+  const douleur = borne3(i.douleur) * k(TAU2.douleur);
+  return {
+    douleur,
+    cause: douleur >= 0.02 ? i.cause : null,
+    sensibilite: SENSIBILITE_BASE + (borne3(i.sensibilite) - SENSIBILITE_BASE) * k(TAU2.sensibilite),
+    plaisir: borne3(i.plaisir) * k(TAU2.plaisir),
+    confiance: 0.5 + (borne3(i.confiance) - 0.5) * k(TAU2.confiance),
+    usure: borne3(i.usure) * k(TAU2.usure)
   };
 }
 function versReseau(i) {
@@ -2345,7 +2359,7 @@ function questionSurSaDouleur(q) {
 }
 function reponseDouleur(i) {
   const pct2 = Math.round(i.douleur * 100);
-  const CAUSES = {
+  const CAUSES2 = {
     choc: "on m'a secou\xE9e",
     brusque: "les clics \xE9taient brusques",
     ton: "ce qui s'est dit m'a touch\xE9e",
@@ -2353,7 +2367,7 @@ function reponseDouleur(i) {
     isolement: "je suis seule depuis longtemps",
     usure: "tout tourne trop lentement"
   };
-  const niveau = pct2 < 8 ? "Pas du tout pour l'instant." : `Un peu : ma douleur est \xE0 ${pct2} %${i.cause ? `, parce que ${CAUSES[i.cause]}` : ""}.`;
+  const niveau = pct2 < 8 ? "Pas du tout pour l'instant." : `Un peu : ma douleur est \xE0 ${pct2} %${i.cause ? `, parce que ${CAUSES2[i.cause]}` : ""}.`;
   return `${niveau} C'est un calcul en moi, pas un vrai ressenti : mais il change vraiment mon humeur et mon corps.`;
 }
 function garder(i, maintenant) {
@@ -2413,6 +2427,13 @@ var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"]
 var LENTE_MAX = 80;
 var VERSION_MAX = 1e9;
 var estFraction = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
+function validerInterieur(brut2) {
+  if (typeof brut2 !== "object" || brut2 === null) return void 0;
+  const { douleur, cause, sensibilite, plaisir, confiance, usure } = brut2;
+  if (![douleur, sensibilite, plaisir, confiance, usure].every(estFraction)) return void 0;
+  if (cause !== null && !(typeof cause === "string" && CAUSES.includes(cause))) return void 0;
+  return { douleur, sensibilite, plaisir, confiance, usure, cause };
+}
 function validerEtat(brut2) {
   if (typeof brut2 !== "object" || brut2 === null) return null;
   const o = brut2;
@@ -2442,7 +2463,8 @@ function validerEtat(brut2) {
     }
   }
   const enviesPropres = Object.fromEntries(NOMS_ENVIES.map((k) => [k, e[k]]));
-  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur: humeur2, relances: { jour, n } };
+  const interieur = validerInterieur(o["interieur"]);
+  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur: humeur2, relances: { jour, n }, ...interieur ? { interieur } : {} };
 }
 function adopter(distant, majVue, versionVue) {
   if (!distant) return false;
@@ -2451,7 +2473,9 @@ function adopter(distant, majVue, versionVue) {
 function empreinte(e) {
   const arrondi = NOMS_ENVIES.map((k) => Math.round(e.envies[k] * 20)).join(",");
   const dernier = e.journal[e.journal.length - 1];
-  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}`;
+  const i = e.interieur;
+  const dedans = i ? `${[i.douleur, i.plaisir, i.confiance].map((x) => Math.round(x * 20)).join(",")}:${i.cause ?? "-"}` : "-";
+  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}`;
 }
 
 // src/poids.ts
@@ -4737,13 +4761,20 @@ function mountLia(options = {}) {
       journal: faits.map((f) => ({ ...f })),
       lente: etatLent(reseau),
       humeur: humeurNom,
-      relances: { jour, n: lireRelances(cle, jour) }
+      relances: { jour, n: lireRelances(cle, jour) },
+      interieur: { ...interieur }
     };
   };
   const appliquerEtat = (e) => {
     envies = { ...e.envies };
     faits = e.journal.map((f) => ({ ...f }));
     chargerLente(reseau, e.lente, Date.now() - e.maj);
+    if (e.interieur) {
+      interieur = vieillir(e.interieur, (Date.now() - e.maj) / 1e3);
+      douleurAvant = interieur.douleur;
+      if (interieur.douleur >= 0.4) aSouffert = true;
+      corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
+    }
     const jour = jourLocal(/* @__PURE__ */ new Date());
     if (e.relances.jour === jour && e.relances.n > lireRelances(cle, jour)) ecrireRelances(cle, e.relances);
     if (e.humeur !== humeurNom && HUMEURS[e.humeur]) {
@@ -5119,4 +5150,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-EHRE4BOH.mjs.map
+//# sourceMappingURL=chunk-3U76XS2X.mjs.map

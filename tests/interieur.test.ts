@@ -12,6 +12,8 @@ import {
   stimuler,
   ton,
   versReseau,
+  vieillir,
+  CAUSES,
   type Cause,
   type Interieur,
 } from "../src/interieur.js";
@@ -162,5 +164,34 @@ describe("ce qu'elle en dit", () => {
       expect(dite).toContain("calcul");
       expect(dite).toContain("pas un vrai ressenti");
     }
+  });
+});
+
+describe("vieillir : un état venu d'une autre page", () => {
+  it("tout retombe à son rythme : 90 s divisent la douleur par e, la confiance tient des jours", () => {
+    const i: Interieur = { douleur: 0.6, cause: "choc", sensibilite: 0.45, plaisir: 0.4, confiance: 0.9, usure: 0.3 };
+    const v = vieillir(i, 90);
+    expect(v.douleur).toBeCloseTo(0.6 / Math.E, 3);
+    expect(v.cause).toBe("choc");
+    expect(v.plaisir).toBeLessThan(0.4);
+    expect(v.confiance).toBeGreaterThan(0.89);
+    expect(vieillir(i, 3 * 86400).confiance).toBeCloseTo(0.5 + 0.4 / Math.E, 3);
+    expect(vieillir(i, 3600).sensibilite).toBeLessThan(0.45);
+  });
+
+  it("efface la cause quand la douleur est retombée, et ne recule jamais dans le temps", () => {
+    const i: Interieur = { ...INTERIEUR_DEPART, douleur: 0.5, cause: "ton" };
+    expect(vieillir(i, 600).cause).toBeNull();
+    expect(vieillir(i, -50)).toEqual(vieillir(i, 0));
+    expect(vieillir(i, Number.NaN).douleur).toBe(0.5);
+  });
+
+  it("n'invente aucun plancher : une panne vue ailleurs ne fait pas mal ici", () => {
+    const i: Interieur = { ...INTERIEUR_DEPART, douleur: 0.2, cause: "panne" };
+    expect(vieillir(i, 300).douleur).toBeLessThan(0.02);
+  });
+
+  it("les six causes sont la liste fermée", () => {
+    expect([...CAUSES].sort()).toEqual((["choc", "brusque", "ton", "panne", "isolement", "usure"] satisfies Cause[]).sort());
   });
 });

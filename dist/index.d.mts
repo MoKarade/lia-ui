@@ -1,5 +1,12 @@
-import { O as OptionsLia, L as LiaHandle } from './types-Y1sCph6Z.mjs';
-export { A as ActionLia, C as Candidat, a as Comportement, b as ContexteLia, D as Decision, c as DescriptionElement, d as ENVIES_DEPART, e as Envies, f as EnvoiLia, E as EtatHote, g as EtatLia, F as FaitLia, G as GESTES, h as GesteLia, H as HUMEURS_LIA, i as HUMEURS_MENU, j as Hasard, k as HumeurLia, l as LIBELLE_HUMEUR, M as MotifMonde, m as MotifSpontane, n as OptionsElements, P as ParoleSpontanee, o as PropositionMonde, p as PuceLia, R as ReponseLia, Z as ZoneVie, q as apresComportement, r as candidats, s as choisirComportement, t as dansZone, u as majEnvies, v as pointDansZone, w as prochaineDecision } from './types-Y1sCph6Z.mjs';
+import { O as OptionsLia, L as LiaHandle } from './types-Y6uDoRv5.mjs';
+export { A as ActionLia, C as Candidat, a as Comportement, b as ContexteLia, D as Decision, c as DescriptionElement, d as ENVIES_DEPART, e as Envies, f as EnvoiLia, E as EtatHote, g as EtatLia, F as FaitLia, G as GESTES, h as GesteLia, H as HUMEURS_LIA, i as HUMEURS_MENU, j as Hasard, k as HumeurLia, l as LIBELLE_HUMEUR, M as MotifMonde, m as MotifSpontane, n as OptionsElements, P as ParoleSpontanee, o as PropositionMonde, p as PuceLia, R as ReponseLia, Z as ZoneVie, q as apresComportement, r as candidats, s as choisirComportement, t as dansZone, u as majEnvies, v as pointDansZone, w as prochaineDecision } from './types-Y6uDoRv5.mjs';
+
+/** Le nom de chacune des 40 humeurs (noms, pas d'accord : « Humeur : sérénité »), pour la pastille que LIA dessine. */
+declare const LIBELLES_HUMEURS: Readonly<Record<string, string>>;
+/** Les 40 humeurs, dans l'ordre : la liste fermée que l'hôte valide (`ContexteLia.humeur`). */
+declare const HUMEURS_DETAILLEES: readonly string[];
+declare const libelleHumeur: (nom: string) => string;
+declare function couleurHumeur(nom: string): string;
 
 declare function mountLia(options?: OptionsLia): LiaHandle;
 
@@ -53,13 +60,6 @@ interface FamilleActions {
 /** Les 39 silhouettes du moteur, rangées comme dans la maquette (même ordre, mêmes familles). */
 declare const FAMILLES_ACTIONS: readonly FamilleActions[];
 declare const ACTIONS_LIA: readonly string[];
-
-/** Le nom de chacune des 40 humeurs (noms, pas d'accord : « Humeur : sérénité »), pour la pastille que LIA dessine. */
-declare const LIBELLES_HUMEURS: Readonly<Record<string, string>>;
-/** Les 40 humeurs, dans l'ordre : la liste fermée que l'hôte valide (`ContexteLia.humeur`). */
-declare const HUMEURS_DETAILLEES: readonly string[];
-declare const libelleHumeur: (nom: string) => string;
-declare function couleurHumeur(nom: string): string;
 
 declare const ST: string[];
 
