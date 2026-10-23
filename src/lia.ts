@@ -49,6 +49,7 @@ import {
   type ModeElement,
 } from "./ecran.js";
 import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
+import { choisirParole, estPuceLia, suiteParole, type ContexteParole } from "./paroles.js";
 import { FAMILLES_ACTIONS, activiteElement, activiteQuestion, estAction, suiteReflexion } from "./activite.js";
 import {
   ecrireCerveau,
@@ -134,6 +135,8 @@ const limiter = (x: number, a: number, b: number): number => Math.max(a, Math.mi
 /** Délai minimal entre deux fois (secondes), comme la maquette V9. */
 /** Secondes sans rien dans une discussion ouverte (vide, sans réponse attendue) avant qu'elle la referme. */
 const DELAI_CHAT_OUBLIE = 120;
+/** Silence (secondes) avant qu'elle reprenne la parole seule quand elle a son propre répertoire. */
+const DELAI_PAROLE_PROPRE = 28;
 const DELAI_MONDE: Record<MotifMonde | "veiller", number> = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
 /** Marc regarde un élément depuis ce temps (ms) : elle vient regarder avec lui, au plus une fois par élément toutes les 3 minutes. */
 const SURVOL_MS = 4000;
@@ -231,6 +234,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let dernierMonde = 0;
 
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
+  /** Physique du corps : accélération filtrée (les traits la subissent), inclinaison sur ressort, flottement. */
+  const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
   let dernierDeplacement = 0;
@@ -429,6 +434,17 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const b = el("button", "lia-ui__puce", c.label);
     b.type = "button";
     b.addEventListener("click", () => {
+      if (estPuceLia(c.id)) {
+        // Une réponse rapide de son propre répertoire : l'hôte n'en sait rien, c'est elle qui répond.
+        if (contexte === "bulle") tais();
+        const suite = suiteParole(c.label, contexteParole(), Math.random);
+        if (suite) {
+          setTimeout(() => {
+            if (!detruit) dire(suite.text, suite.chips ? { chips: suite.chips } : undefined);
+          }, 350);
+        }
+        return;
+      }
       options.onChip?.(c.id, contexte);
       if (contexte === "bulle") tais();
     });
@@ -484,11 +500,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const minuterie = setTimeout(() => ctrl.abort(), DELAI_QUESTION);
     // Elle montre ce qu'elle fait de la question (souvenir, calcul, rédaction…), puis se concentre et attend si ça tarde.
     const debutAttente = t;
-    let silhouette = "";
     const suivreAttente = (): void => {
       if (enCours !== ctrl || detruit || etatForce) return;
+      // Comparée à ce qu'elle fait vraiment : si autre chose a repris la main (fin d'un déplacement, par exemple), elle revient à son travail.
       const e = suiteReflexion(base, t - debutAttente);
-      if (e !== silhouette) choisir((silhouette = e));
+      if (e !== etat) choisir(e);
     };
     suivreAttente();
     const veilleAttente = setInterval(suivreAttente, 500);
@@ -802,6 +818,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   couche.appendChild(repere);
 
   function cesserDeReperer(): void {
+    if (regarde && regarde === reperee && !(attention?.type === "element" && attention.el === regarde)) retirerRegard();
     reperee = null;
     repere.hidden = true;
   }
@@ -1016,7 +1033,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const peutBouger = (): boolean => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
 
   function finAttention(): void {
-    retirerRegard();
+    // Tant que la discussion est posée sur l'élément (cadre `reperee`), elle le regarde encore : le marqueur reste.
+    if (!reperee || reperee !== regarde) retirerRegard();
     if (!attention) return;
     attention = null;
     cible = { x: pos.x, y: pos.y };
@@ -1089,6 +1107,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /* ── vie propre ── */
   const LONGUEUR_MAX_SPONTANE = 280;
   const silence = options.silence ?? [22, 7];
+  const parolePropre = options.parolePropre !== false;
   const relancesMax = options.relancesParJour ?? 2;
   const peutParlerSeule = (): boolean => !enSilence(new Date().getHours(), silence);
   const relancesRestantes = (): boolean => lireRelances(cle, jourLocal(new Date())) < relancesMax;
@@ -1107,6 +1126,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (!parole || !texte) return false;
     return dire(texte, parole.chips ? { chips: parole.chips } : undefined);
+  };
+
+  /** Ce qu'elle dit d'elle-même (src/paroles.ts) : vrai par construction, jamais rien sur Marc ni sur ses apps. */
+  let recentesParoles: string[] = [];
+  const contexteParole = (): ContexteParole => ({ heure: new Date().getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles });
+  const direPersonnel = (): boolean => {
+    const p = choisirParole(contexteParole(), Math.random);
+    recentesParoles = [...recentesParoles, p.id].slice(-6);
+    return dire(p.text, p.chips ? { chips: p.chips } : undefined);
   };
 
   /** Comme dans la maquette : elle arrive, puis dit sa phrase au bout d'une seconde et demie si elle y est encore. */
@@ -1192,6 +1220,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }, 1500);
   };
 
+  /** Avant de partir elle se retire un peu dans le sens opposé (anticipation), puis le ressort la lance. */
+  const anticiper = (): void => {
+    const dx = cible.x - pos.x;
+    const dy = cible.y - pos.y;
+    const d = Math.hypot(dx, dy);
+    if (d < rayon) return;
+    pos.vx -= (dx / d) * 70;
+    pos.vy -= (dy / d) * 70;
+  };
+
   const lancer = (id: Comportement, vues: Element[]): void => {
     comportement = id;
     derniereDecision = t;
@@ -1205,6 +1243,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 5, 8));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
+      anticiper();
       errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
       choisir("repos");
       calme(30);
@@ -1217,6 +1256,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       calme(20);
     } else if (id === "rentrer") {
       cible = { x: maison.x, y: maison.y };
+      anticiper();
       errance = { jusqua: t + 5.7 };
       choisir("repos");
       calme(30);
@@ -1236,10 +1276,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (id === "feliciter" && reseauActif) impulsion(reseau, "bon", 0.6);
       calme(40);
     } else if (id === "causer" || id === "relancer") {
-      derniereParole = t; // même muette (l'hôte n'avait rien de vrai à dire) : pas de nouvelle tentative avant 90 s
-      const parole = id === "relancer" ? direSpontane("relance") : direSpontane(Math.random() < 0.2 ? "salut" : "rien");
-      if (parole && id === "relancer") {
-        ecrireRelances(cle, { jour: jourLocal(new Date()), n: lireRelances(cle, jourLocal(new Date())) + 1 });
+      derniereParole = t; // même muette (l'hôte n'avait rien de vrai à dire) : pas de nouvelle tentative avant le délai
+      if (id === "relancer") {
+        if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(new Date()), n: lireRelances(cle, jourLocal(new Date())) + 1 });
+      } else {
+        // Le bavardage libre alterne : l'hôte a ses sujets (projets, alertes), elle a les siens ; sans rien de l'hôte, elle parle d'elle.
+        const perso = parolePropre && Math.random() < 0.6;
+        const dit = !perso && direSpontane(Math.random() < 0.2 ? "salut" : "rien");
+        if (!dit && parolePropre) direPersonnel();
       }
       errance = { jusqua: t + 4 };
     } else {
@@ -1289,7 +1333,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       candidats(envies, {
         curseurRecent: curseurRecent(),
         cibles: vues.length,
-        parole: !!options.onSpontane && peutParlerSeule(),
+        parole: (!!options.onSpontane || parolePropre) && peutParlerSeule(),
+        delaiParole: parolePropre ? DELAI_PAROLE_PROPRE : 90,
         relance: relancesRestantes(),
         humeur: humeurNom,
         tranquille: t < tranquilleJusqua,
@@ -1464,22 +1509,49 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
     // Collée à un élément : exactement sur lui, sans retard ni flottement quand la page défile.
     const colle = attention?.type === "element" && attention.colle;
-    if (sansMouvement || doux || still || colle) {
+    if (sansMouvement || doux || still) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
+      phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
     } else {
-      // Quand Marc lui demande d'aller quelque part, elle y court plus vite que dans ses balades.
-      const k = glisse ? 260 : attention?.type === "element" && !attention.colle ? 150 : 95;
-      const zeta = 2 * Math.sqrt(k) * 0.9;
+      // Un corps qui a une masse : il accélère, file, freine et dépasse un peu sa cible avant de s'y poser (ressort un peu mou,
+      // vitesse et accélération bornées). Une demande de Marc la fait courir ; la balade est une glissade lente de 2 à 3 s.
+      const demande = attention?.type === "element" && !attention.colle;
+      const suit = attention?.type === "curseur";
+      const balade = !glisse && !demande && !suit && !colle;
+      // Posée contre un élément : un ressort raide, amorti juste ce qu'il faut, qui la garde dessus quand la page défile sans jamais la faire sauter.
+      const k = colle ? 1600 : glisse ? 260 : demande ? 70 : suit ? 30 : 8;
+      const zeta = 2 * Math.sqrt(k) * (colle ? 1 : glisse ? 0.9 : demande ? 0.8 : suit ? 0.7 : 0.62);
+      const vmax = colle ? 2500 : balade ? 520 : demande ? 1100 : 900;
+      const amax = colle ? 20000 : glisse ? 9000 : balade ? 1500 : 3500;
       const n = Math.max(1, Math.ceil(dt / 0.008));
       const h = dt / n;
       for (let q = 0; q < n; q++) {
-        pos.vx += (k * (cc.x - pos.x) - zeta * pos.vx) * h;
-        pos.vy += (k * (cc.y - pos.y) - zeta * pos.vy) * h;
+        let ax = k * (cc.x - pos.x) - zeta * pos.vx;
+        let ay = k * (cc.y - pos.y) - zeta * pos.vy;
+        const a = Math.hypot(ax, ay);
+        if (a > amax) {
+          ax *= amax / a;
+          ay *= amax / a;
+        }
+        pos.vx += ax * h;
+        pos.vy += ay * h;
+        const v = Math.hypot(pos.vx, pos.vy);
+        if (v > vmax) {
+          pos.vx *= vmax / v;
+          pos.vy *= vmax / v;
+        }
         pos.x += pos.vx * h;
         pos.y += pos.vy * h;
       }
+      // L'accélération (filtrée, bornée) que subissent ses traits : ils traînent au départ, se balancent à l'arrêt.
+      const pas = Math.max(dt, 0.008);
+      const lisse = 1 - Math.exp(-dt * 18);
+      phys.ax = limiter(phys.ax + ((pos.vx - phys.vxPrec) / pas - phys.ax) * lisse, -2600, 2600);
+      phys.ay = limiter(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
+      phys.vxPrec = pos.vx;
+      phys.vyPrec = pos.vy;
     }
     // Elle a vraiment bougé quand elle s'écarte de plus d'un demi-rayon du dernier point où elle s'est posée.
     if (Math.hypot(pos.x - ancreDeplacement.x, pos.y - ancreDeplacement.y) > rayon * 0.5) {
@@ -1506,6 +1578,21 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     for (const id of ST) lts[id] = sansMouvement ? 1.6 : t - (debut[id] ?? t);
     etatMoteur.lts = lts;
 
+    // Inclinaison : elle se penche dans le sens de sa course, sur un ressort sous-amorti (elle se balance un instant en s'arrêtant).
+    const mobile = !sansMouvement && !doux && !still;
+    const penche = mobile ? limiter(pos.vx / 700, -1, 1) * 0.17 : 0;
+    const nb = Math.max(1, Math.ceil(dt / 0.01));
+    for (let q = 0; q < nb; q++) {
+      phys.vIncl += (55 * (penche - phys.incl) - 2 * 0.38 * Math.sqrt(55) * phys.vIncl) * (dt / nb);
+      phys.incl += phys.vIncl * (dt / nb);
+    }
+    if (!mobile) phys.incl = phys.vIncl = 0;
+    // Flottement : même au repos elle n'est jamais figée (dérive douce, battement vertical quand elle file).
+    const filante = limiter(vitesse / 700, 0, 1);
+    phys.flotte += ((mobile && vie && !glisse && !chatOuvert && !menuOuvert ? 1 : 0) - phys.flotte) * (still ? 1 : 1 - Math.exp(-dt * 2));
+    const amp = rayon * 0.26 * phys.flotte * (1 - 0.7 * filante);
+    const ox = amp * (Math.sin(t * 0.78 + 1.3) + 0.45 * Math.sin(t * 1.93));
+    const oy = amp * 0.85 * (Math.cos(t * 0.61) + 0.4 * Math.sin(t * 1.51 + 0.7)) + rayon * 0.05 * filante * Math.sin(t * 8.2);
     const cote = Math.round(rayon * 5);
     if (toile.style.width !== `${cote}px`) {
       toile.style.width = toile.style.height = `${cote}px`;
@@ -1523,10 +1610,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         R: rayon,
         asp: 1,
         fly: v > 0.04 ? { dx: pos.vx, dy: pos.vy, v } : null,
+        acc: mobile ? { x: phys.ax, y: phys.ay } : null,
         snap: sansMouvement,
       });
     }
-    corpsEl.style.transform = `translate(${pos.x.toFixed(1)}px,${pos.y.toFixed(1)}px)`;
+    corpsEl.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${(pos.y + oy).toFixed(1)}px)`;
+    // Étirement léger le long de sa course, et inclinaison : sur la toile seulement (la pastille et la zone cliquable restent droites).
+    const etire = 0.07 * filante;
+    const cap = Math.atan2(pos.vy, pos.vx);
+    toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${etire > 0.004 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
       puceHumeur.hidden = chatOuvert;
       // Sous son corps ; près du bas de la zone, elle se glisse plus haut pour ne jamais sortir de l'écran.

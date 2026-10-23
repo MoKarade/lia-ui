@@ -80,9 +80,25 @@ describe("clic droit sur un élément de la page", () => {
     await vi.waitFor(() => expect(ask).toHaveBeenCalled());
     const repere = document.querySelector<HTMLElement>(".lia-ui__repere");
     await vi.waitFor(() => expect(repere?.hidden).toBe(false));
-    expect(carte.getAttributeNames().sort()).toEqual(["data-lia-app", "data-lia-genre", "id"]);
+    // Le seul ajout est le marqueur que l'hôte peut styler tant que la discussion est posée sur l'élément.
+    expect(carte.getAttributeNames().sort()).toEqual(["data-lia-app", "data-lia-genre", "data-regard", "id"]);
     lia.fermerChat();
     expect(repere?.hidden).toBe(true);
+    expect(carte.hasAttribute("data-regard")).toBe(false);
+  });
+
+  it("pendant qu'elle réfléchit à l'élément, elle garde l'air de lire et son marqueur reste posé", async () => {
+    const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockReturnValue(new Promise(() => undefined));
+    lia = mountLia({ vieAutonome: false, ask });
+    clicDroit(carte);
+    choisir("Regarde ça avec moi");
+    await vi.waitFor(() => expect(ask).toHaveBeenCalled());
+    const etat = (): string | undefined => document.querySelector<HTMLElement>(".lia-ui__corps")?.dataset["etat"];
+    // Une fois posée près de l'élément (la fin de son déplacement la remettait « au repos »), elle lit encore.
+    await vi.waitFor(() => expect(etat()).toBe("lit"), { timeout: 3000 });
+    await new Promise((r) => setTimeout(r, 1300));
+    expect(etat()).toBe("lit");
+    expect(carte.hasAttribute("data-regard")).toBe(true);
   });
 
   it("« Poser une question… » attend la question de Marc, puis l'envoie avec l'élément", async () => {

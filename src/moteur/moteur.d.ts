@@ -38,6 +38,8 @@ export interface OptionsCorps {
   R?: number;
   asp?: number;
   fly?: { dx: number; dy: number; v: number } | null;
+  /** Accélération du corps entier (px/s²) : chaque trait la subit selon sa masse, d'où la traîne, le rebond et le balancement. */
+  acc?: { x: number; y: number } | null;
   snap?: boolean;
   extra?: number;
 }

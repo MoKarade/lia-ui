@@ -71,7 +71,7 @@ describe("aller voir un élément", () => {
     await new Promise((r) => setTimeout(r, 200));
     const apres = position();
     await new Promise((r) => setTimeout(r, 200));
-    expect(position().y).toBeCloseTo(apres.y, 0);
+    expect(Math.abs(position().y - apres.y)).toBeLessThan(2); // elle flotte un peu, elle ne repart pas
     expect(Math.abs(apres.y - 400)).toBeLessThan(5);
   });
 

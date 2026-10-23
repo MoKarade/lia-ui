@@ -51,7 +51,7 @@ describe("mouvement réduit : mode « doux » (choisi par l'hôte ou par Marc)",
 
   it("ne glisse pas : sa position ne bouge pas tant que personne ne l'envoie", async () => {
     vi.useFakeTimers();
-    lia = mountLia({ quandMouvementReduit: "doux", onSpontane: () => null });
+    lia = mountLia({ quandMouvementReduit: "doux", parolePropre: false, onSpontane: () => null });
     vi.advanceTimersByTime(100);
     const avant = position();
     vi.advanceTimersByTime(60_000);
@@ -61,7 +61,7 @@ describe("mouvement réduit : mode « doux » (choisi par l'hôte ou par Marc)",
   it("parle seule et sa bulle s'écrit d'un coup", () => {
     vi.useFakeTimers();
     const hasard = vi.spyOn(Math, "random").mockReturnValue(0.3); // choix pondéré : causer, motif « rien »
-    lia = mountLia({ quandMouvementReduit: "doux", onSpontane: () => "Il est calme ici.", silence: [3, 3] });
+    lia = mountLia({ quandMouvementReduit: "doux", parolePropre: false, onSpontane: () => "Il est calme ici.", silence: [3, 3] });
     vi.advanceTimersByTime(4_000); // sa première parole, avant le délai de 90 s entre deux remarques
     expect(document.querySelector(".lia-ui__bulle")?.textContent).toBe("Il est calme ici.");
     hasard.mockRestore();

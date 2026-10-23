@@ -1,7 +1,7 @@
 "use client";
 import {
   mountLia
-} from "./chunk-HALJDZJ7.mjs";
+} from "./chunk-CKX23HSN.mjs";
 
 // src/react.tsx
 import { useEffect, useRef } from "react";
@@ -22,6 +22,7 @@ function Lia(props) {
       ...p.humeurVisible !== void 0 ? { humeurVisible: p.humeurVisible } : {},
       ...p.etat ? { etat: p.etat } : {},
       ...p.relancesParJour !== void 0 ? { relancesParJour: p.relancesParJour } : {},
+      ...p.parolePropre !== void 0 ? { parolePropre: p.parolePropre } : {},
       ...p.onSpontane ? { onSpontane: (m) => derniere.current.onSpontane?.(m) ?? null } : {},
       ...p.elements === false ? { elements: false } : p.elements ? {
         elements: {

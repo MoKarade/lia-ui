@@ -13,6 +13,7 @@
 
 ## Règles propres au dépôt
 - **Aucun réseau, aucun secret, aucune donnée** dans le paquet principal : tout ce que LIA sait passe par `options.ask` et `options.etat` fournis par l'hôte. Pas de `fetch`, pas de jeton, pas de donnée perso (maquettes et tests : données FICTIVES). Seule exception : `src/etat-http.ts` (sous-chemin `/etat-http`), un `fetch` vers la MÊME origine, refusé pour tout autre site.
+- **Sa parole propre (`src/paroles.ts`)** : seules phrases écrites ici, vraies par construction (humeur, envies, journal, heure) ou sans fait ; rien sur Marc, ses apps ni ses chiffres (verrou `tests/paroles.test.ts`). Tout le reste vient de l'hôte.
 - **Échec fermé** : sans `ask`, ou si `ask` échoue, LIA dit qu'elle est indisponible. Jamais de réponse inventée.
 - **Texte du modèle = DONNÉE** : tout texte reçu (réponse, bulle, puces) entre par `textContent`, jamais par `innerHTML`. Les blocs composés passent par `renderBlocks`, fourni et validé par l'hôte.
 - **Une seule LIA par page** (l'état du moteur est global). `mountLia` refuse un second montage ; `destroy()` libère tout.

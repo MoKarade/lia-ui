@@ -113,32 +113,32 @@ afterEach(() => {
 describe("elle vient prévenir (appeler)", () => {
   it("avec une alerte et un problème vrai de l'hôte, elle dit SA phrase avec ses puces", () => {
     const monde = vi.fn((m: MotifMonde) => (m === "appeler" ? { ...PROBLEME, element: carte } : null));
-    lia = mountLia({ entrees: () => ALERTE, monde });
+    lia = mountLia({ parolePropre: false, entrees: () => ALERTE, monde });
     expect(attendreDit("DriveAI ne répond plus depuis une heure.", 40)).toBe(true);
     expect(monde).toHaveBeenCalledWith("appeler");
     expect(bulle().textContent).toContain("Regarder");
   });
 
   it("si la carte est hors de la bande regardée, elle ne s'y rend pas mais le dit quand même", () => {
-    lia = mountLia({ entrees: () => ALERTE, monde: (m) => (m === "appeler" ? { ...PROBLEME, element: document.getElementById("loin") } : null) });
+    lia = mountLia({ parolePropre: false, entrees: () => ALERTE, monde: (m) => (m === "appeler" ? { ...PROBLEME, element: document.getElementById("loin") } : null) });
     expect(attendreDit("DriveAI ne répond plus depuis une heure.", 40)).toBe(true);
   });
 
   it("sans alerte, elle n'a aucune raison de venir, même si l'hôte a un problème à signaler", () => {
-    lia = mountLia({ monde: (m) => (m === "appeler" ? PROBLEME : null) });
+    lia = mountLia({ parolePropre: false, monde: (m) => (m === "appeler" ? PROBLEME : null) });
     seconde(60);
     expect(dit()).not.toContain("DriveAI ne répond plus");
   });
 
   it("quand l'hôte n'a rien de vrai (null), elle se tait", () => {
-    lia = mountLia({ entrees: () => ALERTE, monde: () => null });
+    lia = mountLia({ parolePropre: false, entrees: () => ALERTE, monde: () => null });
     seconde(60);
     expect(dit()).toBe("");
   });
 
   it("ne revient pas avant 90 s : l'hôte n'est plus interrogé sur ce motif entre-temps", () => {
     const monde = vi.fn((m: MotifMonde) => (m === "appeler" ? PROBLEME : null));
-    lia = mountLia({ entrees: () => ALERTE, monde });
+    lia = mountLia({ parolePropre: false, entrees: () => ALERTE, monde });
     seconde(30);
     const appels = monde.mock.calls.filter(([m]) => m === "appeler").length;
     seconde(30);
@@ -150,7 +150,7 @@ describe("elle vient prévenir (appeler)", () => {
   it("se tait la nuit (heures de silence) : l'hôte n'est pas même interrogé", () => {
     vi.setSystemTime(new Date(2026, 9, 22, 23, 30, 0));
     const monde = vi.fn(() => PROBLEME);
-    lia = mountLia({ entrees: () => ALERTE, monde });
+    lia = mountLia({ parolePropre: false, entrees: () => ALERTE, monde });
     seconde(60);
     expect(monde).not.toHaveBeenCalled();
     expect(dit()).toBe("");
@@ -158,14 +158,14 @@ describe("elle vient prévenir (appeler)", () => {
 
   it("la dit aussi en mouvement réduit « doux », sur place", () => {
     installerEnvironnement({ sansMouvement: true });
-    lia = mountLia({ entrees: () => ALERTE, monde: (m) => (m === "appeler" ? { ...PROBLEME, element: carte } : null) });
+    lia = mountLia({ parolePropre: false, entrees: () => ALERTE, monde: (m) => (m === "appeler" ? { ...PROBLEME, element: carte } : null) });
     expect(attendreDit("DriveAI ne répond plus", 40)).toBe(true);
   });
 
   it("n'est jamais dite en mouvement réduit « fixe »", () => {
     installerEnvironnement({ sansMouvement: true });
     const monde = vi.fn(() => PROBLEME);
-    lia = mountLia({ quandMouvementReduit: "fixe", entrees: () => ALERTE, monde });
+    lia = mountLia({ parolePropre: false, quandMouvementReduit: "fixe", entrees: () => ALERTE, monde });
     seconde(60);
     expect(monde).not.toHaveBeenCalled();
   });
@@ -173,6 +173,7 @@ describe("elle vient prévenir (appeler)", () => {
   it("l'échec de l'hôte ne l'arrête pas : elle le dit une seule fois dans la console", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
     lia = mountLia({
+      parolePropre: false,
       entrees: () => ALERTE,
       monde: () => {
         throw new Error("hors ligne");
@@ -201,13 +202,13 @@ describe("ce qu'elle fait quand Marc est là", () => {
   ] as const)("%s : elle dit le texte de l'hôte, rien d'autre", (motif, texte) => {
     // Tirage fixé : après 30 s sans bouger, « promener » pèse de plus en plus (envie de bouger) ; 0,75 tombe sur le motif de l'hôte (jouer pèse plus depuis v0.13.0 : elle montre davantage d'actions).
     vi.spyOn(Math, "random").mockReturnValue(0.75);
-    lia = mountLia({ monde: seule(motif, texte) });
+    lia = mountLia({ parolePropre: false, monde: seule(motif, texte) });
     expect(attendreDit(texte, 150, true)).toBe(true);
     expect(lia.journal().some((f) => f.quoi === motif)).toBe(true);
   });
 
   it("si Marc ne bouge pas, elle n'en parle pas", () => {
-    lia = mountLia({ monde: seule("resumer", "Côté DriveAI : ça monte.") });
+    lia = mountLia({ parolePropre: false, monde: seule("resumer", "Côté DriveAI : ça monte.") });
     // Marc est compté présent 60 s après le montage ; ensuite, plus rien ne doit sortir.
     seconde(61);
     const avant = lia.journal().filter((f) => f.quoi === "resumer").length;
@@ -216,7 +217,7 @@ describe("ce qu'elle fait quand Marc est là", () => {
   });
 
   it("une bonne nouvelle la réjouit : son réseau reçoit une impulsion « bon »", () => {
-    lia = mountLia({ monde: seule("feliciter", "Ça fait plaisir : tout est vert.") });
+    lia = mountLia({ parolePropre: false, monde: seule("feliciter", "Ça fait plaisir : tout est vert.") });
     let avant = lia.envies().joie;
     for (let i = 0; i < 24 && !lia.journal().some((f) => f.quoi === "feliciter"); i++) {
       avant = lia.envies().joie;
@@ -233,13 +234,13 @@ describe("ce qu'elle fait quand Marc est là", () => {
 describe("veiller, sans l'hôte", () => {
   it("la nuit, elle veille un moment (silhouette « surveille ») et le note", () => {
     vi.setSystemTime(new Date(2026, 9, 22, 2, 0, 0));
-    lia = mountLia({});
+    lia = mountLia({ parolePropre: false });
     seconde(120);
     expect(lia.journal().some((f) => f.quoi === "veiller")).toBe(true);
   });
 
   it("en plein jour avec Marc là, elle ne veille pas", () => {
-    lia = mountLia({});
+    lia = mountLia({ parolePropre: false });
     for (let i = 0; i < 24; i++) {
       bouger();
       seconde(5);
@@ -264,7 +265,7 @@ describe("elle vient regarder avec Marc (accompagner)", () => {
 
   it("après 4 s sur un élément, elle demande à l'hôte avec cet élément, vient et dit sa phrase", () => {
     const monde = vi.fn((m: MotifMonde, el?: Element) => (m === "accompagner" && el === regard ? phrase : null));
-    lia = mountLia({ monde });
+    lia = mountLia({ parolePropre: false, monde });
     survoler(regard);
     seconde(3);
     expect(monde.mock.calls.some(([m]) => m === "accompagner")).toBe(false);
@@ -273,7 +274,7 @@ describe("elle vient regarder avec Marc (accompagner)", () => {
   });
 
   it("marque l'élément regardé (data-regard) tant qu'elle est là, puis l'efface", () => {
-    lia = mountLia({ monde: (m) => (m === "accompagner" ? phrase : null) });
+    lia = mountLia({ parolePropre: false, monde: (m) => (m === "accompagner" ? phrase : null) });
     survoler(regard);
     expect(attendreDit(phrase.text, 20)).toBe(true);
     expect(regard.hasAttribute("data-regard")).toBe(true);
@@ -284,7 +285,7 @@ describe("elle vient regarder avec Marc (accompagner)", () => {
 
   it("n'y revient pas avant 3 minutes pour le même élément", () => {
     const monde = vi.fn((m: MotifMonde) => (m === "accompagner" ? phrase : null));
-    lia = mountLia({ monde });
+    lia = mountLia({ parolePropre: false, monde });
     survoler(regard);
     expect(attendreDit(phrase.text, 20)).toBe(true);
     const appels = monde.mock.calls.filter(([m]) => m === "accompagner").length;
@@ -296,7 +297,7 @@ describe("elle vient regarder avec Marc (accompagner)", () => {
 
   it("changer d'élément remet le compte à zéro ; quitter les éléments l'arrête", () => {
     const monde = vi.fn((m: MotifMonde) => (m === "accompagner" ? phrase : null));
-    lia = mountLia({ monde });
+    lia = mountLia({ parolePropre: false, monde });
     survoler(regard);
     seconde(3);
     survoler(document.getElementById("autre") as Element);
@@ -308,7 +309,7 @@ describe("elle vient regarder avec Marc (accompagner)", () => {
   });
 
   it("l'hôte qui n'a rien à dire (null) : elle ne vient pas", () => {
-    lia = mountLia({ monde: () => null });
+    lia = mountLia({ parolePropre: false, monde: () => null });
     survoler(regard);
     seconde(30);
     expect(dit()).toBe("");
