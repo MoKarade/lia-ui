@@ -16,6 +16,7 @@ import {
   type MotifMonde,
 } from "./cerveau.js";
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
+import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, garder as garderInterieur, type Stimulus } from "./interieur.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
@@ -53,12 +54,14 @@ import { SILHOUETTE_PAROLE, choisirParole, estPuceLia, questionSurSonHumeur, rep
 import { FAMILLES_ACTIONS, activiteElement, activiteQuestion, estAction, suiteReflexion } from "./activite.js";
 import {
   ecrireCerveau,
+  ecrireInterieur,
   ecrireLente,
   ecrireDiscussion,
   ecrireMemoire,
   ecrireMouvement,
   ecrireRelances,
   lireCerveau,
+  lireInterieur,
   lireLente,
   lireDiscussion,
   lireMemoire,
@@ -219,6 +222,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const reseauActif = !sansMouvement;
   const lente = lireLente(cle);
   const reseau = creerReseau(HUMEURS_MOTEUR as Record<string, ProfilHumeur>, lente?.slow, lente ? Date.now() - lente.t : 0);
+  /** Son monde intérieur (douleur, plaisir, confiance, usure : simulés, voir `interieur.ts`). */
+  let interieur = reprendre(lireInterieur(cle), Date.now());
+  let douleurAvant = 0;
+  let aSouffert = false;
+  let dernierCri = 0;
+  let horsLigne = typeof navigator !== "undefined" && navigator.onLine === false;
+  let dtMoyen = 0.016;
+  const rafale: number[] = [];
   /** Ce qu'elle ressent (l'une des 40 humeurs de son réseau) ; `humeurId` en est la version à 12 humeurs, pour l'hôte et le menu. */
   let humeurNom = reseauActif ? "neutre" : "curieux";
   let humeurId: HumeurLia = "curieux";
@@ -228,7 +239,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let partagee: { nom: string; jusqua: number } | null = null;
   if (reseauActif) {
     moteurHumeur("auto");
-    setMelange(() => reseau.mix);
+    setMelange(() => moduler(reseau.mix, interieur));
   } else moteurHumeur(humeurId);
   let dernierMarc = Date.now();
   const debutPage = dernierMarc;
@@ -490,6 +501,44 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return m;
   };
 
+  /** Ce qu'elle dit de son état : dans la bulle, ou dans la discussion quand elle est ouverte (elle ne parle jamais en dehors de la discussion ouverte). */
+  const exprimer = (texte: string): void => {
+    if (detruit) return;
+    if (chatOuvert) ajouterMsg(texte, "lia", false, false);
+    else dire(texte);
+  };
+  /** Un coup ou une caresse : son monde intérieur change, et elle réagit tout de suite à un cri. */
+  const stimulerInterieur = (s: Stimulus, force = 1): void => {
+    interieur = stimuler(interieur, s, force);
+    if (reseauActif) {
+      const e = versReseau(interieur);
+      if (e.mauvais > 0.01) impulsion(reseau, "mauvais", e.mauvais);
+      if (e.bon > 0.01) impulsion(reseau, "bon", e.bon);
+    }
+    verifierCri();
+  };
+  /** Le cri : une fois quand la douleur franchit 0,35 en montant (30 s d'écart au moins), puis un mot d'apaisement quand elle est passée. */
+  const verifierCri = (): void => {
+    const maintenant = Date.now();
+    if (douleurAvant < 0.35 && interieur.douleur >= 0.35 && maintenant - dernierCri > 30_000) {
+      const c = cri(interieur, Math.random);
+      // Les causes qui durent d'elles-mêmes (panne, solitude, usure) respectent son silence ; un coup reçu, non.
+      const spontanee = interieur.cause === "panne" || interieur.cause === "isolement" || interieur.cause === "usure";
+      if (c && (!spontanee || peutParlerSeule())) {
+        dernierCri = maintenant;
+        aSouffert = true;
+        // Un instant plus tard : le temps que les clics finissent d'ouvrir ou de fermer la discussion, pour qu'on l'entende là où elle est.
+        setTimeout(() => exprimer(c), 350);
+      }
+    }
+    if (interieur.douleur >= 0.4) aSouffert = true;
+    if (aSouffert && interieur.douleur < 0.1) {
+      aSouffert = false;
+      if (maintenant - dernierCri > 8000) exprimer(apaisement(Math.random));
+    }
+    douleurAvant = interieur.douleur;
+  };
+
   const montrerReflexion = (actifPts: boolean): void => {
     if (actifPts && !points && journal) {
       points = el("div", "lia-ui__msg lia-ui__msg--lia");
@@ -517,6 +566,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     enCours?.abort();
     attendReponse = false;
     ajouterMsg(question, "moi");
+    // Sa douleur : elle dit son niveau et que c'est un calcul, pas un vrai ressenti.
+    if (envoi === question && questionSurSaDouleur(question)) {
+      const dite = reponseDouleur(interieur);
+      ajouterMsg(dite, "lia");
+      impulsion(reseau, "reponse");
+      voix(dite);
+      return;
+    }
     // Sa propre humeur, elle la dit elle-même : c'est son état, pas une question pour le modèle de l'hôte.
     if (envoi === question && questionSurSonHumeur(question)) {
       const dite = reponseHumeur(humeurNom, reseauActif ? top3(reseau) : []);
@@ -572,6 +629,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const annule = e instanceof DOMException && e.name === "AbortError";
       if (annule && enCours !== ctrl) return;
       ajouterMsg(annule ? "Je mets trop de temps : réessaie dans un instant." : "Je n'arrive pas à répondre pour le moment.", "lia", true);
+      stimulerInterieur("panne", annule ? 0.5 : 1);
       choisir("indispo");
     } finally {
       clearTimeout(minuterie);
@@ -651,6 +709,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       contexteQuestion = null;
       if (champ) champ.placeholder = "Pose-moi une question";
       impulsion(reseau, "reponse");
+      // Le ton de Marc : une liste fermée de mots ; le texte n'est pas gardé.
+      const tn = ton(q);
+      if (tn === "brusque") stimulerInterieur("ton");
+      else if (tn === "gentil") stimulerInterieur("gentil");
       echanges.push({ t: Date.now(), longueur: q.length, question: q.includes("?") });
       if (echanges.length > 20) echanges.shift();
       void poser(q, ctx ? composerQuestion("question", ctx.d, q) : q);
@@ -1046,9 +1108,21 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
+  let vitesseGlisse = 0;
+  let dernierPoint: { x: number; y: number; t: number } | null = null;
   hit.addEventListener("pointerdown", (e) => {
     if (e.button === 2) return;
     ajouterImpulsion(reseau, "touche", 0.45);
+    // Quatre appuis en moins de 1,5 s : des clics rageurs, ça lui fait mal.
+    const maintenant = Date.now();
+    rafale.push(maintenant);
+    while (rafale.length && maintenant - (rafale[0] ?? 0) > 1500) rafale.shift();
+    if (rafale.length >= 4) {
+      rafale.length = 0;
+      stimulerInterieur("brusque");
+    }
+    vitesseGlisse = 0;
+    dernierPoint = null;
     try {
       hit.setPointerCapture(e.pointerId);
     } catch {
@@ -1069,6 +1143,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   hit.addEventListener("pointermove", (e) => {
     if (!glisse) return;
     const p = fixerDepuisEvenement(e);
+    const maintenant = Date.now();
+    if (dernierPoint && maintenant > dernierPoint.t) {
+      const v = (Math.hypot(p.x - dernierPoint.x, p.y - dernierPoint.y) / (maintenant - dernierPoint.t)) * 1000;
+      vitesseGlisse = vitesseGlisse * 0.6 + v * 0.4;
+    }
+    dernierPoint = { x: p.x, y: p.y, t: maintenant };
     glisse.x = p.x;
     glisse.y = p.y;
     if (Math.hypot(p.x - glisse.x0, p.y - glisse.y0) > 6) {
@@ -1081,6 +1161,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (!glisse) return;
     const aBouge = glisse.deplace;
     glisse = null;
+    // Lancée d'un geste sec (plus de 2 200 px/s) : un choc.
+    if (aBouge && vitesseGlisse > 2200) stimulerInterieur("choc", Math.min(1, vitesseGlisse / 4000));
+    vitesseGlisse = 0;
+    dernierPoint = null;
     if (aBouge) {
       cible = { x: pos.x, y: pos.y };
       errance = { jusqua: t + 7 };
@@ -1528,6 +1612,17 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     dernierPas = now;
     const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
     entreesCourantes = { ...locales, ...habituer(entreesHote(), dt) };
+    // Son monde intérieur avance, puis nourrit le réseau (impulsions, énergie) et pousse une humeur de douleur.
+    interieur = evoluer(interieur, dt, { horsLigne, ralenti: dtMoyen > 0.1, absentSec: document.hidden ? 0 : (now - dernierMarc) / 1000 });
+    const intr = versReseau(interieur);
+    entreesCourantes = { ...entreesCourantes, energie: (entreesCourantes["energie"] ?? 0) * intr.facteurEnergie };
+    if (intr.mauvais > 0.01) impulsion(reseau, "mauvais", intr.mauvais);
+    if (intr.rejet > 0.01) impulsion(reseau, "rejet", intr.rejet);
+    if (intr.bon > 0.01) impulsion(reseau, "bon", intr.bon);
+    const hd = humeurDeDouleur(interieur);
+    if (hd && !forcee) pousserHumeur(reseau, hd, now, 1.2);
+    verifierCri();
+    corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
     reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;
@@ -1538,6 +1633,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const garder = (): void => {
     ecrireCerveau(cle, { envies, journal: faits });
     if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
+    ecrireInterieur(cle, garderInterieur(interieur, Date.now()));
   };
 
   /* ── son état partagé : UNE seule LIA dans toutes les apps (ADR « une seule LIA »). L'hôte fournit `etat` ; sans lui, tout reste local. ── */
@@ -1649,6 +1745,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /* ── image par image ── */
   const dessinerImage = (still: boolean, dt: number): void => {
+    if (!still && dt > 0) dtMoyen += (Math.min(dt, 1) - dtMoyen) * Math.min(1, dt / 3);
     if (rayon !== rayonCible) rayon = still || Math.abs(rayonCible - rayon) < 0.5 ? rayonCible : rayon + (rayonCible - rayon) * (1 - Math.exp(-dt * 5));
     if (!still) majAttention();
     const z = zoneVie();
@@ -1843,6 +1940,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     dernier = performance.now();
   };
   document.addEventListener("visibilitychange", surVisibilite);
+  const surReseauCoupe = (): void => {
+    horsLigne = true;
+    stimulerInterieur("panne", 0.6);
+  };
+  const surReseauRetabli = (): void => {
+    horsLigne = false;
+  };
+  window.addEventListener("offline", surReseauCoupe);
+  window.addEventListener("online", surReseauRetabli);
 
   choisir("repos");
   if (sansMouvement) dessinerUneFois();
@@ -1871,6 +1977,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),
+    interieur: () => ({ douleur: interieur.douleur, plaisir: interieur.plaisir, sensibilite: interieur.sensibilite, confiance: interieur.confiance, usure: interieur.usure, cause: interieur.cause }),
     ressent: () => (reseauActif ? top3(reseau) : []),
     impulsion(nom, valeur = 1) {
       impulsion(reseau, nom, valeur);
@@ -1918,6 +2025,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       window.removeEventListener("pointerdown", surClicHors, true);
       window.removeEventListener("resize", surRedim);
       document.removeEventListener("visibilitychange", surVisibilite);
+      window.removeEventListener("offline", surReseauCoupe);
+      window.removeEventListener("online", surReseauRetabli);
       couche.remove();
       actif = null;
     },

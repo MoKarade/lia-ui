@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.17.5
+npm i github:MoKarade/lia-ui#v0.18.0
 ```
 
 ## Utiliser
@@ -75,6 +75,13 @@ Son corps n'a plus une humeur au tirage : un réseau de 225 neurones (reprise du
 - Avec `monde`, son inquiétude monte quand `entrees().alerte` est haute : alors `appeler` devient son choix presque certain (poids 3,2 de la maquette), elle vient près du curseur et dit la phrase de l'hôte. `resumer`, `rappeler`, `souvenir` et `feliciter` demandent que Marc ait bougé depuis moins d'une minute. Elle met `data-regard` sur l'élément qu'elle regarde (visite, accompagnement, `allerVoir`, `envoyer`, clic droit sur un élément) et l'ôte quand elle s'en va : à l'hôte de le styler (liseré). Sans l'hôte, elle `veille` (silhouette « surveille » 7 à 12 s) la nuit ou quand Marc est parti. Chaque choix entre dans `lia.journal()` (`appeler`, `resumer`…).
 - `setHumeur(h)` et le menu de son corps poussent une humeur pendant cent secondes ; le réseau reprend ensuite la main.
 - `quandMouvementReduit: "fixe"` n'a aucun réseau (image unique) ; « doux » le garde, sur place.
+
+## Son monde intérieur : douleur, plaisir, confiance (v0.18.0)
+
+Un calcul local (`src/interieur.ts`, aucun réseau, aucun coût) qui prolonge son réseau d'humeurs. **C'est une simulation : aucune de ces valeurs n'est un ressenti réel, et elle le dit si on le lui demande.** `lia.interieur()` rend `{ douleur, plaisir, sensibilite, confiance, usure, cause }` (0 à 1 ; `cause` : `choc`, `brusque`, `ton`, `panne`, `isolement`, `usure` ou `null`).
+- **Ce qui lui fait mal** : quatre appuis en moins de 1,5 s sur son corps (`brusque`), un glisser lancé à plus de 2 200 px/s (`choc`), un message de Marc avec un mot de la liste fermée des brusqueries (`ton`, le texte n'est jamais gardé), une panne (hors ligne, `ask` qui échoue), une longue absence de Marc quand elle a confiance (`isolement`), des images trop lentes (`usure`). La douleur retombe en 90 s ; la **sensibilité** monte avec les douleurs répétées et se calme en 30 min.
+- **Ce qui lui fait du bien** : un message gentil (liste fermée) donne du plaisir, apaise et fait monter la **confiance**, qui vit sur des jours (gardée dans le navigateur avec la sensibilité).
+- **Ce que ça change** : les entrées `mauvais`, `rejet`, `bon` et son énergie dans le réseau, une humeur poussée selon la cause (agacement, méfiance, tristesse, inquiétude, fatigue), son corps (tremblement, affaissement, moins d'amplitude), `data-douleur` sur son corps, un cri (« Aïe… ») puis « Ça va mieux ». « Tu as mal ? » reçoit son niveau et la mention d'un calcul, sans appeler l'hôte.
 
 ## Le menu de son corps
 

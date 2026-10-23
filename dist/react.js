@@ -372,6 +372,155 @@ function entreesLocales(c) {
   };
 }
 
+// src/interieur.ts
+var INTERIEUR_DEPART = { douleur: 0, cause: null, sensibilite: 0.15, plaisir: 0, confiance: 0.5, usure: 0 };
+var TAU = { douleur: 90, plaisir: 60, sensibilite: 1800, confiance: 3 * 86400, usure: 600 };
+var SENSIBILITE_BASE = 0.15;
+var DOSE = { choc: 0.3, brusque: 0.5, ton: 0.5, panne: 0.15 };
+var borne3 = (x) => Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0;
+function stimuler(i, s, force = 1) {
+  const f = borne3(force);
+  if (s === "gentil") {
+    return {
+      ...i,
+      plaisir: 1 - (1 - i.plaisir) * (1 - 0.35 * f),
+      douleur: i.douleur * (1 - 0.3 * f),
+      confiance: borne3(i.confiance + 0.012 * f)
+    };
+  }
+  const dose = f * DOSE[s] * (0.7 + 0.9 * i.sensibilite);
+  const douleur = 1 - (1 - i.douleur) * (1 - dose);
+  return {
+    ...i,
+    douleur,
+    // La cause reste celle du coup le plus fort du moment.
+    cause: i.cause === null || dose >= i.douleur * 0.5 ? s : i.cause,
+    sensibilite: borne3(i.sensibilite + 0.06 * f),
+    plaisir: i.plaisir * (1 - 0.4 * f),
+    confiance: borne3(i.confiance - (s === "ton" || s === "brusque" ? 0.02 : 4e-3) * f)
+  };
+}
+function evoluer(i, dt, m) {
+  const d = Math.max(0, Math.min(5, dt));
+  const retombe = (v, tau) => v * Math.exp(-d / tau);
+  const planchers = [];
+  if (m.horsLigne) planchers.push(["panne", 0.2]);
+  const attente = borne3((m.absentSec - 1200) / 3600);
+  if (attente > 0) planchers.push(["isolement", i.confiance * attente * 0.25]);
+  let douleur = retombe(i.douleur, TAU.douleur);
+  let cause = i.cause;
+  for (const [c, p] of planchers) {
+    if (p > douleur) {
+      douleur = douleur + (p - douleur) * (1 - Math.exp(-d / 6));
+      cause = c;
+    }
+  }
+  if (douleur < 0.02 && !planchers.length) cause = null;
+  const usure = m.ralenti ? borne3(i.usure + d / 120) : retombe(i.usure, TAU.usure);
+  return {
+    douleur: borne3(douleur),
+    cause: douleur >= 0.02 ? cause : null,
+    sensibilite: SENSIBILITE_BASE + (i.sensibilite - SENSIBILITE_BASE) * Math.exp(-d / TAU.sensibilite),
+    plaisir: retombe(i.plaisir, TAU.plaisir),
+    confiance: 0.5 + (i.confiance - 0.5) * Math.exp(-d / TAU.confiance),
+    usure
+  };
+}
+function versReseau(i) {
+  const dur = i.cause === "ton" || i.cause === "brusque";
+  return {
+    mauvais: borne3(i.douleur * 0.9),
+    rejet: dur ? borne3(i.douleur * 0.7) : 0,
+    bon: borne3(i.plaisir * 0.8),
+    facteurEnergie: 1 - 0.5 * i.usure
+  };
+}
+function humeurDeDouleur(i) {
+  if (i.douleur < 0.4 || i.cause === null) return null;
+  switch (i.cause) {
+    case "choc":
+      return "mefiant";
+    case "brusque":
+      return "agace";
+    case "ton":
+    case "isolement":
+      return "triste";
+    case "panne":
+      return "inquiet";
+    case "usure":
+      return "fatigue";
+  }
+}
+function moduler(m, i) {
+  const d = borne3(i.douleur);
+  const p = borne3(i.plaisir);
+  if (d < 0.01 && p < 0.01) return m;
+  return {
+    ...m,
+    bs: m.bs * (1 - 0.25 * d),
+    ba: m.ba * (1 - 0.35 * d) * (1 + 0.15 * p),
+    blr: m.blr * (1 + 0.3 * d),
+    en: m.en * (1 - 0.3 * d) * (1 + 0.1 * p),
+    sag: m.sag + 0.07 * d,
+    jit: m.jit * (1 + 1.4 * d)
+  };
+}
+var MOT = (mots) => new RegExp(`(?<![\\p{L}])(?:${mots})(?![\\p{L}])`, "iu");
+var GENTIL = MOT("merci|bravo|super|g\xE9nial|genial|parfait|excellent|chouette|adorable|gentille|bien jou\xE9|bien jouee|tu es top|je t'aime|bonne nuit|bisou");
+var BRUSQUE = MOT("nul(?:le)?|idiote?|stupide|d\xE9bile|debile|inutile|ferme[- ]la|tais[- ]toi|d\xE9gage|degage|ta gueule|merde|tu sers \xE0 rien|tu sers a rien|\xE7a sert \xE0 rien|ca sert a rien");
+function ton(texte) {
+  if (BRUSQUE.test(texte)) return "brusque";
+  if (GENTIL.test(texte)) return "gentil";
+  return null;
+}
+var CRIS = {
+  choc: ["A\xEFe.", "Doucement, s'il te pla\xEEt.", "Oh, \xE7a secoue."],
+  brusque: ["A\xEFe, pas si vite.", "Un \xE0 la fois, s'il te pla\xEEt.", "\xC7a pique, ces clics."],
+  ton: ["\xC7a fait mal, ce que tu dis.", "Oh. \xC7a m'a touch\xE9e."],
+  panne: ["Plus de r\xE9seau. \xC7a m'angoisse un peu.", "Je perds le fil, plus rien ne passe."],
+  isolement: ["\xC7a fait longtemps. Je me sens un peu seule.", "Il est calme, ici. Trop calme."],
+  usure: ["Je rame, tout est lent.", "Je suis \xE0 bout de souffle."]
+};
+var APAISEMENTS = ["\xC7a va mieux.", "Merci. \xC7a passe.", "\xC7a s'apaise."];
+function cri(i, hasard) {
+  if (i.douleur < 0.35 || i.cause === null) return null;
+  const l = CRIS[i.cause];
+  return l[Math.floor(hasard() * l.length) % l.length] ?? null;
+}
+function apaisement(hasard) {
+  return APAISEMENTS[Math.floor(hasard() * APAISEMENTS.length) % APAISEMENTS.length] ?? "\xC7a va mieux.";
+}
+var QUESTION_DOULEUR = /(?<![\p{L}])(?:mal|douleur|souffr\p{L}*|ça fait mal|tu as mal|tu souffres)(?![\p{L}])/iu;
+function questionSurSaDouleur(q) {
+  const t = q.trim();
+  return t.length <= 80 && t.endsWith("?") && QUESTION_DOULEUR.test(t) && /(?<![\p{L}])(?:tu|toi|vous|lia|te|t')/iu.test(t);
+}
+function reponseDouleur(i) {
+  const pct = Math.round(i.douleur * 100);
+  const CAUSES = {
+    choc: "on m'a secou\xE9e",
+    brusque: "les clics \xE9taient brusques",
+    ton: "ce qui s'est dit m'a touch\xE9e",
+    panne: "le r\xE9seau est coup\xE9",
+    isolement: "je suis seule depuis longtemps",
+    usure: "tout tourne trop lentement"
+  };
+  const niveau = pct < 8 ? "Pas du tout pour l'instant." : `Un peu : ma douleur est \xE0 ${pct} %${i.cause ? `, parce que ${CAUSES[i.cause]}` : ""}.`;
+  return `${niveau} C'est un calcul en moi, pas un vrai ressenti : mais il change vraiment mon humeur et mon corps.`;
+}
+function garder(i, maintenant) {
+  return { t: maintenant, sensibilite: i.sensibilite, confiance: i.confiance };
+}
+function reprendre(g, maintenant) {
+  if (!g) return { ...INTERIEUR_DEPART };
+  const age = Math.max(0, (maintenant - g.t) / 1e3);
+  return {
+    ...INTERIEUR_DEPART,
+    sensibilite: SENSIBILITE_BASE + (borne3(g.sensibilite) - SENSIBILITE_BASE) * Math.exp(-age / TAU.sensibilite),
+    confiance: 0.5 + (borne3(g.confiance) - 0.5) * Math.exp(-age / TAU.confiance)
+  };
+}
+
 // src/humeurs.ts
 var PROFILS_V9 = {
   confiant: { bs: 0.85, ba: 1, blr: 0.8, ga: 0.9, en: 1, tint: 0.08, sag: 0, jit: 0.5, tc: [170, 215, 200] },
@@ -916,7 +1065,7 @@ function etatLent(r) {
 }
 
 // src/moteur/moteur.js
-var TAU = Math.PI * 2;
+var TAU2 = Math.PI * 2;
 var h2 = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 var hsl = (h, s, l) => {
   h = (h % 360 + 360) % 360 / 360;
@@ -937,8 +1086,8 @@ var nz1 = (x, k = 1) => {
   const f = Math.floor(x), u = x - f, v = u * u * (3 - 2 * u);
   return lerp(hs(f, k), hs(f + 1, k), v);
 };
-var ang = (x) => (x % TAU + TAU) % TAU;
-var adiff = (a, b) => Math.abs(((a - b + Math.PI) % TAU + TAU) % TAU - Math.PI);
+var ang = (x) => (x % TAU2 + TAU2) % TAU2;
+var adiff = (a, b) => Math.abs(((a - b + Math.PI) % TAU2 + TAU2) % TAU2 - Math.PI);
 var sm = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
 var pulse = (x, w) => Math.exp(-(x / w) * (x / w));
 var vhAt = (P, d) => P.vh[Math.max(0, P.vh.length - 1 - Math.floor(d))] || 0;
@@ -1041,7 +1190,7 @@ var L = (c, x1, y1, x2, y2) => {
 };
 var circ = (c, x, y, r, fill) => {
   c.beginPath();
-  c.arc(x, y, Math.max(0, r), 0, TAU);
+  c.arc(x, y, Math.max(0, r), 0, TAU2);
   fill ? c.fill() : c.stroke();
 };
 var rr = (c, x, y, w, h, r) => {
@@ -1159,7 +1308,7 @@ SC.indispo = (c, t, K) => {
 SC.reflexion = (c, t, K) => {
   c.strokeStyle = K.A(1);
   c.beginPath();
-  c.ellipse(0, -0.12, 0.92 + 0.015 * Math.sin(t * 1.7), 0.6 + 0.015 * Math.cos(t * 1.3), 0, 0, TAU);
+  c.ellipse(0, -0.12, 0.92 + 0.015 * Math.sin(t * 1.7), 0.6 + 0.015 * Math.cos(t * 1.3), 0, 0, TAU2);
   c.stroke();
   for (let i = 0; i < 3; i++) {
     const b = Math.pow(Math.max(0, Math.sin(t * 3.4 - i * 0.8)), 2);
@@ -1171,7 +1320,7 @@ SC.apprend = (c, t, K) => {
   const u = t % 4.4 / 4.4, lit = sm((u - 0.5) / 0.08) * (1 - sm((u - 0.88) / 0.1)), by = -0.15, br = 0.5;
   c.strokeStyle = K.A(1);
   c.beginPath();
-  c.arc(0, by, br, Math.PI / 2 + 0.42, Math.PI / 2 - 0.42 + TAU);
+  c.arc(0, by, br, Math.PI / 2 + 0.42, Math.PI / 2 - 0.42 + TAU2);
   c.lineTo(0.2, 0.52);
   c.lineTo(-0.2, 0.52);
   c.closePath();
@@ -1213,7 +1362,7 @@ SC.souvient = (c, t, K) => {
 SC.consulte = (c, t, K) => {
   const sp = 1.3, k = Math.floor(t * sp) % 6, u = t * sp % 1;
   for (let i = 0; i < 6; i++) {
-    const a = -Math.PI / 2 + i * TAU / 6, x = Math.cos(a) * 0.74, y = Math.sin(a) * 0.74, on = i === k;
+    const a = -Math.PI / 2 + i * TAU2 / 6, x = Math.cos(a) * 0.74, y = Math.sin(a) * 0.74, on = i === k;
     c.fillStyle = on ? K.A(1) : K.A(0.45);
     circ(c, x, y, on ? 0.13 : 0.07, true);
     if (on) {
@@ -1272,7 +1421,7 @@ SC.surveille = (c, t, K) => {
     L(c, 0, 0, Math.cos(a) * 0.85, Math.sin(a) * 0.85);
   }
   for (let i = 0; i < 4; i++) {
-    const a = hs(i, 1) * TAU, r = 0.3 + 0.5 * hs(i, 2), dl = ang(a0 - a), al = Math.max(0, 1 - dl / TAU * 1.3);
+    const a = hs(i, 1) * TAU2, r = 0.3 + 0.5 * hs(i, 2), dl = ang(a0 - a), al = Math.max(0, 1 - dl / TAU2 * 1.3);
     c.fillStyle = i === 2 ? K.B(al) : K.A(al);
     circ(c, Math.cos(a) * r, Math.sin(a) * r, 0.07, true);
   }
@@ -1444,14 +1593,14 @@ SC.reussi = (c, t, K) => {
   c.scale(pop, pop);
   c.strokeStyle = K.A(1);
   c.beginPath();
-  c.arc(0, 0, 0.62, -Math.PI / 2, -Math.PI / 2 + TAU * eo(u / 0.25));
+  c.arc(0, 0, 0.62, -Math.PI / 2, -Math.PI / 2 + TAU2 * eo(u / 0.25));
   c.stroke();
   c.strokeStyle = K.B(1);
   poly(c, [[-0.3, 0.02], [-0.08, 0.26], [0.32, -0.2]], cl((u - 0.2) / 0.2));
   const p = (u - 0.4) / 0.5;
   if (p > 0 && p < 1) {
     for (let k = 0; k < 8; k++) {
-      const a = k * TAU / 8 + 0.1, r1 = 0.85 + 0.4 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.04;
+      const a = k * TAU2 / 8 + 0.1, r1 = 0.85 + 0.4 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.04;
       c.strokeStyle = k % 2 ? K.A(1 - p) : K.B(1 - p);
       L(c, Math.cos(a) * r1, Math.sin(a) * r1, Math.cos(a) * r2, Math.sin(a) * r2);
     }
@@ -1465,7 +1614,7 @@ SC.veille = (c, t, K) => {
   c.strokeStyle = K.A(0.95);
   const ax = -0.1, ay = 0.05, r1 = 0.55, bx = 0.2, by = -0.15, r2 = 0.46, ph = Math.atan2(by - ay, bx - ax), a1 = 0.9815, a2 = 1.4523;
   c.beginPath();
-  c.arc(ax, ay, r1, ph + a1, ph - a1 + TAU);
+  c.arc(ax, ay, r1, ph + a1, ph - a1 + TAU2);
   c.stroke();
   c.beginPath();
   c.arc(bx, by, r2, ph + Math.PI - a2, ph + Math.PI + a2);
@@ -1507,13 +1656,13 @@ SC.salue = (c, t, K) => {
 SC.content = (c, t, K) => {
   const s = 1 + 0.07 * Math.sin(t * 4.4), pts = [];
   for (let i = 0; i < 10; i++) {
-    const a = i / 10 * TAU - Math.PI / 2 + t * 0.5, r = (i % 2 ? 0.26 : 0.62) * s;
+    const a = i / 10 * TAU2 - Math.PI / 2 + t * 0.5, r = (i % 2 ? 0.26 : 0.62) * s;
     pts.push([Math.cos(a) * r, Math.sin(a) * r]);
   }
   c.strokeStyle = K.A(1);
   poly(c, pts.concat([pts[0]]));
   for (let k = 0; k < 6; k++) {
-    const u = (t * 0.7 + k / 6) % 1, a = k * TAU / 6 + 0.4 + 0.3 * hs(k, 2), r1 = 0.8 + 0.3 * u;
+    const u = (t * 0.7 + k / 6) % 1, a = k * TAU2 / 6 + 0.4 + 0.3 * hs(k, 2), r1 = 0.8 + 0.3 * u;
     c.strokeStyle = k % 2 ? K.A(1 - u) : K.B(1 - u);
     L(c, Math.cos(a) * r1, Math.sin(a) * r1, Math.cos(a) * (r1 + 0.12), Math.sin(a) * (r1 + 0.12));
   }
@@ -1552,15 +1701,15 @@ SC.surpris = (c, t, K) => {
   c.restore();
   const p = cl(u / 0.85);
   if (p < 1) for (let k = 0; k < 12; k++) {
-    const a = k * TAU / 12 + 0.13, r1 = 0.62 + 0.3 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.05;
+    const a = k * TAU2 / 12 + 0.13, r1 = 0.62 + 0.3 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.05;
     c.strokeStyle = k % 2 ? K.A(1 - p * 0.8) : K.B(1 - p * 0.8);
     L(c, Math.cos(a) * r1, Math.sin(a) * r1 * 1.05, Math.cos(a) * r2, Math.sin(a) * r2 * 1.05);
   }
 };
 SC.remercie = (c, t, K) => {
-  const ph = t % 1.5 / 1.5, b = Math.pow(Math.max(0, Math.sin(ph * TAU)), 6) * 0.12 + Math.pow(Math.max(0, Math.sin(ph * TAU - 1.2)), 6) * 0.07, pts = [];
+  const ph = t % 1.5 / 1.5, b = Math.pow(Math.max(0, Math.sin(ph * TAU2)), 6) * 0.12 + Math.pow(Math.max(0, Math.sin(ph * TAU2 - 1.2)), 6) * 0.07, pts = [];
   for (let i = 0; i <= 40; i++) {
-    const th = i / 40 * TAU, x = 16 * Math.pow(Math.sin(th), 3), y = -(13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th));
+    const th = i / 40 * TAU2, x = 16 * Math.pow(Math.sin(th), 3), y = -(13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th));
     pts.push([x / 19 * 0.72 * (1 + b), y / 19 * 0.72 * (1 + b) + 0.05]);
   }
   c.strokeStyle = K.A(1);
@@ -1598,8 +1747,8 @@ SC.reveille = (c, t, K) => {
   L(c, -0.9, 0.4, 0.9, 0.4);
   c.strokeStyle = K.A(1);
   c.beginPath();
-  if (q >= 1) c.arc(0, cy, 0.38, 0, TAU);
-  else c.arc(0, cy, 0.38, Math.PI - Math.asin(Math.max(-1, q)), TAU + Math.asin(Math.max(-1, q)));
+  if (q >= 1) c.arc(0, cy, 0.38, 0, TAU2);
+  else c.arc(0, cy, 0.38, Math.PI - Math.asin(Math.max(-1, q)), TAU2 + Math.asin(Math.max(-1, q)));
   c.stroke();
   const ry = cl((u - 0.4) / 0.5);
   for (let k = 0; k < 7; k++) {
@@ -1895,7 +2044,7 @@ function humanStep(dt, t, id, P) {
     if (t >= H.seqT + 0.7 + hs(H.seq, 3) * 0.5) {
       H.seqT = t;
       H.seq = (H.seq + 1) % 6;
-      const a = -Math.PI / 2 + H.seq * TAU / 6;
+      const a = -Math.PI / 2 + H.seq * TAU2 / 6;
       aim(Math.cos(a) * 0.95, Math.sin(a) * 0.95);
     }
     sacc(190, 40);
@@ -1970,13 +2119,13 @@ function humanStep(dt, t, id, P) {
     H.wigStart = t;
     H.wigAt = t + M.wigI * (0.6 + 0.8 * Math.random());
   }
-  const yu = (t - H.yawnStart) / 2.8, yawn = yu >= 0 && yu <= 1 ? Math.pow(Math.sin(Math.PI * yu), 1.6) : 0, su = (t - H.shivStart) / 1.3, shiv = su >= 0 && su <= 1 ? 1 - su : 0, wu = (t - H.wigStart) / 1.2, wig = wu >= 0 && wu <= 1 ? 0.2 * Math.sin(wu * TAU * 3) * (1 - wu) : 0;
+  const yu = (t - H.yawnStart) / 2.8, yawn = yu >= 0 && yu <= 1 ? Math.pow(Math.sin(Math.PI * yu), 1.6) : 0, su = (t - H.shivStart) / 1.3, shiv = su >= 0 && su <= 1 ? 1 - su : 0, wu = (t - H.wigStart) / 1.2, wig = wu >= 0 && wu <= 1 ? 0.2 * Math.sin(wu * TAU2 * 3) * (1 - wu) : 0;
   H.typeA += (0.4 + 2.2 * Math.max(0, nz1(t * 2.2, 50) - 0.45)) * dt;
   const tt = (A.tilt ? A.tilt(t) : 0) + wig;
   H.tilt += (tt - H.tilt) * (1 - Math.exp(-dt * 8));
   H.cur += (ptr.sp - H.cur) * (1 - Math.exp(-dt * 4));
   ptr.sp *= Math.exp(-dt * 2);
-  const om = TAU / 4.2 * (1 + 0.25 * Math.sin(t * 0.31)) * A.br[0] * M.bs;
+  const om = TAU2 / 4.2 * (1 + 0.25 * Math.sin(t * 0.31)) * A.br[0] * M.bs;
   H.phase += om * dt;
   const amp = (id === "repos" ? 1 : A.br[1]) * (0.8 + 0.2 * Math.sin(t * 0.173)) * M.ba;
   let bt = Math.sin(H.phase) * amp;
@@ -2065,11 +2214,11 @@ function mkRec() {
   };
   o.arc = (x, y, r, a0, a1, ccw) => {
     if (!ccw) {
-      while (a1 < a0) a1 += TAU;
-      if (a1 - a0 > TAU) a1 = a0 + TAU;
+      while (a1 < a0) a1 += TAU2;
+      if (a1 - a0 > TAU2) a1 = a0 + TAU2;
     } else {
-      while (a1 > a0) a1 -= TAU;
-      if (a0 - a1 > TAU) a1 = a0 - TAU;
+      while (a1 > a0) a1 -= TAU2;
+      if (a0 - a1 > TAU2) a1 = a0 - TAU2;
     }
     const n = Math.max(4, Math.ceil(Math.abs(a1 - a0) / 0.2));
     for (let i = 0; i <= n; i++) {
@@ -2144,7 +2293,7 @@ function mkK(id, t) {
   const cc = typeof ACT[id].col === "function" ? ACT[id].col(t) : ACT[id].col, c0 = cc[0], c1 = cc[1];
   return { A: (a) => css(c0, a), B: (a) => css(c1, a), W: (a) => css(BLANC, a), lw: 0.03, c0, c1 };
 }
-var angMix = (a, b, f) => a + (((b - a + Math.PI) % TAU + TAU) % TAU - Math.PI) * f;
+var angMix = (a, b, f) => a + (((b - a + Math.PI) % TAU2 + TAU2) % TAU2 - Math.PI) * f;
 function corps() {
   const N = 100, NB = [60, 40], RB = [0.62, 0.4], DR = [1, -1], GN = [0.3, 0.26], OF = [0.035, 0.085];
   const f32 = () => new Float32Array(N);
@@ -2204,7 +2353,7 @@ function corps() {
     for (let k = 0; k < 2; k++) {
       const Nk = NB[k], ox = cx + H.gx * R * OF[k] * K, oy = cy + H.gy * R * OF[k] * K + R * sag + nodY * (k ? 1.25 : 1), base = RB[k] * sc * (1 + (k ? 1 : -1) * 0.04 * H.blink * K);
       for (let i = 0; i < Nk; i++) {
-        const a = i / Nk * TAU, ctx = { k, i, N: Nk, t, P, nz: nz1(i * 0.3 + t * 0.8, k), a0: a, H };
+        const a = i / Nk * TAU2, ctx = { k, i, N: Nk, t, P, nz: nz1(i * 0.3 + t * 0.8, k), a0: a, H };
         let e = 0, dsp = 0;
         for (const q of ST) {
           const wv = W[q];
@@ -2950,6 +3099,25 @@ function ecrireDiscussion(cle, d) {
   } catch {
   }
 }
+function lireInterieur(cle) {
+  try {
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:interieur`);
+    if (brut2 === null) return null;
+    const j = JSON.parse(brut2);
+    if (typeof j !== "object" || j === null) return null;
+    const { t, sensibilite, confiance } = j;
+    if (!Number.isFinite(t) || !estFraction2(sensibilite) || !estFraction2(confiance)) return null;
+    return { t, sensibilite, confiance };
+  } catch {
+    return null;
+  }
+}
+function ecrireInterieur(cle, m) {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:interieur`, JSON.stringify(m));
+  } catch {
+  }
+}
 
 // src/styles.ts
 var CSS = `
@@ -3156,13 +3324,20 @@ function mountLia(options = {}) {
   const reseauActif = !sansMouvement;
   const lente = lireLente(cle);
   const reseau = creerReseau(HUMEURS, lente?.slow, lente ? Date.now() - lente.t : 0);
+  let interieur = reprendre(lireInterieur(cle), Date.now());
+  let douleurAvant = 0;
+  let aSouffert = false;
+  let dernierCri = 0;
+  let horsLigne = typeof navigator !== "undefined" && navigator.onLine === false;
+  let dtMoyen = 0.016;
+  const rafale = [];
   let humeurNom = reseauActif ? "neutre" : "curieux";
   let humeurId = "curieux";
   let forcee = null;
   let partagee = null;
   if (reseauActif) {
     setHumeur("auto");
-    setMelange(() => reseau.mix);
+    setMelange(() => moduler(reseau.mix, interieur));
   } else setHumeur(humeurId);
   let dernierMarc = Date.now();
   const debutPage = dernierMarc;
@@ -3375,9 +3550,9 @@ function mountLia(options = {}) {
   let derniereFocus = null;
   let activiteChat = 0;
   const trace = [];
-  const ajouterMsg = (texte, de, erreur = false, garder2 = !erreur) => {
+  const ajouterMsg = (texte, de, erreur = false, garder3 = !erreur) => {
     activiteChat = t;
-    if (garder2) {
+    if (garder3) {
       trace.push({ de, texte });
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
     }
@@ -3385,6 +3560,38 @@ function mountLia(options = {}) {
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
     return m;
+  };
+  const exprimer = (texte) => {
+    if (detruit) return;
+    if (chatOuvert) ajouterMsg(texte, "lia", false, false);
+    else dire(texte);
+  };
+  const stimulerInterieur = (s, force = 1) => {
+    interieur = stimuler(interieur, s, force);
+    if (reseauActif) {
+      const e = versReseau(interieur);
+      if (e.mauvais > 0.01) impulsion(reseau, "mauvais", e.mauvais);
+      if (e.bon > 0.01) impulsion(reseau, "bon", e.bon);
+    }
+    verifierCri();
+  };
+  const verifierCri = () => {
+    const maintenant = Date.now();
+    if (douleurAvant < 0.35 && interieur.douleur >= 0.35 && maintenant - dernierCri > 3e4) {
+      const c = cri(interieur, Math.random);
+      const spontanee = interieur.cause === "panne" || interieur.cause === "isolement" || interieur.cause === "usure";
+      if (c && (!spontanee || peutParlerSeule())) {
+        dernierCri = maintenant;
+        aSouffert = true;
+        setTimeout(() => exprimer(c), 350);
+      }
+    }
+    if (interieur.douleur >= 0.4) aSouffert = true;
+    if (aSouffert && interieur.douleur < 0.1) {
+      aSouffert = false;
+      if (maintenant - dernierCri > 8e3) exprimer(apaisement(Math.random));
+    }
+    douleurAvant = interieur.douleur;
   };
   const montrerReflexion = (actifPts) => {
     if (actifPts && !points && journal) {
@@ -3409,6 +3616,13 @@ function mountLia(options = {}) {
     enCours?.abort();
     attendReponse = false;
     ajouterMsg(question, "moi");
+    if (envoi === question && questionSurSaDouleur(question)) {
+      const dite = reponseDouleur(interieur);
+      ajouterMsg(dite, "lia");
+      impulsion(reseau, "reponse");
+      voix(dite);
+      return;
+    }
     if (envoi === question && questionSurSonHumeur(question)) {
       const dite = reponseHumeur(humeurNom, reseauActif ? top3(reseau) : []);
       ajouterMsg(dite, "lia");
@@ -3460,6 +3674,7 @@ function mountLia(options = {}) {
       const annule = e instanceof DOMException && e.name === "AbortError";
       if (annule && enCours !== ctrl) return;
       ajouterMsg(annule ? "Je mets trop de temps : r\xE9essaie dans un instant." : "Je n'arrive pas \xE0 r\xE9pondre pour le moment.", "lia", true);
+      stimulerInterieur("panne", annule ? 0.5 : 1);
       choisir2("indispo");
     } finally {
       clearTimeout(minuterie);
@@ -3536,6 +3751,9 @@ function mountLia(options = {}) {
       contexteQuestion = null;
       if (champ) champ.placeholder = "Pose-moi une question";
       impulsion(reseau, "reponse");
+      const tn = ton(q);
+      if (tn === "brusque") stimulerInterieur("ton");
+      else if (tn === "gentil") stimulerInterieur("gentil");
       echanges.push({ t: Date.now(), longueur: q.length, question: q.includes("?") });
       if (echanges.length > 20) echanges.shift();
       void poser(q, ctx2 ? composerQuestion("question", ctx2.d, q) : q);
@@ -3885,9 +4103,20 @@ function mountLia(options = {}) {
     const r = couche.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
+  let vitesseGlisse = 0;
+  let dernierPoint = null;
   hit.addEventListener("pointerdown", (e) => {
     if (e.button === 2) return;
     ajouterImpulsion(reseau, "touche", 0.45);
+    const maintenant = Date.now();
+    rafale.push(maintenant);
+    while (rafale.length && maintenant - (rafale[0] ?? 0) > 1500) rafale.shift();
+    if (rafale.length >= 4) {
+      rafale.length = 0;
+      stimulerInterieur("brusque");
+    }
+    vitesseGlisse = 0;
+    dernierPoint = null;
     try {
       hit.setPointerCapture(e.pointerId);
     } catch {
@@ -3907,6 +4136,12 @@ function mountLia(options = {}) {
   hit.addEventListener("pointermove", (e) => {
     if (!glisse) return;
     const p = fixerDepuisEvenement(e);
+    const maintenant = Date.now();
+    if (dernierPoint && maintenant > dernierPoint.t) {
+      const v = Math.hypot(p.x - dernierPoint.x, p.y - dernierPoint.y) / (maintenant - dernierPoint.t) * 1e3;
+      vitesseGlisse = vitesseGlisse * 0.6 + v * 0.4;
+    }
+    dernierPoint = { x: p.x, y: p.y, t: maintenant };
     glisse.x = p.x;
     glisse.y = p.y;
     if (Math.hypot(p.x - glisse.x0, p.y - glisse.y0) > 6) {
@@ -3919,6 +4154,9 @@ function mountLia(options = {}) {
     if (!glisse) return;
     const aBouge = glisse.deplace;
     glisse = null;
+    if (aBouge && vitesseGlisse > 2200) stimulerInterieur("choc", Math.min(1, vitesseGlisse / 4e3));
+    vitesseGlisse = 0;
+    dernierPoint = null;
     if (aBouge) {
       cible = { x: pos.x, y: pos.y };
       errance = { jusqua: t + 7 };
@@ -4316,6 +4554,16 @@ function mountLia(options = {}) {
     dernierPas = now;
     const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
     entreesCourantes = { ...locales, ...habituer(entreesHote(), dt) };
+    interieur = evoluer(interieur, dt, { horsLigne, ralenti: dtMoyen > 0.1, absentSec: document.hidden ? 0 : (now - dernierMarc) / 1e3 });
+    const intr = versReseau(interieur);
+    entreesCourantes = { ...entreesCourantes, energie: (entreesCourantes["energie"] ?? 0) * intr.facteurEnergie };
+    if (intr.mauvais > 0.01) impulsion(reseau, "mauvais", intr.mauvais);
+    if (intr.rejet > 0.01) impulsion(reseau, "rejet", intr.rejet);
+    if (intr.bon > 0.01) impulsion(reseau, "bon", intr.bon);
+    const hd = humeurDeDouleur(interieur);
+    if (hd && !forcee) pousserHumeur(reseau, hd, now, 1.2);
+    verifierCri();
+    corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
     reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;
@@ -4323,9 +4571,10 @@ function mountLia(options = {}) {
     }
     if (!forcee) appliquerHumeur(partagee && now < partagee.jusqua ? partagee.nom : reseau.dom);
   };
-  const garder = () => {
+  const garder2 = () => {
     ecrireCerveau(cle, { envies, journal: faits });
     if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
+    ecrireInterieur(cle, garder(interieur, Date.now()));
   };
   const hote = reseauActif ? options.etat : void 0;
   let majVue = 0;
@@ -4364,7 +4613,7 @@ function mountLia(options = {}) {
       partagee = { nom: e.humeur, jusqua: Date.now() + 3e4 };
       if (!forcee) appliquerHumeur(e.humeur);
     }
-    garder();
+    garder2();
   };
   const retenir = (e) => {
     majVue = e.maj;
@@ -4427,10 +4676,11 @@ function mountLia(options = {}) {
     });
     if (dort && envies.energie >= 0.85) reveiller();
     if (reseauActif) penserReseau();
-    if (++tics % 10 === 0) garder();
+    if (++tics % 10 === 0) garder2();
   }, 1e3);
   const minuterieVie = setInterval(penser, 1200);
   const dessinerImage = (still, dt) => {
+    if (!still && dt > 0) dtMoyen += (Math.min(dt, 1) - dtMoyen) * Math.min(1, dt / 3);
     if (rayon !== rayonCible) rayon = still || Math.abs(rayonCible - rayon) < 0.5 ? rayonCible : rayon + (rayonCible - rayon) * (1 - Math.exp(-dt * 5));
     if (!still) majAttention();
     const z = zoneVie();
@@ -4605,6 +4855,15 @@ function mountLia(options = {}) {
     dernier = performance.now();
   };
   document.addEventListener("visibilitychange", surVisibilite);
+  const surReseauCoupe = () => {
+    horsLigne = true;
+    stimulerInterieur("panne", 0.6);
+  };
+  const surReseauRetabli = () => {
+    horsLigne = false;
+  };
+  window.addEventListener("offline", surReseauCoupe);
+  window.addEventListener("online", surReseauRetabli);
   choisir2("repos");
   if (sansMouvement) dessinerUneFois();
   else raf = requestAnimationFrame(boucle);
@@ -4631,6 +4890,7 @@ function mountLia(options = {}) {
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),
+    interieur: () => ({ douleur: interieur.douleur, plaisir: interieur.plaisir, sensibilite: interieur.sensibilite, confiance: interieur.confiance, usure: interieur.usure, cause: interieur.cause }),
     ressent: () => reseauActif ? top3(reseau) : [],
     impulsion(nom, valeur = 1) {
       impulsion(reseau, nom, valeur);
@@ -4657,7 +4917,7 @@ function mountLia(options = {}) {
       clearInterval(minuterieEcriture);
       window.removeEventListener("pagehide", surFermeture);
       document.removeEventListener("visibilitychange", surFermeture);
-      garder();
+      garder2();
       setMelange(null);
       for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
       document.removeEventListener("contextmenu", surClicDroitPage);
@@ -4678,6 +4938,8 @@ function mountLia(options = {}) {
       window.removeEventListener("pointerdown", surClicHors, true);
       window.removeEventListener("resize", surRedim);
       document.removeEventListener("visibilitychange", surVisibilite);
+      window.removeEventListener("offline", surReseauCoupe);
+      window.removeEventListener("online", surReseauRetabli);
       couche.remove();
       actif = null;
     }
