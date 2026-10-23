@@ -1,3 +1,5 @@
+import type { GesteLia } from "./gestes.js";
+
 /** Les 12 humeurs de LIA (source : maquette validée du 22/10/2026). */
 export const HUMEURS_LIA = [
   "neutre",
@@ -152,6 +154,16 @@ export interface OptionsLia {
   elements?: false | OptionsElements;
 }
 
+/** Ce que l'hôte demande à LIA quand il l'envoie vers un élément (`lia.envoyer`). */
+export interface EnvoiLia {
+  /** Silhouette à prendre une fois là-bas (« lit », « cherche »…) ; défaut : celle de la visite. */
+  etat?: string;
+  /** Ce qu'elle dit au bout d'une seconde et demie si elle y est encore. Écrit par l'hôte, jamais par ce paquet. */
+  dit?: string;
+  /** Combien de temps elle y reste ; défaut 10. */
+  secondes?: number;
+}
+
 export interface LiaHandle {
   /** Fait parler LIA (bulle + voix). Sans effet si le chat est ouvert ou si on la déplace. */
   dire(texte: string, options?: { chips?: readonly PuceLia[] }): boolean;
@@ -165,6 +177,13 @@ export interface LiaHandle {
   suivreCurseur(secondes?: number): boolean;
   /** Va se coller à cet élément, sans faire défiler la page. `secondes` : défaut 10. */
   allerVoir(element: Element, secondes?: number): boolean;
+  /**
+   * Va se coller à cet élément (sans faire défiler la page), prend `etat` et dit `dit` si elle y est encore.
+   * Faux quand elle ne peut pas bouger (vie coupée, mouvement réduit) ou que l'élément n'est pas dans la page.
+   */
+  envoyer(element: Element, options?: EnvoiLia): boolean;
+  /** Fait un des gestes de son menu (salue, content, musique, remercie, surpris, concentre, apprend, veille). */
+  geste(geste: GesteLia, secondes?: number): boolean;
   /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
   venirPres(): boolean;
   /** Arrête de suivre ou de regarder : elle reste où elle est. */

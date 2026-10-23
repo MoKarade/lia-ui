@@ -145,9 +145,9 @@ describe("menu", () => {
     const run = vi.fn();
     lia = mountLia({ actions: [{ id: "bail", label: "Voir le bail", run }] });
     hit().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
-    const items = [...document.querySelectorAll('[role="menuitem"]')].map((i) => i.textContent);
-    expect(items).toEqual(["Lui parler", "Couper sa vie autonome", "Voir le bail"]);
-    document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[2]?.click();
+    const libelles = [...document.querySelectorAll('[role="menuitem"]')].map((i) => i.textContent).filter(Boolean);
+    expect(libelles).toEqual(["Lui parler", "La laisser tranquille", "Voir le bail"]);
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((b) => b.textContent === "Voir le bail")?.click();
     await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
     expect(document.querySelector('[role="menu"]')).toBeNull();
   });
@@ -157,7 +157,8 @@ describe("menu", () => {
     touche(hit(), "ContextMenu");
     const menu = document.querySelector('[role="menu"]');
     expect(menu).not.toBeNull();
-    const items = document.querySelectorAll<HTMLElement>('[role="menuitem"]');
+    const items = document.querySelectorAll<HTMLElement>('[role^="menuitem"]');
+    expect(items[0]?.textContent).toBe("Lui parler");
     expect(document.activeElement).toBe(items[0]);
     touche(items[0] as Element, "ArrowDown");
     expect(document.activeElement).toBe(items[1]);
@@ -168,7 +169,7 @@ describe("menu", () => {
   it("mémorise la vie autonome coupée", () => {
     lia = mountLia({ cle: "test" });
     touche(hit(), "ContextMenu");
-    document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[1]?.click();
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((b) => b.textContent === "La laisser tranquille")?.click();
     expect(JSON.parse(localStorage.getItem("lia-ui:test") ?? "{}")).toMatchObject({ vie: false });
   });
 });

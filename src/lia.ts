@@ -35,10 +35,12 @@ import {
   type ElementDecrit,
   type ModeElement,
 } from "./ecran.js";
+import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
 import { ecrireMemoire, ecrireRelances, lireMemoire, lireRelances } from "./stockage.js";
 import { CSS } from "./styles.js";
 import {
   type ActionLia,
+  type EnvoiLia,
   type HumeurLia,
   type LiaHandle,
   type MotifSpontane,
@@ -48,6 +50,7 @@ import {
   type ReponseLia,
   type ZoneVie,
 } from "./types.js";
+import type { GesteLia } from "./gestes.js";
 
 const DELAI_APPUI_LONG = 620;
 const DELAI_QUESTION = 30_000;
@@ -468,6 +471,38 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return b;
   };
 
+  /** Les humeurs du menu : celle d'en ce moment est cochée, un clic la change. */
+  const rangeeHumeurs = (): HTMLElement => {
+    const rangee = el("div", "lia-ui__rangee lia-ui__rangee--humeurs");
+    rangee.setAttribute("role", "group");
+    rangee.setAttribute("aria-label", "Son humeur");
+    for (const h of HUMEURS_MENU) {
+      const b = item(h.libelle, () => setHumeur(h.id));
+      b.classList.add("lia-ui__humeur");
+      b.setAttribute("role", "menuitemradio");
+      b.setAttribute("aria-checked", String(h.id === humeurId));
+      b.style.setProperty("--lia-point", `var(--lia-h-${h.id})`);
+      rangee.appendChild(b);
+    }
+    return rangee;
+  };
+
+  /** Les gestes du menu : une silhouette de son moteur, tenue quelques secondes. Absents si le mouvement est réduit. */
+  const rangeeGestes = (): HTMLElement => {
+    const rangee = el("div", "lia-ui__rangee lia-ui__rangee--gestes");
+    rangee.setAttribute("role", "group");
+    rangee.setAttribute("aria-label", "Ses gestes");
+    for (const g of GESTES) {
+      const b = item("", () => geste(g.id));
+      b.classList.add("lia-ui__geste");
+      b.setAttribute("aria-label", g.libelle);
+      b.title = g.libelle;
+      b.appendChild(icone(g.icone));
+      rangee.appendChild(b);
+    }
+    return rangee;
+  };
+
   /** Le menu de son corps (sans `element`) ou celui d'un élément de la page (clic droit n'importe où). */
   const ouvrirMenu = (x: number, y: number, element?: { cible: Element; d: ElementDecrit }): void => {
     if (detruit) return;
@@ -478,15 +513,17 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", element ? "LIA : que faire de cet élément" : "Actions de LIA");
     if (element) {
+      menu.classList.add("lia-ui__menu--element");
       menu.appendChild(el("p", "lia-ui__menu-titre", titreMenu(element.d)));
       for (const { mode, libelle } of ENTREES_MENU) {
         menu.appendChild(item(libelle, () => surElement(element.cible, element.d, mode)));
       }
     } else {
+      menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
       menu.appendChild(item("Lui parler", ouvrirChat));
-      menu.appendChild(
-        item(vie ? "Couper sa vie autonome" : "Reprendre sa vie autonome", () => setVieAutonome(!vie)),
-      );
+      menu.appendChild(rangeeHumeurs());
+      if (!sansMouvement) menu.appendChild(rangeeGestes());
+      menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
     }
     const actions: readonly ActionLia[] = element ? [] : (options.actions ?? []);
     if (actions.length) {
@@ -504,16 +541,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }
     }
     menu.addEventListener("keydown", (e) => {
-      const items = [...(menu?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
+      const items = [...(menu?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
       const i = items.indexOf(document.activeElement as HTMLElement);
       if (e.key === "Escape") {
         e.preventDefault();
         fermerMenu();
         hit.focus();
-      } else if (e.key === "ArrowDown") {
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         e.preventDefault();
         items[(i + 1) % items.length]?.focus();
-      } else if (e.key === "ArrowUp") {
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
         e.preventDefault();
         items[(i - 1 + items.length) % items.length]?.focus();
       } else if (e.key === "Tab") {
@@ -615,7 +652,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   document.addEventListener("contextmenu", surClicDroitPage);
   /** Un menu ouvert sur la page se ferme au défilement, comme un menu du navigateur. */
   const surDefilement = (): void => {
-    if (menuOuvert && menu?.firstElementChild?.classList.contains("lia-ui__menu-titre")) fermerMenu();
+    if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
 
@@ -817,16 +854,46 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return dire(texte, parole.chips ? { chips: parole.chips } : undefined);
   };
 
-  const visiter = (el: Element, secondes: number): void => {
-    if (!allerVoir(el, secondes)) return;
-    // Comme dans la maquette : elle arrive, puis dit sa phrase au bout d'une seconde et demie si elle y est encore.
+  /** Comme dans la maquette : elle arrive, puis dit sa phrase au bout d'une seconde et demie si elle y est encore. */
+  const direLa = (el: Element, texte: string, respecterSilence: boolean): void => {
     setTimeout(() => {
-      if (detruit || chatOuvert || glisse || parle || !peutParlerSeule()) return;
+      if (detruit || chatOuvert || glisse || parle || (respecterSilence && !peutParlerSeule())) return;
       if (attention?.type !== "element" || attention.el !== el) return;
-      const dit = el.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
-      if (dit) dire(dit);
+      dire(texte);
     }, 1500);
   };
+
+  const visiter = (el: Element, secondes: number): void => {
+    if (!allerVoir(el, secondes)) return;
+    const dit = el.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (dit) direLa(el, dit, true);
+  };
+
+  /** L'hôte l'envoie vers un élément. Ce qu'elle dit vient de lui (pas d'heure de silence : c'est lui qui décide). */
+  function envoyerVers(element: Element, opts: EnvoiLia = {}): boolean {
+    if (!allerVoir(element, opts.secondes ?? 10)) return false;
+    if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir(opts.etat);
+    const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (dit) direLa(element, dit, false);
+    return true;
+  }
+
+  let finGeste: ReturnType<typeof setTimeout> | undefined;
+  /** Prend la silhouette d'un geste un moment, puis reprend sa vie. Sans effet si elle ne peut pas bouger. */
+  function geste(id: GesteLia, secondes?: number): boolean {
+    const g = trouverGeste(id);
+    if (!g || !peutBouger()) return false;
+    clearTimeout(finGeste);
+    finAttention();
+    etatForce = g.etat;
+    choisir(g.etat);
+    finGeste = setTimeout(() => {
+      if (detruit || etatForce !== g.etat) return;
+      etatForce = null;
+      choisir("repos");
+    }, dureeGeste(secondes) * 1000);
+    return true;
+  }
 
   const penser = (): void => {
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
@@ -985,12 +1052,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     setVieAutonome,
     suivreCurseur,
     allerVoir,
+    envoyer: envoyerVers,
+    geste,
     venirPres,
     rester: finAttention,
     destroy() {
       if (detruit) return;
       detruit = true;
       clearTimeout(attenteElement);
+      clearTimeout(finGeste);
       document.removeEventListener("contextmenu", surClicDroitPage);
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);

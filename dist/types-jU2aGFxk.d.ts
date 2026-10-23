@@ -1,3 +1,56 @@
+/**
+ * Les gestes que Marc peut lui demander dans le menu de son corps (maquette v5, `maison.js`) : une
+ * silhouette de son moteur, tenue quelques secondes, puis elle reprend sa vie. Pas de phrase écrite ici :
+ * ce qu'elle dit vient toujours de l'hôte. Les tracés sont des chemins SVG 24 × 24 (trait de 1,8).
+ */
+declare const GESTES: readonly [{
+    readonly id: "salue";
+    readonly etat: "salue";
+    readonly libelle: "Salue";
+    readonly icone: "M15.5 8a3.5 3.5 0 1 0-7 0 3.5 3.5 0 0 0 7 0zM5 20a7 7 0 0 1 14 0";
+}, {
+    readonly id: "content";
+    readonly etat: "content";
+    readonly libelle: "Content";
+    readonly icone: "M12 4l2.4 5 5.6.8-4 4 1 5.5L12 16.5 7 19.3l1-5.5-4-4L9.6 9z";
+}, {
+    readonly id: "musique";
+    readonly etat: "musique";
+    readonly libelle: "Fredonne";
+    readonly icone: "M12 3q1 7 8 9-7 2-8 9-1-7-8-9 7-2 8-9z";
+}, {
+    readonly id: "remercie";
+    readonly etat: "remercie";
+    readonly libelle: "Merci";
+    readonly icone: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z";
+}, {
+    readonly id: "surpris";
+    readonly etat: "surpris";
+    readonly libelle: "Surpris";
+    readonly icone: "M13 3L5 13h6l-1 8 8-10h-6z";
+}, {
+    readonly id: "concentre";
+    readonly etat: "concentre";
+    readonly libelle: "Se concentre";
+    readonly icone: "M20.5 12a8.5 8.5 0 1 0-17 0 8.5 8.5 0 0 0 17 0zM16 12a4 4 0 1 0-8 0 4 4 0 0 0 8 0zM12.8 12a.8.8 0 1 0-1.6 0 .8.8 0 0 0 1.6 0z";
+}, {
+    readonly id: "apprend";
+    readonly etat: "apprend";
+    readonly libelle: "Apprend";
+    readonly icone: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3 11v2h6v-2a6 6 0 0 0-3-11z";
+}, {
+    readonly id: "veille";
+    readonly etat: "veille";
+    readonly libelle: "Dort";
+    readonly icone: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z";
+}];
+type GesteLia = (typeof GESTES)[number]["id"];
+/** Les humeurs proposées dans le menu (celles qu'elle choisit aussi d'elle-même), au féminin comme elle. */
+declare const HUMEURS_MENU: ReadonlyArray<{
+    id: HumeurLia;
+    libelle: string;
+}>;
+
 /** Les 12 humeurs de LIA (source : maquette validée du 22/10/2026). */
 declare const HUMEURS_LIA: readonly ["neutre", "joyeux", "calme", "curieux", "fatigue", "inquiet", "excite", "triste", "concentre", "espiegle", "fier", "timide"];
 type HumeurLia = (typeof HUMEURS_LIA)[number];
@@ -114,6 +167,15 @@ interface OptionsLia {
      */
     elements?: false | OptionsElements;
 }
+/** Ce que l'hôte demande à LIA quand il l'envoie vers un élément (`lia.envoyer`). */
+interface EnvoiLia {
+    /** Silhouette à prendre une fois là-bas (« lit », « cherche »…) ; défaut : celle de la visite. */
+    etat?: string;
+    /** Ce qu'elle dit au bout d'une seconde et demie si elle y est encore. Écrit par l'hôte, jamais par ce paquet. */
+    dit?: string;
+    /** Combien de temps elle y reste ; défaut 10. */
+    secondes?: number;
+}
 interface LiaHandle {
     /** Fait parler LIA (bulle + voix). Sans effet si le chat est ouvert ou si on la déplace. */
     dire(texte: string, options?: {
@@ -129,6 +191,13 @@ interface LiaHandle {
     suivreCurseur(secondes?: number): boolean;
     /** Va se coller à cet élément, sans faire défiler la page. `secondes` : défaut 10. */
     allerVoir(element: Element, secondes?: number): boolean;
+    /**
+     * Va se coller à cet élément (sans faire défiler la page), prend `etat` et dit `dit` si elle y est encore.
+     * Faux quand elle ne peut pas bouger (vie coupée, mouvement réduit) ou que l'élément n'est pas dans la page.
+     */
+    envoyer(element: Element, options?: EnvoiLia): boolean;
+    /** Fait un des gestes de son menu (salue, content, musique, remercie, surpris, concentre, apprend, veille). */
+    geste(geste: GesteLia, secondes?: number): boolean;
     /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
     venirPres(): boolean;
     /** Arrête de suivre ou de regarder : elle reste où elle est. */
@@ -136,4 +205,4 @@ interface LiaHandle {
     destroy(): void;
 }
 
-export { type ActionLia as A, type DescriptionElement as D, type HumeurLia as H, type LiaHandle as L, type MotifSpontane as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, HUMEURS_LIA as a, LIBELLE_HUMEUR as b, type OptionsElements as c, type PuceLia as d };
+export { type ActionLia as A, type DescriptionElement as D, type EnvoiLia as E, GESTES as G, type HumeurLia as H, type LiaHandle as L, type MotifSpontane as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, type GesteLia as a, HUMEURS_LIA as b, HUMEURS_MENU as c, LIBELLE_HUMEUR as d, type OptionsElements as e, type PuceLia as f };

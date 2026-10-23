@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.4.0
+npm i github:MoKarade/lia-ui#v0.5.0
 ```
 
 ## Utiliser
@@ -46,7 +46,13 @@ Sans framework : `const lia = mountLia({ ask, actions })`, puis `lia.dire("…")
 
 ## Elle te suit, elle vit seule
 
-Sans rien lui demander, LIA décide d'elle-même de rester là, d'errer, de suivre le curseur un moment (souris ou stylet, jamais au doigt) ou d'aller voir un des éléments `[data-lia-cible]` visibles, puis s'y colle exactement (écart de 0 px mesuré pendant le défilement). L'hôte peut aussi la guider : `lia.suivreCurseur(secondes)`, `lia.allerVoir(element, secondes)`, `lia.venirPres()` (près du curseur ou sur le bord, avant de la faire parler) et `lia.rester()`. Tout est coupé par « Couper sa vie autonome » et par `prefers-reduced-motion`. Sa tirette est celle de la maquette validée, toutes les 1,2 s : 28 % elle reste, 18 % elle erre, 22 % elle veut parler, 18 % elle va voir un élément (et dit son `data-lia-dit` au bout d'une seconde et demie), 7 % son humeur change, 7 % relance (2 par jour au plus) ; l'humeur dérive aussi d'elle-même toutes les 40 s. Elle ne parle seule que par `onSpontane` : le texte vient toujours de l'hôte, jamais de ce paquet, et jamais entre 22 h et 7 h.
+Sans rien lui demander, LIA décide d'elle-même de rester là, d'errer, de suivre le curseur un moment (souris ou stylet, jamais au doigt) ou d'aller voir un des éléments `[data-lia-cible]` visibles, puis s'y colle exactement (écart de 0 px mesuré pendant le défilement). L'hôte peut aussi la guider : `lia.suivreCurseur(secondes)`, `lia.allerVoir(element, secondes)`, `lia.venirPres()` (près du curseur ou sur le bord, avant de la faire parler) et `lia.rester()`. Tout est coupé par « La laisser tranquille » et par `prefers-reduced-motion`. Sa tirette est celle de la maquette validée, toutes les 1,2 s : 28 % elle reste, 18 % elle erre, 22 % elle veut parler, 18 % elle va voir un élément (et dit son `data-lia-dit` au bout d'une seconde et demie), 7 % son humeur change, 7 % relance (2 par jour au plus) ; l'humeur dérive aussi d'elle-même toutes les 40 s. Elle ne parle seule que par `onSpontane` : le texte vient toujours de l'hôte, jamais de ce paquet, et jamais entre 22 h et 7 h.
+
+## Le menu de son corps
+
+Un clic droit sur LIA elle-même (ou la touche Menu, ou un appui long) ouvre, comme la maquette : *Lui parler*, six humeurs (curieuse, calme, joyeuse, concentrée, espiègle, fatiguée ; la sienne est cochée), huit gestes (*Salue*, *Content*, *Fredonne*, *Merci*, *Surpris*, *Se concentre*, *Apprend*, *Dort*), puis *La laisser tranquille* ou *La laisser vivre*, et les `actions` de l'hôte. Un geste prend la silhouette correspondante 3 secondes puis elle reprend sa vie ; avec `prefers-reduced-motion` la rangée des gestes n'existe pas. Flèches haut, bas, gauche et droite parcourent le menu, cibles de 44 px. Aucune phrase n'est écrite dans ce paquet : ce qu'elle dit vient de l'hôte.
+
+Côté hôte : `lia.geste("salue", 3)` fait le même geste ; `lia.envoyer(element, { etat: "lit", dit: "Regarde cette carte.", secondes: 10 })` l'envoie près d'un élément, sans faire défiler la page, avec la silhouette voulue, et elle dit `dit` au bout d'une seconde et demie si elle y est encore (280 caractères au plus, et c'est l'hôte qui décide : pas d'heure de silence). Les couleurs des humeurs sont les variables `--lia-h-curieux`, `--lia-h-calme`… sur `.lia-ui`.
 
 ## Clic droit sur n'importe quel élément
 
