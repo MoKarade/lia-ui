@@ -20,6 +20,7 @@ export function installerEnvironnement(options: { sansMouvement?: boolean } = {}
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   document.body.innerHTML = "";
 });
 

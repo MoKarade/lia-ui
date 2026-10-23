@@ -54,11 +54,13 @@ import { FAMILLES_ACTIONS, activiteElement, activiteQuestion, estAction, suiteRe
 import {
   ecrireCerveau,
   ecrireLente,
+  ecrireDiscussion,
   ecrireMemoire,
   ecrireMouvement,
   ecrireRelances,
   lireCerveau,
   lireLente,
+  lireDiscussion,
   lireMemoire,
   lireMouvement,
   lireRelances,
@@ -469,8 +471,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /** Dernier signe de vie dans la discussion (message, frappe, clic), en secondes de son horloge. */
   let activiteChat = 0;
-  const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false): HTMLElement => {
+  /** Ce qui se dit dans la discussion ouverte, gardé pour la page suivante (sans les erreurs : elles ne valent que pour l'instant). */
+  const trace: Array<{ de: "lia" | "moi"; texte: string }> = [];
+  const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur): HTMLElement => {
     activiteChat = t;
+    if (garder) {
+      trace.push({ de, texte });
+      ecrireDiscussion(cle, { ouvert: true, msgs: trace });
+    }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
@@ -604,6 +612,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     derniereFocus = document.activeElement;
     chatOuvert = true;
     activiteChat = t;
+    ecrireDiscussion(cle, { ouvert: true, msgs: trace });
     chat = el("div", "lia-ui__chat");
     chat.setAttribute("role", "dialog");
     chat.setAttribute("aria-label", "Discussion avec LIA");
@@ -669,6 +678,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
+    trace.length = 0;
+    ecrireDiscussion(cle, null);
     contexteQuestion = null;
     cesserDeReperer();
     choisir(etatForce ?? "repos");
@@ -1728,14 +1739,28 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     // Jamais négatif : l'horloge de rAF peut précéder `performance.now()` d'un instant, et un pas négatif ferait diverger le ressort.
     const reel = Math.max(0, Math.min(1, (maintenant - dernier) / 1000 || 0));
     dernier = maintenant;
-    if (!document.hidden) {
-      // Son temps est le temps réel : sur un écran qui ne donne que quelques images par seconde, ses envies, ses délais et ses
-      // déplacements ne ralentissent pas (un pas borné à 0,05 s la faisait vivre 5 à 10 fois trop lentement). Seul le pas du dessin est borné.
-      t += reel;
-      dessinerImage(false, Math.min(reel, 0.25));
+    try {
+      if (!document.hidden) {
+        // Son temps est le temps réel : sur un écran qui ne donne que quelques images par seconde, ses envies, ses délais et ses
+        // déplacements ne ralentissent pas (un pas borné à 0,05 s la faisait vivre 5 à 10 fois trop lentement). Seul le pas du dessin est borné.
+        t += reel;
+        dessinerImage(false, Math.min(reel, 0.25));
+      }
+    } catch (e) {
+      // Une image ratée ne doit jamais la faire disparaître : on le dit (trois fois au plus) et on continue à vivre.
+      if (erreursImage++ < 3) console.error("[lia-ui] image ratée, elle continue", e);
+    } finally {
+      raf = requestAnimationFrame(boucle);
     }
-    raf = requestAnimationFrame(boucle);
   };
+  let erreursImage = 0;
+  /* Présente tout le temps : si la page retire sa couche (rendu remplacé, erreur, navigation), elle la remet. */
+  const veilleCouche = setInterval(() => {
+    if (detruit || couche.isConnected) return;
+    const hote = conteneur?.isConnected ? conteneur : document.body;
+    if (hote !== conteneur) couche.className = "lia-ui";
+    hote.appendChild(couche);
+  }, 500);
   const surVisibilite = (): void => {
     dernier = performance.now();
   };
@@ -1801,6 +1826,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
+      clearInterval(veilleCouche);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);
@@ -1812,5 +1838,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     },
   };
   actif = poignee;
+  // Une discussion ouverte sur la page d'avant se rouvre telle quelle (même onglet).
+  const avant = lireDiscussion(cle);
+  if (avant) {
+    ouvrirChat();
+    for (const m of avant.msgs) ajouterMsg(m.texte, m.de);
+  }
   return poignee;
 }

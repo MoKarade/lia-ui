@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.15.0
+npm i github:MoKarade/lia-ui#v0.16.0
 ```
 
 ## Utiliser
@@ -129,3 +129,11 @@ Pour que LIA soit la MÊME dans le hub, MemoryAI et les apps, l'hôte lui donne 
 - Une seule LIA par page ; avec `prefers-reduced-motion` elle ne traverse jamais l'écran (option `quandMouvementReduit`).
 
 Détail des règles : `CLAUDE.md`. État du chantier : `HANDOVER.md`.
+
+## Présente tout le temps (v0.16.0)
+
+Marc : « présente tout le temps, même si quelque chose charge, même si une page bug ». Trois choses :
+
+- **Elle se remet seule** : si la page retire sa couche (rendu remplacé, `body` remplacé, conteneur démonté), elle revient dans la fenêtre en moins d'une seconde ; une image qui lève une exception ne l'arrête pas (l'erreur est écrite, trois fois au plus). `destroy()` reste le seul moyen de la retirer.
+- **Elle se monte hors du rendu** : `import { demarrerLia } from "@mokarade/lia-ui/boot"`, puis `demarrerLia({ ask, … })` au chargement d'un module du layout racine (pas dans un effet, pas dans un composant). Elle se pose dans `document.body` dès qu'il existe, avant l'hydratation, hors des écrans de chargement et des error boundaries (`error.tsx`, `loading.tsx`, `not-found.tsx` et `global-error.tsx` compris). Idempotent ; réessaie (0,5 s, 1 s, 2 s, 4 s) si la page n'est pas prête. `arreter()` la retire. Une seule voie par app : `demarrerLia` OU `<Lia />`, pas les deux (une seule LIA par page).
+- **Elle ne repart pas de zéro** : position, humeur et envies sont déjà gardées par page ; la discussion ouverte (avec ce qui s'y est dit) se rouvre sur la page suivante du même onglet, jusqu'à ce qu'on la ferme. D'une app à l'autre (autre sous-domaine) la page se recharge : un court blanc avant qu'elle revienne, que l'état partagé (`etat`) rend sans perte.

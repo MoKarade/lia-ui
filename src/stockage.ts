@@ -157,3 +157,41 @@ export function ecrireMouvement(cle: string, m: MouvementLia): void {
     /* navigateur sans stockage : le choix vaut jusqu'au prochain montage */
   }
 }
+
+/** Sa discussion en cours, gardée le temps de l'onglet (sessionStorage) : une page qui se recharge ne la ferme pas. */
+export interface DiscussionLia {
+  ouvert: boolean;
+  msgs: Array<{ de: "lia" | "moi"; texte: string }>;
+}
+
+const MAX_MSGS = 20;
+
+export function lireDiscussion(cle: string): DiscussionLia | null {
+  try {
+    const brut = sessionStorage.getItem(`${PREFIXE}${cle}:discussion`);
+    if (brut === null) return null;
+    const j: unknown = JSON.parse(brut);
+    if (typeof j !== "object" || j === null) return null;
+    const { ouvert, msgs } = j as Record<string, unknown>;
+    if (ouvert !== true || !Array.isArray(msgs)) return null;
+    const propres = msgs
+      .filter((m): m is { de: "lia" | "moi"; texte: string } => {
+        const x = m as Record<string, unknown> | null;
+        return !!x && (x["de"] === "lia" || x["de"] === "moi") && typeof x["texte"] === "string";
+      })
+      .slice(-MAX_MSGS)
+      .map((m) => ({ de: m.de, texte: m.texte.slice(0, 4000) }));
+    return { ouvert: true, msgs: propres };
+  } catch {
+    return null;
+  }
+}
+
+export function ecrireDiscussion(cle: string, d: DiscussionLia | null): void {
+  try {
+    if (!d || !d.ouvert) sessionStorage.removeItem(`${PREFIXE}${cle}:discussion`);
+    else sessionStorage.setItem(`${PREFIXE}${cle}:discussion`, JSON.stringify({ ouvert: true, msgs: d.msgs.slice(-MAX_MSGS) }));
+  } catch {
+    /* sans stockage de session : la discussion ne survit pas au rechargement, rien d'autre ne change */
+  }
+}
