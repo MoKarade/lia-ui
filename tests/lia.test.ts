@@ -175,10 +175,10 @@ describe("menu", () => {
 });
 
 describe("mouvement réduit", () => {
-  it("ne lance aucune animation en continu", () => {
+  it("en mode « fixe », ne lance aucune animation en continu", () => {
     installerEnvironnement({ sansMouvement: true });
     const raf = vi.spyOn(window, "requestAnimationFrame");
-    lia = mountLia();
+    lia = mountLia({ quandMouvementReduit: "fixe" });
     expect(raf).not.toHaveBeenCalled();
   });
 });

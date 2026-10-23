@@ -80,9 +80,9 @@ describe("aller voir un élément", () => {
     expect(lia.allerVoir(document.createElement("div"))).toBe(false);
   });
 
-  it("refuse tout mouvement au mode « réduire les animations »", () => {
+  it("refuse tout mouvement au mode « réduire les animations » réglé sur « fixe »", () => {
     installerEnvironnement({ sansMouvement: true });
-    lia = mountLia();
+    lia = mountLia({ quandMouvementReduit: "fixe" });
     expect(lia.allerVoir(carte)).toBe(false);
     expect(lia.suivreCurseur()).toBe(false);
   });

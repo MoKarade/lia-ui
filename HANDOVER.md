@@ -1,6 +1,6 @@
 # HANDOVER — lia-ui
 
-*État au 23/10/2026, tâche lia-ui#13 (menu de son corps et envoyer).*
+*État au 23/10/2026, tâche lia-ui#15 (mouvement réduit doux).*
 
 ## Fait
 - Moteur de 100 traits repris de la maquette v5 validée par Marc (38 silhouettes, 12 humeurs).
@@ -11,6 +11,7 @@
 - **v0.2.1 (lia-ui#6)** : sa tirette de décisions et sa parole sont celles de la maquette v5 (`maison.js`, `penser`) : 28 % rester, 18 % errer, 22 % parler, 18 % visiter un élément (phrase `data-lia-dit`), 7 % humeur, 7 % relance ; dérive d'humeur toutes les 40 s ; `onSpontane` (texte de l'hôte), silence 22 h-7 h, 2 relances par jour. Marc, 22/10 22:35Z : « exactement pareil que la maquette ». Reste : envies et mémoire de l'accueil v2, voir lia-ui#6.
 - **v0.4.0 (lia-ui#11)** : clic droit sur n'importe quel élément (option `elements`, quatre entrées de la maquette V9, LIA vient se poser près de l'élément et le cadre, la question part par `ask` avec l'élément comme donnée annoncée). Marc, 23/10 12:15Z : « manque le clique droit ». Corrigé en passant : `<Lia />` (React) ne transmettait ni `onSpontane`, ni `cibles`, ni `silence`, ni `relancesParJour` à `mountLia` (v0.2.0 à v0.3.0) : une app qui les passait en React n'avait aucun effet ; tests ajoutés. Écart complet avec la maquette V9 : mission .github#557 ; reste à faire dans lia-ui : envies et mémoire (lia-ui#6), réseau V9 (225 neurones, 40 humeurs mélangées, crochet `HUM_MIX` dans le moteur), comportements riches et interface `monde` (avec la vue de l'écran : survol et centre, que le clic droit de cette version ne fournit pas).
 - **v0.5.0 (lia-ui#13)** : le menu de son corps est celui de la maquette v5 (titre, six humeurs avec la sienne cochée, huit gestes, « La laisser tranquille / La laisser vivre »), `lia.geste(nom, secondes)` et `lia.envoyer(element, { etat, dit, secondes })` pour l'hôte (futur « monde »). Marc, 23/10 12:15Z : « manque le clique droit, sa personnalité, mouvements ». Le défilement ne ferme plus que le menu d'un élément de la page, pas celui de son corps. Aucune phrase écrite dans ce paquet. Reste : lia-ui#6 (envies, mémoire), réseau V9, comportements riches et interface `monde`.
+- **v0.5.1 (lia-ui#15)** : `prefers-reduced-motion` ne fige plus LIA. Le PC de Marc a mesuré que son Chrome l'annonce : lia-ui coupait sa vie, ses gestes et ses déplacements, d'où « elle vit pas seule » (relevé du Coordinateur, 23/10 13:18Z). Nouvelle option `quandMouvementReduit` : « doux » (défaut, elle vit sur place : respire, gestes, humeur, parole seule, jamais de déplacement ni de suivi du curseur), « fixe » (image unique, comme avant), « complet » (ignore la demande du système). Marc peut aussi activer les effets d'animation de Windows. Corrigé avec : en mode « fixe », la bulle de `dire()` n'était jamais placée (la boucle ne tourne pas) et s'affichait en haut à gauche (relevé du fil Refonte sur la v0.4.0 chez Marc) ; `dire` redessine maintenant une fois.
 - Corrigé en passant : un pas de temps négatif (horloge rAF en avance sur `performance.now()`) pouvait faire diverger le ressort.
 
 ## À faire

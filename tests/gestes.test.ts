@@ -120,9 +120,9 @@ describe("menu de son corps", () => {
     vi.advanceTimersByTime(1100);
   });
 
-  it("sans mouvement (prefers-reduced-motion) : pas de gestes, mais les humeurs restent", () => {
+  it("mouvement réduit en mode « fixe » : pas de gestes, mais les humeurs restent", () => {
     installerEnvironnement({ sansMouvement: true });
-    lia = mountLia();
+    lia = mountLia({ quandMouvementReduit: "fixe" });
     ouvrir();
     expect(document.querySelectorAll(".lia-ui__geste")).toHaveLength(0);
     expect(document.querySelectorAll("[role=menuitemradio]")).toHaveLength(HUMEURS_MENU.length);

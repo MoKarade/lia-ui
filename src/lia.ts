@@ -112,7 +112,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   const cle = options.cle ?? "lia";
   const rayonBase = options.rayon ?? 56;
-  const sansMouvement = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const modeReduit = reduit ? (options.quandMouvementReduit ?? "doux") : "complet";
+  /** « fixe » : une seule image, comme avant. */
+  const sansMouvement = modeReduit === "fixe";
+  /** « doux » : elle ne traverse jamais l'écran (pas de glissade, d'errance ni de suivi du curseur), mais vit sur place. */
+  const doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
   let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
 
@@ -279,11 +284,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       p.textContent = texte.slice(0, Math.ceil(texte.length * u));
       if (u < 1 && !bulle.hidden && !detruit) requestAnimationFrame(tic);
     };
-    if (sansMouvement) p.textContent = texte;
+    if (sansMouvement || doux) p.textContent = texte;
     else tic();
     voix(texte);
     bulleFin = t + Math.max(5, totalVoix() + 3) + (chips.length ? 6 : 0);
     dernierMot = t;
+    // Sans boucle d'animation (mode « fixe »), rien d'autre ne place la bulle.
+    if (sansMouvement) dessinerUneFois();
     return true;
   };
 
@@ -783,7 +790,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   }
 
   function suivreCurseur(secondes = 8): boolean {
-    if (!peutBouger() || !curseurRecent()) return false;
+    if (doux || !peutBouger() || !curseurRecent()) return false;
     attention = { type: "curseur", jusqua: t + secondes };
     errance = { jusqua: t + secondes };
     choisir(etatForce ?? "repos");
@@ -907,7 +914,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       parole: !!options.onSpontane && peutParlerSeule(),
       relance: relancesRestantes(),
     });
-    if (d.type === "suivre") {
+    if (doux && (d.type === "suivre" || d.type === "voir")) {
+      // Sans déplacement : elle reste là, comme si elle attendait.
+      errance = { jusqua: t + d.duree };
+      choisir("repos");
+    } else if (d.type === "suivre") {
       suivreCurseur(d.duree);
     } else if (d.type === "voir") {
       const el = vues[rangDe(d.rang, vues.length)];
@@ -920,7 +931,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       errance = { jusqua: t + d.duree };
       choisir("repos");
     } else if (d.type === "errer") {
-      cible = pointDansZone(zoneVie(), d.u, d.v, rayon * 1.3);
+      if (!doux) cible = pointDansZone(zoneVie(), d.u, d.v, rayon * 1.3);
       errance = { jusqua: t + d.duree };
       choisir(d.etat);
     } else {
@@ -942,7 +953,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
     // Collée à un élément : exactement sur lui, sans retard ni flottement quand la page défile.
     const colle = attention?.type === "element" && attention.colle;
-    if (sansMouvement || still || colle) {
+    if (sansMouvement || doux || still || colle) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
