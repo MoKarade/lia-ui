@@ -28,6 +28,13 @@ export interface ElementDecrit {
 export const SELECTEUR_ELEMENTS =
   "[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1, h2, h3, h4, button, a, label";
 
+/** Une image, un graphique, une vidéo : visés eux-mêmes même à l'intérieur d'une carte (Marc : « tout ce que je clique »). */
+const MEDIAS = "img, svg, canvas, picture, video";
+/** Une icône dans un bouton ou un titre : c'est le bouton ou le titre qu'on vise, pas l'icône. */
+const PRIORITAIRES = "button, a, label, h1, h2, h3, h4, summary";
+/** Ce qui est visé à défaut de bloc : un paragraphe, une cellule… plutôt qu'un conteneur anonyme. */
+const SECOURS = "p, td, th, blockquote, pre, details, summary, nav, header, footer, aside";
+
 /** Là où LIA ne prend jamais le clic droit : le menu du navigateur reste. */
 const EXCLUS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], [data-lia-ignorer]";
 
@@ -70,6 +77,22 @@ const GENRES_BALISE: Record<string, string> = {
   SECTION: "une section",
   LABEL: "une étiquette",
   FIGURE: "une figure",
+  P: "un paragraphe",
+  TD: "une cellule de tableau",
+  TH: "un en-tête de tableau",
+  SVG: "un graphique",
+  CANVAS: "un graphique",
+  PICTURE: "une image",
+  VIDEO: "une vidéo",
+  NAV: "une barre de navigation",
+  HEADER: "un en-tête",
+  FOOTER: "un pied de page",
+  ASIDE: "un encadré",
+  BLOCKQUOTE: "une citation",
+  PRE: "un bloc de code",
+  CODE: "du code",
+  DETAILS: "un bloc repliable",
+  SUMMARY: "un titre repliable",
 };
 
 const GENRES_ROLE: Record<string, string> = {
@@ -113,7 +136,11 @@ export function elementVise(
   if (couche.contains(cible)) return null;
   if (cible.closest(EXCLUS)) return null;
   try {
-    return cible.closest(selecteur) ?? cible;
+    const bloc = cible.closest(selecteur);
+    if (selecteur !== SELECTEUR_ELEMENTS) return bloc ?? cible;
+    const media = cible.closest(MEDIAS);
+    if (media && (!bloc || (bloc.contains(media) && !bloc.matches(PRIORITAIRES)))) return media;
+    return bloc ?? cible.closest(SECOURS) ?? cible;
   } catch {
     // Sélecteur invalide fourni par l'hôte : le clic droit vise l'élément cliqué lui-même.
     return cible;

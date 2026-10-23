@@ -45,6 +45,18 @@ export interface PuceLia {
 }
 
 /**
+ * Ce que LIA dit d'elle-même à l'hôte avec chaque question (3e argument de `ask`), pour qu'il ne la prenne pas pour un
+ * modèle sans humeur. Listes fermées, sans texte libre : `humeur` est l'une des clés de `LIBELLES_HUMEURS` (40),
+ * `silhouette` l'une de `SILHOUETTES_LIA`, `regard` un identifiant court `[a-z0-9-]` (la valeur de `data-lia-cible` de
+ * l'élément qu'elle regarde) ou `null`. À l'hôte de l'annoncer au modèle comme une DONNÉE sur LIA.
+ */
+export interface ContexteLia {
+  humeur: string;
+  silhouette: string;
+  regard: string | null;
+}
+
+/**
  * Ce que l'hôte renvoie à une question. `text` est toujours montré ; `mood` colore LIA.
  * Les blocs composés (cartes, courbes…) arrivent avec l'API MemoryAI : ils passent par
  * `blocks` et par `renderBlocks`, fourni par l'hôte ; ce paquet ne les interprète jamais.
@@ -99,7 +111,7 @@ export interface DescriptionElement {
 export interface OptionsElements {
   /**
    * Éléments visés en premier : le plus proche ancêtre (ou l'élément lui-même) qui correspond. Défaut :
-   * `[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1…h4, button, a, label`.
+   * `[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1…h4, button, a, label` ; à défaut un média (`img`, `svg`, `canvas`) ou un paragraphe, une cellule, une citation…
    */
   selecteur?: string;
   /**
@@ -126,7 +138,7 @@ export interface OptionsLia {
   /**
    * Pose une question. Absent ou en échec : LIA dit qu'elle est indisponible. Jamais de réponse inventée.
    */
-  ask?: (question: string, signal: AbortSignal) => Promise<ReponseLia>;
+  ask?: (question: string, signal: AbortSignal, contexte?: ContexteLia) => Promise<ReponseLia>;
   /** Actions du menu (clic droit, appui long, touche Menu), ajoutées aux actions de LIA. */
   actions?: readonly ActionLia[];
   /**
