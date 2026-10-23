@@ -893,6 +893,40 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     repere.style.height = `${(r.height + 8).toFixed(1)}px`;
   };
 
+  /**
+   * Quand elle analyse, le carré de son animation (quatre coins, un balayage) se dessine tout autour de ce qu'elle regarde :
+   * la carte que Marc a désignée, celle qu'elle visite ou celle qu'elle regarde avec lui. Dans sa couche, la page n'est
+   * jamais modifiée ; jamais de cadre sans élément réel à encadrer.
+   */
+  const cadre = el("div", "lia-ui__cadre");
+  cadre.hidden = true;
+  cadre.setAttribute("aria-hidden", "true");
+  for (const c of ["hg", "hd", "bg", "bd"]) cadre.appendChild(el("i", `lia-ui__coin lia-ui__coin--${c}`));
+  cadre.appendChild(el("b", "lia-ui__balai"));
+  couche.appendChild(cadre);
+  let cadreSur: Element | null = null;
+  const masquerCadre = (): void => {
+    cadre.hidden = true;
+    cadre.classList.remove("lia-ui__cadre--pose");
+    cadreSur = null;
+  };
+  const majCadre = (): void => {
+    const cible = etat === "analyse" ? (reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde) : null;
+    if (!cible || !cible.isConnected || couche.contains(cible)) return masquerCadre();
+    const r = cible.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return masquerCadre();
+    const c = couche.getBoundingClientRect();
+    cadre.style.left = `${(r.left - c.left - 6).toFixed(1)}px`;
+    cadre.style.top = `${(r.top - c.top - 6).toFixed(1)}px`;
+    cadre.style.width = `${(r.width + 12).toFixed(1)}px`;
+    cadre.style.height = `${(r.height + 12).toFixed(1)}px`;
+    cadre.classList.toggle("lia-ui__cadre--fixe", sansMouvement || doux);
+    if (cadre.hidden) cadre.hidden = false;
+    // Les coins se posent : un premier tour dessine le cadre agrandi, le suivant le fait arriver sur l'élément.
+    if (cadreSur === cible) cadre.classList.add("lia-ui__cadre--pose");
+    else cadreSur = cible;
+  };
+
   const decrireElement = (cible: Element): ElementDecrit | null => {
     try {
       const d = optElements?.decrire ? optElements.decrire(cible) : decrireParDefaut(cible);
@@ -1751,6 +1785,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
     if (chat) placerAutour(chat);
     majRepere();
+    majCadre();
   };
 
   function dessinerUneFois(): void {
