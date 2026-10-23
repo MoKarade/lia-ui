@@ -52,6 +52,7 @@ describe("<Lia />", () => {
       r.render(
         createElement(Lia, {
           onSpontane,
+          parolePropre: false,
           silence: [3, 3],
           relancesParJour: 1,
           cibles: "[data-x]",

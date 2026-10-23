@@ -38,6 +38,7 @@ describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)",
     vi.spyOn(Math, "random").mockReturnValue(0.3); // choix pondéré : causer, motif « rien »
     const motifs: MotifSpontane[] = [];
     lia = mountLia({
+      parolePropre: false,
       onSpontane: (m) => {
         motifs.push(m);
         return "Il est calme ici.";
@@ -51,14 +52,14 @@ describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)",
   it("se tait quand l'hôte n'a rien de vrai à dire", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.3);
     const onSpontane = vi.fn(() => null);
-    lia = mountLia({ onSpontane });
+    lia = mountLia({ parolePropre: false, onSpontane });
     await vi.waitFor(() => expect(onSpontane).toHaveBeenCalled(), { timeout: 4000 });
     expect(bulle().hidden).toBe(true);
   });
 
   it("ne parle jamais seule sans onSpontane", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.3);
-    lia = mountLia({});
+    lia = mountLia({ parolePropre: false });
     await new Promise((r) => setTimeout(r, 3500));
     expect(bulle().hidden).toBe(true);
   });
@@ -67,7 +68,7 @@ describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)",
     vi.setSystemTime(new Date(2026, 9, 22, 23, 30, 0));
     vi.spyOn(Math, "random").mockReturnValue(0.3);
     const onSpontane = vi.fn(() => "Bonsoir.");
-    lia = mountLia({ onSpontane });
+    lia = mountLia({ parolePropre: false, onSpontane });
     await new Promise((r) => setTimeout(r, 3500));
     expect(onSpontane).not.toHaveBeenCalled();
     expect(bulle().hidden).toBe(true);
@@ -77,6 +78,7 @@ describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)",
     vi.spyOn(Math, "random").mockReturnValue(0.3);
     const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
     lia = mountLia({
+      parolePropre: false,
       onSpontane: () => {
         throw new Error("hors ligne");
       },
@@ -94,6 +96,7 @@ describe("relances : au plus deux par jour", () => {
     localStorage.setItem("lia-ui:lia:relances", JSON.stringify({ jour: jour(), n: 1 }));
     const motifs: MotifSpontane[] = [];
     lia = mountLia({
+      parolePropre: false,
       onSpontane: (m) => {
         motifs.push(m);
         return { text: "Le bail arrive. Je te le rappelle ?", chips: [{ id: "plus", label: "Plus tard" }] };
@@ -109,7 +112,7 @@ describe("relances : au plus deux par jour", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.9); // choix pondéré : repos (jamais de relance au plafond)
     localStorage.setItem("lia-ui:lia:relances", JSON.stringify({ jour: jour(), n: 2 }));
     const onSpontane = vi.fn(() => "Relance.");
-    lia = mountLia({ onSpontane });
+    lia = mountLia({ parolePropre: false, onSpontane });
     await new Promise((r) => setTimeout(r, 3500));
     expect(onSpontane).not.toHaveBeenCalled();
   });
@@ -118,7 +121,7 @@ describe("relances : au plus deux par jour", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     localStorage.setItem("lia-ui:lia:relances", JSON.stringify({ jour: "2026-10-21", n: 2 }));
     const onSpontane = vi.fn(() => "Relance.");
-    lia = mountLia({ onSpontane });
+    lia = mountLia({ parolePropre: false, onSpontane });
     await vi.waitFor(() => expect(onSpontane).toHaveBeenCalledWith("relance"), { timeout: 4000 });
   });
 });
@@ -135,7 +138,7 @@ describe("visite d'un élément : sa phrase après une seconde et demie", () => 
     carte.setAttribute("data-lia-cible", "");
     carte.setAttribute("data-lia-dit", "Le souper de 18 h approche.");
     document.body.appendChild(carte);
-    lia = mountLia({});
+    lia = mountLia({ parolePropre: false });
     await vi.waitFor(() => expect(bulle().textContent).toContain("souper"), { timeout: 5000 });
     expect(carte.hasAttribute("data-regard")).toBe(true); // l'hôte peut la montrer (la maquette : liseré)
   });
@@ -145,7 +148,7 @@ describe("visite d'un élément : sa phrase après une seconde et demie", () => 
     const carte = document.createElement("section");
     carte.setAttribute("data-lia-cible", "");
     document.body.appendChild(carte);
-    lia = mountLia({});
+    lia = mountLia({ parolePropre: false });
     await new Promise((r) => setTimeout(r, 3800));
     expect(bulle().hidden).toBe(true);
   });

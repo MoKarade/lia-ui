@@ -520,6 +520,8 @@ function corps(){
    const tA=fa[i]+Math.round((pa[i]-fa[i])/Math.PI)*Math.PI;
    if(snap){px[i]=fx[i];py[i]=fy[i];pa[i]=fa[i];pl[i]=fl[i];vx[i]=vy[i]=va[i]=vl[i]=0;cr[i]=fr[i];cg[i]=fg[i];cb[i]=fb[i];ca[i]=fal[i];continue;}
    const u=cl((tsw-dl[i])/1.1);ua[i]=snap?1:u;const kt=A.sc?150:(420*(1-soft)+260*soft),k=kI[i]*(1-u)+kt*u,z=.58*(1-u)+.95*u,cc=2*z*Math.sqrt(k),n=Math.max(1,Math.ceil(dt/.008)),hh=dt/n,sv=sw[i]*(1-u)*.7*k;
+   /* inertie : le corps est entraîné par son hôte (accélération `o.acc`, px/s²), chaque trait a sa masse et traîne ou rebondit à son tour */
+   if(o.acc&&!snap){const ms=3.4+2.6*hs(i,31);vx[i]-=o.acc.x*ms*dt;vy[i]-=o.acc.y*ms*dt;}
    for(let q=0;q<n;q++){const dx=fx[i]-px[i],dy=fy[i]-py[i];vx[i]+=(k*dx-sv*dy-cc*vx[i])*hh;px[i]+=vx[i]*hh;vy[i]+=(k*dy+sv*dx-cc*vy[i])*hh;py[i]+=vy[i]*hh;
     va[i]+=(k*1.3*(tA-pa[i])-cc*1.1*va[i])*hh;pa[i]+=va[i]*hh;vl[i]+=(k*(fl[i]-pl[i])-cc*vl[i])*hh;pl[i]+=vl[i]*hh;}
    const rt=1-Math.exp(-dt*(act?9:0));cr[i]+=(fr[i]-cr[i])*rt;cg[i]+=(fg[i]-cg[i])*rt;cb[i]+=(fb[i]-cb[i])*rt;ca[i]+=(fal[i]-ca[i])*(1-Math.exp(-dt*(act?10:0)));}

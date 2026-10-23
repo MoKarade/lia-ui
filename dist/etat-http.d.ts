@@ -1,4 +1,4 @@
-import { E as EtatHote } from './etat-CWkvIV18.js';
+import { E as EtatHote } from './etat-e-fS3ns2.js';
 
 /**
  * Le seul module du paquet qui appelle le réseau : un `fetch` vers la MÊME origine que la page (GET pour lire, PUT pour écrire),

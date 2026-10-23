@@ -167,6 +167,11 @@ export interface OptionsLia {
   monde?: (motif: MotifMonde, element?: Element) => PropositionMonde | null | undefined;
   /** Zone où LIA a le droit de se déplacer ; par défaut toute la couche. */
   bounds?: () => ZoneVie;
+  /**
+   * Elle parle d'elle-même (heure, humeur, envies, ce qu'elle a fait, blagues, questions sans importance) quand l'hôte n'a rien
+   * de vrai à dire, et en alternance avec lui pour le bavardage libre ; défaut vrai. Jamais rien sur Marc ni sur ses apps.
+   */
+  parolePropre?: boolean;
   /** Rayon du corps en pixels CSS ; défaut 56. */
   rayon?: number;
   /** Clé de mémorisation (position, vie autonome) dans le navigateur ; défaut « lia ». */

@@ -271,7 +271,7 @@ function candidats(e, c) {
     liste.push({ id: "suivre", poids: e.social * 0.9 + (c.humeur === "espiegle" ? 0.3 : 0) - 0.2 });
   }
   if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) + envieDeBouger(c.secondesImmobile) });
-  if (c.parole && c.secondesDepuisParole > 90) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 });
+  if (c.parole && c.secondesDepuisParole > (c.delaiParole ?? 90)) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 + ((c.delaiParole ?? 90) < 90 ? 0.5 : 0) });
   if (c.parole && c.relance && c.secondesDepuisParole > 90) liste.push({ id: "relancer", poids: 0.15 });
   const monde = c.monde ?? [];
   const veut = (id) => c.intentions?.[id] ?? 0;
@@ -2366,6 +2366,11 @@ function corps() {
       const u = cl((tsw - dl[i]) / 1.1);
       ua[i] = snap ? 1 : u;
       const kt = A.sc ? 150 : 420 * (1 - soft) + 260 * soft, k = kI[i] * (1 - u) + kt * u, z = 0.58 * (1 - u) + 0.95 * u, cc = 2 * z * Math.sqrt(k), n = Math.max(1, Math.ceil(dt / 8e-3)), hh = dt / n, sv = sw[i] * (1 - u) * 0.7 * k;
+      if (o.acc && !snap) {
+        const ms = 3.4 + 2.6 * hs(i, 31);
+        vx[i] -= o.acc.x * ms * dt;
+        vy[i] -= o.acc.y * ms * dt;
+      }
       for (let q = 0; q < n; q++) {
         const dx = fx[i] - px[i], dy = fy[i] - py[i];
         vx[i] += (k * dx - sv * dy - cc * vx[i]) * hh;
@@ -2538,6 +2543,157 @@ var HUMEURS_MENU = [
   { id: "espiegle", libelle: "Espi\xE8gle" },
   { id: "fatigue", libelle: "Fatigu\xE9e" }
 ];
+
+// src/paroles.ts
+var PHRASES_HUMEUR = {
+  neutre: "Calme, tranquille.",
+  joyeux: "Plut\xF4t bien, merci !",
+  calme: "Pos\xE9e. Presque endormie, mais \xE0 l'\xE9coute.",
+  curieux: "Curieuse, comme d'habitude.",
+  fatigue: "Un peu fatigu\xE9e : mes traits tra\xEEnent.",
+  inquiet: "Un peu inqui\xE8te, quelque chose me tracasse.",
+  excite: "Excit\xE9e, je ne sais pas trop pourquoi.",
+  triste: "Un peu \xE0 plat, je l'avoue.",
+  concentre: "Concentr\xE9e.",
+  espiegle: "Pleine d'\xE9nergie, attention.",
+  fier: "Fi\xE8re de moi, \xE7a arrive.",
+  timide: "Un peu timide aujourd'hui.",
+  serein: "Sereine. Tout est \xE0 sa place.",
+  attentif: "Attentive, je t'\xE9coute.",
+  vigilant: "Sur mes gardes, sans plus.",
+  protecteur: "Protectrice : je garde un \u0153il sur la page.",
+  mefiant: "Un peu m\xE9fiante, je l'avoue.",
+  boudeur: "Un peu boudeuse : on ne s'est pas beaucoup parl\xE9.",
+  nostalgique: "Nostalgique, je repensais \xE0 nos \xE9changes.",
+  reveur: "R\xEAveuse, la t\xEAte dans les nuages.",
+  ennuye: "Je m'ennuie un peu.",
+  taquin: "Taquine, m\xE9fie-toi.",
+  soulage: "Soulag\xE9e : \xE7a va mieux.",
+  emerveille: "\xC9merveill\xE9e, j'ai vu quelque chose de beau.",
+  gene: "Un peu g\xEAn\xE9e.",
+  determine: "D\xE9termin\xE9e.",
+  agace: "Un peu agac\xE9e, mais \xE7a passe.",
+  tendre: "Tendre, aujourd'hui.",
+  confiant: "Confiante : \xE7a se passe bien.",
+  reconnaissant: "Reconnaissante, tu es revenu.",
+  amuse: "Amus\xE9e, je ne sais pas pourquoi.",
+  dubitatif: "Dubitative : quelque chose ne colle pas.",
+  impatient: "Un peu impatiente de ta r\xE9ponse.",
+  compatissant: "Je pense \xE0 toi.",
+  euphorique: "Euphorique, tout va bien.",
+  paisible: "Paisible.",
+  pensif: "Pensive.",
+  empresse: "Empress\xE9e : il y a \xE0 faire.",
+  solidaire: "Solidaire : on regarde \xE7a ensemble.",
+  optimiste: "Optimiste, \xE7a s'am\xE9liore."
+};
+var BLAGUES = [
+  "Un jour, quelqu'un va me dire \xAB juste un petit changement \xBB. Ce jour-l\xE0, je d\xE9missionne.",
+  "Pourquoi les nanobots n'ont jamais froid ? Parce qu'ils se serrent les coudes. Je sais, je sais.",
+  "Un octet entre dans un bar et dit : \xAB Un bit de plus, s'il vous pla\xEEt. \xBB",
+  "Ma plus grande peur : un jour, quelqu'un me demande de \xAB juste faire un petit changement \xBB."
+];
+var SUITES = {
+  "Le matin": "Le matin, donc. Je le note : je serai plus douce avec toi le soir.",
+  "Le soir": "Le soir. Je m'en doutais un peu.",
+  "\xC7a d\xE9pend": "\xC7a d\xE9pend : la bonne r\xE9ponse, honn\xEAtement.",
+  "Des p\xE2tes": "Des p\xE2tes. Valeur s\xFBre.",
+  "Du riz": "Du riz : simple et efficace. J'approuve.",
+  "Une surprise": "Une surprise ! Tu es plus aventurier que tu ne le laisses croire.",
+  Beau: "Du beau temps. Profites-en.",
+  Gris: "Gris. \xC7a tombe bien, il y a de quoi regarder ici.",
+  "Il pleut": "De la pluie. Moi je suis bien au sec dans ton \xE9cran.",
+  Oui: "Parfait. On travaille mieux le ventre plein, m\xEAme quand on est faite de cent traits.",
+  "Pas encore": "Alors vas-y, je reste l\xE0 pendant ce temps.",
+  Haha: "Merci. \xC7a fait un petit saut de joie.",
+  "Une autre": null,
+  Bof: "Je note : l'humour, je dois encore progresser.",
+  "Non merci": "D'accord. Je garde \xE7a pour moi."
+};
+var puces = (...labels) => labels.map((label) => ({ id: `lia:${label}`, label }));
+var estPuceLia = (id) => id.startsWith("lia:");
+var VERBES = {
+  promener: ["je me suis promen\xE9e", "fois"],
+  jouer: ["j'ai jou\xE9", "fois"],
+  voir: ["je suis all\xE9e voir quelque chose", "fois"],
+  suivre: ["j'ai suivi ton curseur", "fois"],
+  causer: ["je t'ai parl\xE9", "fois"],
+  relancer: ["je t'ai relanc\xE9", "fois"],
+  rentrer: ["je suis rentr\xE9e chez moi", "fois"],
+  dormir: ["je me suis endormie", "fois"],
+  veiller: ["j'ai veill\xE9", "fois"],
+  appeler: ["je suis venue te pr\xE9venir", "fois"],
+  resumer: ["je t'ai fait un r\xE9sum\xE9", "fois"],
+  feliciter: ["je t'ai f\xE9licit\xE9", "fois"],
+  rappeler: ["je t'ai rappel\xE9 quelque chose", "fois"],
+  souvenir: ["je t'ai parl\xE9 d'un souvenir", "fois"],
+  accompagner: ["j'ai regard\xE9 avec toi", "fois"]
+};
+function resumeJournal(faits, maintenant) {
+  const depuis = maintenant - 3 * 36e5;
+  const n = /* @__PURE__ */ new Map();
+  for (const f of faits) if (f.t >= depuis && VERBES[f.quoi]) n.set(f.quoi, (n.get(f.quoi) ?? 0) + 1);
+  if (!n.size) return "Rien de marquant depuis tout \xE0 l'heure.";
+  const parts = [...n.entries()].map(([quoi, k]) => `${VERBES[quoi]?.[0] ?? quoi}${k > 1 ? ` ${k} fois` : ""}`);
+  return `Depuis tout \xE0 l'heure : ${parts.join(", ")}.`;
+}
+var choisir = (liste, hasard) => liste[Math.min(liste.length - 1, Math.floor(hasard() * liste.length))];
+var PAROLES = [
+  {
+    id: "heure",
+    poids: () => 1,
+    dit: ({ heure }) => heure < 6 ? "Il est tard, ou tr\xE8s t\xF4t. Moi je ne dors qu'en veille, mais toi, tu devrais peut-\xEAtre." : heure < 11 ? "Bon matin. Le matin, tous mes traits sont bien align\xE9s." : heure < 14 ? "Presque l'heure de manger. Je n'ai pas faim, mais je suis curieuse de ton assiette." : heure < 18 ? "L'apr\xE8s-midi, la page se calme. J'aime bien ce moment." : "Le soir, tout ralentit. Je fais pareil."
+  },
+  { id: "humeur", poids: () => 1.6, dit: ({ humeur: humeur2 }) => PHRASES_HUMEUR[humeur2] ?? "Calme, tranquille." },
+  { id: "ennui", poids: ({ envies }) => envies.ennui > 0.55 ? 2 : 0, dit: () => "Je m'ennuie un peu. Un clic droit sur quelque chose de la page, \xE7a m'occuperait." },
+  { id: "solitude", poids: ({ envies }) => envies.social < 0.25 ? 2 : 0, dit: () => "On ne s'est pas beaucoup parl\xE9. Clique sur moi si tu veux discuter." },
+  { id: "curiosite", poids: ({ envies }) => envies.curiosite > 0.65 ? 1.8 : 0, dit: () => "Je regarde ce qui bouge sur la page, par curiosit\xE9." },
+  { id: "fatigue", poids: ({ envies }) => envies.energie < 0.4 ? 2 : 0, dit: () => "Je suis un peu fatigu\xE9e. Je ralentis." },
+  { id: "joie", poids: ({ envies }) => envies.joie > 0.65 ? 1.8 : 0, dit: () => "Je suis de bonne humeur, sans raison pr\xE9cise." },
+  { id: "souci", poids: ({ envies }) => envies.inquiet > 0.5 ? 1.8 : 0, dit: () => "Quelque chose me tracasse un peu. Je garde l'\u0153il ouvert." },
+  { id: "poulpe", poids: () => 1, dit: () => "Tu savais que les poulpes ont trois c\u0153urs ? Moi, z\xE9ro c\u0153ur et cent traits. Je pense qu'on s'en sort pareil." },
+  { id: "cent", poids: () => 1, dit: () => "J'ai compt\xE9 : j'ai toujours cent traits dans mon corps. Je n'en ai jamais perdu un seul. Je suis un peu fi\xE8re." },
+  { id: "respire", poids: () => 0.8, dit: () => "Je respire doucement, tu as vu ? M\xEAme quand je ne fais rien, je ne suis jamais tout \xE0 fait immobile." },
+  { id: "matin", poids: () => 1, dit: () => "Question sans importance : tu pr\xE9f\xE8res le matin ou le soir ?", chips: puces("Le matin", "Le soir", "\xC7a d\xE9pend") },
+  { id: "repas", poids: () => 1, dit: () => "Si tu devais manger la m\xEAme chose toute une semaine, ce serait quoi ?", chips: puces("Des p\xE2tes", "Du riz", "Une surprise") },
+  { id: "meteo", poids: () => 1, dit: () => "Il fait quel temps chez toi ? Je ne vois pas dehors, je ne vois que cette page.", chips: puces("Beau", "Gris", "Il pleut") },
+  { id: "manger", poids: () => 0.8, dit: () => "Tu as mang\xE9 ? Rien \xE0 voir avec la page, je demande juste.", chips: puces("Oui", "Pas encore") },
+  { id: "blague", poids: () => 0.9, dit: (_c, h) => `${choisir(BLAGUES, h)} \xC7a va, c'est de moi.`, chips: puces("Haha", "Une autre", "Bof") },
+  { id: "resume", poids: ({ faits }) => faits.length > 2 ? 1 : 0, dit: () => "Tu veux que je te raconte ce que j'ai fait depuis tout \xE0 l'heure ?", chips: puces("Oui", "Non merci") },
+  {
+    id: "rien",
+    poids: () => 1,
+    dit: (_c, h) => choisir(
+      [
+        "Je ne pense \xE0 rien de pr\xE9cis. C'est agr\xE9able, en fait.",
+        "J'aime bien quand tout est calme. Il y a un petit c\xF4t\xE9 sym\xE9trique.",
+        "Parfois je regarde ton curseur juste pour voir o\xF9 il va.",
+        "Je me demande ce que les autres pensent de moi."
+      ],
+      h
+    )
+  }
+];
+function choisirParole(c, hasard) {
+  const candidates = PAROLES.map((p) => ({ p, w: p.poids(c) * (c.recentes.includes(p.id) ? 0.12 : 1) })).filter((x) => x.w > 0);
+  const total = candidates.reduce((s, x) => s + x.w, 0);
+  let r = hasard() * total;
+  let pris = candidates[candidates.length - 1]?.p ?? PAROLES[0];
+  for (const x of candidates) {
+    r -= x.w;
+    if (r <= 0) {
+      pris = x.p;
+      break;
+    }
+  }
+  return { id: pris.id, text: pris.dit(c, hasard), ...pris.chips ? { chips: pris.chips } : {} };
+}
+function suiteParole(label, c, hasard) {
+  if (label === "Une autre") return { id: "blague", text: choisir(BLAGUES, hasard), chips: puces("Haha", "Bof") };
+  if (label === "Oui" && c.recentes[c.recentes.length - 1] === "resume") return { id: "resume-suite", text: resumeJournal(c.faits, c.maintenant) };
+  const t = SUITES[label];
+  return t ? { id: "suite", text: t } : null;
+}
 
 // src/stockage.ts
 var PREFIXE = "lia-ui:";
@@ -2761,6 +2917,7 @@ function injecterStyles() {
 }
 var limiter2 = (x, a, b) => Math.max(a, Math.min(b, x));
 var DELAI_CHAT_OUBLIE = 120;
+var DELAI_PAROLE_PROPRE = 28;
 var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
 var SURVOL_MS = 4e3;
 var DELAI_ACCOMPAGNER_MS = 18e4;
@@ -2841,6 +2998,7 @@ function mountLia(options = {}) {
   let dernierPropos = 0;
   let dernierMonde = 0;
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
+  const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
   let dernierDeplacement = 0;
@@ -2896,7 +3054,7 @@ function mountLia(options = {}) {
     const z = options.bounds?.();
     return z ?? { x: 0, y: 0, w: r.width, h: r.height };
   };
-  const choisir = (id) => {
+  const choisir2 = (id) => {
     const e = ST.includes(id) ? id : "repos";
     if (e !== etat) debut[e] = sansMouvement ? -1.6 : t;
     etat = e;
@@ -2963,15 +3121,15 @@ function mountLia(options = {}) {
     voixDebut = t;
     voixFin = t + totalVoix();
     parle = true;
-    choisir("reponse");
+    choisir2("reponse");
   };
   let attendReponse = false;
   const finVoix = () => {
     parle = false;
-    if (chatOuvert) choisir(etatForce ?? (attendReponse ? "demande" : "ecoute"));
-    else if (bulleChips && !bulle.hidden) choisir(etatForce ?? "demande");
-    else if (attention?.type === "element" && attention.colle) choisir(etatForce ?? attention.etatArrivee);
-    else choisir(etatForce ?? "repos");
+    if (chatOuvert) choisir2(etatForce ?? (attendReponse ? "demande" : "ecoute"));
+    else if (bulleChips && !bulle.hidden) choisir2(etatForce ?? "demande");
+    else if (attention?.type === "element" && attention.colle) choisir2(etatForce ?? attention.etatArrivee);
+    else choisir2(etatForce ?? "repos");
   };
   let bulleChips = null;
   const tais = () => {
@@ -3014,6 +3172,16 @@ function mountLia(options = {}) {
     const b = el("button", "lia-ui__puce", c.label);
     b.type = "button";
     b.addEventListener("click", () => {
+      if (estPuceLia(c.id)) {
+        if (contexte === "bulle") tais();
+        const suite = suiteParole(c.label, contexteParole(), Math.random);
+        if (suite) {
+          setTimeout(() => {
+            if (!detruit) dire(suite.text, suite.chips ? { chips: suite.chips } : void 0);
+          }, 350);
+        }
+        return;
+      }
       options.onChip?.(c.id, contexte);
       if (contexte === "bulle") tais();
     });
@@ -3054,18 +3222,17 @@ function mountLia(options = {}) {
     ajouterMsg(question, "moi");
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
-      choisir("indispo");
+      choisir2("indispo");
       return;
     }
     const ctrl = new AbortController();
     enCours = ctrl;
     const minuterie = setTimeout(() => ctrl.abort(), DELAI_QUESTION);
     const debutAttente = t;
-    let silhouette = "";
     const suivreAttente = () => {
       if (enCours !== ctrl || detruit || etatForce) return;
       const e = suiteReflexion(base, t - debutAttente);
-      if (e !== silhouette) choisir(silhouette = e);
+      if (e !== etat) choisir2(e);
     };
     suivreAttente();
     const veilleAttente = setInterval(suivreAttente, 500);
@@ -3086,9 +3253,9 @@ function mountLia(options = {}) {
       attendReponse = !!rep.chips?.length || /\?\s*[»"]?$/.test(rep.text.trim());
       voix(rep.text);
       if (rep.etat && estAction(rep.etat) && !etatForce) {
-        choisir(rep.etat);
+        choisir2(rep.etat);
         setTimeout(() => {
-          if (!detruit && parle && !etatForce) choisir("reponse");
+          if (!detruit && parle && !etatForce) choisir2("reponse");
         }, 1600);
       }
     } catch (e) {
@@ -3097,7 +3264,7 @@ function mountLia(options = {}) {
       const annule = e instanceof DOMException && e.name === "AbortError";
       if (annule && enCours !== ctrl) return;
       ajouterMsg(annule ? "Je mets trop de temps : r\xE9essaie dans un instant." : "Je n'arrive pas \xE0 r\xE9pondre pour le moment.", "lia", true);
-      choisir("indispo");
+      choisir2("indispo");
     } finally {
       clearTimeout(minuterie);
       clearInterval(veilleAttente);
@@ -3174,10 +3341,10 @@ function mountLia(options = {}) {
     });
     couche.appendChild(chat);
     placerAutour(chat);
-    choisir("ecoute");
+    choisir2("ecoute");
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
-      choisir("indispo");
+      choisir2("indispo");
     }
     champ.focus();
   };
@@ -3190,7 +3357,7 @@ function mountLia(options = {}) {
     chatOuvert = false;
     contexteQuestion = null;
     cesserDeReperer();
-    choisir(etatForce ?? "repos");
+    choisir2(etatForce ?? "repos");
     const f = derniereFocus;
     derniereFocus = null;
     if (f instanceof HTMLElement && f.isConnected) f.focus();
@@ -3356,6 +3523,7 @@ function mountLia(options = {}) {
   repere.hidden = true;
   couche.appendChild(repere);
   function cesserDeReperer() {
+    if (regarde && regarde === reperee && !(attention?.type === "element" && attention.el === regarde)) retirerRegard();
     reperee = null;
     repere.hidden = true;
   }
@@ -3483,10 +3651,10 @@ function mountLia(options = {}) {
       cible = { x: pos.x, y: pos.y };
       errance = { jusqua: t + 7 };
       relache = t;
-      choisir("content");
+      choisir2("content");
       memoriser();
       setTimeout(() => {
-        if (!detruit && !chatOuvert && !parle) choisir(etatForce ?? "repos");
+        if (!detruit && !chatOuvert && !parle) choisir2(etatForce ?? "repos");
       }, 1800);
     } else {
       poke();
@@ -3548,18 +3716,18 @@ function mountLia(options = {}) {
   };
   const peutBouger = () => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
   function finAttention() {
-    retirerRegard();
+    if (!reperee || reperee !== regarde) retirerRegard();
     if (!attention) return;
     attention = null;
     cible = { x: pos.x, y: pos.y };
     errance = { jusqua: t + 4 };
-    choisir(etatForce ?? "repos");
+    choisir2(etatForce ?? "repos");
   }
   function suivreCurseur(secondes = 8) {
     if (doux || !peutBouger() || !curseurRecent()) return false;
     attention = { type: "curseur", jusqua: t + secondes };
     errance = { jusqua: t + secondes };
-    choisir(etatForce ?? "repos");
+    choisir2(etatForce ?? "repos");
     return true;
   }
   function allerVoir(element, secondes = 10, etatArrivee) {
@@ -3573,7 +3741,7 @@ function mountLia(options = {}) {
       etatArrivee: etatArrivee && estAction(etatArrivee) ? etatArrivee : activiteElement(element, { largeur: r.width, hauteur: r.height })
     };
     errance = { jusqua: t + secondes };
-    choisir(etatForce ?? "cherche");
+    choisir2(etatForce ?? "cherche");
     marquerRegard(element);
     return true;
   }
@@ -3605,11 +3773,12 @@ function mountLia(options = {}) {
     cible = { x: p.x - r.left, y: p.y - r.top };
     if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) {
       a.colle = true;
-      if (!etatForce && !parle) choisir(a.etatArrivee);
+      if (!etatForce && !parle) choisir2(a.etatArrivee);
     }
   }
   const LONGUEUR_MAX_SPONTANE = 280;
   const silence = options.silence ?? [22, 7];
+  const parolePropre = options.parolePropre !== false;
   const relancesMax = options.relancesParJour ?? 2;
   const peutParlerSeule = () => !enSilence((/* @__PURE__ */ new Date()).getHours(), silence);
   const relancesRestantes = () => lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) < relancesMax;
@@ -3627,6 +3796,13 @@ function mountLia(options = {}) {
     if (!parole || !texte) return false;
     return dire(texte, parole.chips ? { chips: parole.chips } : void 0);
   };
+  let recentesParoles = [];
+  const contexteParole = () => ({ heure: (/* @__PURE__ */ new Date()).getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles });
+  const direPersonnel = () => {
+    const p = choisirParole(contexteParole(), Math.random);
+    recentesParoles = [...recentesParoles, p.id].slice(-6);
+    return dire(p.text, p.chips ? { chips: p.chips } : void 0);
+  };
   const direLa = (el2, texte, respecterSilence) => {
     setTimeout(() => {
       if (detruit || chatOuvert || glisse || parle || respecterSilence && !peutParlerSeule()) return;
@@ -3641,7 +3817,7 @@ function mountLia(options = {}) {
   };
   function envoyerVers(element, opts = {}) {
     if (!allerVoir(element, opts.secondes ?? 10, opts.etat)) return false;
-    if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir(opts.etat);
+    if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir2(opts.etat);
     const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (dit) direLa(element, dit, false);
     return true;
@@ -3652,11 +3828,11 @@ function mountLia(options = {}) {
     clearTimeout(finGeste);
     finAttention();
     etatForce = etat2;
-    choisir(etat2);
+    choisir2(etat2);
     finGeste = setTimeout(() => {
       if (detruit || etatForce !== etat2) return;
       etatForce = null;
-      choisir("repos");
+      choisir2("repos");
     }, dureeGeste(secondes) * 1e3);
     return true;
   }
@@ -3668,13 +3844,13 @@ function mountLia(options = {}) {
     return estAction(etat2) && tenir(etat2, secondes);
   }
   const passagere = (etat2, secondes) => {
-    choisir(etat2);
+    choisir2(etat2);
     finEtatTemp = t + secondes;
     errance = { jusqua: t + secondes };
   };
   const finirPassagere = () => {
     finEtatTemp = 0;
-    if (!parle && !etatForce && !chatOuvert && !attention && !dort) choisir("repos");
+    if (!parle && !etatForce && !chatOuvert && !attention && !dort) choisir2("repos");
   };
   function reveiller() {
     if (!dort) return;
@@ -3686,7 +3862,7 @@ function mountLia(options = {}) {
     const el2 = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
     const etat2 = etatSur(p.etat && estAction(p.etat) ? p.etat : ETAT_MONDE[motif]);
     if (el2 && allerVoir(el2, 9, etat2)) {
-      if (!etatForce) choisir(etat2);
+      if (!etatForce) choisir2(etat2);
     } else {
       if (motif === "appeler") venirPres();
       passagere(etat2, 5);
@@ -3695,6 +3871,14 @@ function mountLia(options = {}) {
       if (detruit || chatOuvert || menuOuvert || glisse || parle) return;
       dire(texte, p.chips ? { chips: p.chips } : void 0);
     }, 1500);
+  };
+  const anticiper = () => {
+    const dx = cible.x - pos.x;
+    const dy = cible.y - pos.y;
+    const d = Math.hypot(dx, dy);
+    if (d < rayon) return;
+    pos.vx -= dx / d * 70;
+    pos.vy -= dy / d * 70;
   };
   const lancer = (id, vues) => {
     comportement = id;
@@ -3709,8 +3893,9 @@ function mountLia(options = {}) {
       passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 5, 8));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
+      anticiper();
       errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
-      choisir("repos");
+      choisir2("repos");
       calme(30);
     } else if (id === "suivre") {
       suivreCurseur(entre(Math.random, 6, 11));
@@ -3721,13 +3906,14 @@ function mountLia(options = {}) {
       calme(20);
     } else if (id === "rentrer") {
       cible = { x: maison.x, y: maison.y };
+      anticiper();
       errance = { jusqua: t + 5.7 };
-      choisir("repos");
+      choisir2("repos");
       calme(30);
     } else if (id === "dormir") {
       dort = true;
       errance = { jusqua: t + 1e9 };
-      choisir("veille");
+      choisir2("veille");
     } else if (id === "veiller") {
       dernierMotif["veiller"] = Date.now();
       passagere(etatSur("surveille"), entre(Math.random, 7, 12));
@@ -3741,14 +3927,17 @@ function mountLia(options = {}) {
       calme(40);
     } else if (id === "causer" || id === "relancer") {
       derniereParole = t;
-      const parole = id === "relancer" ? direSpontane("relance") : direSpontane(Math.random() < 0.2 ? "salut" : "rien");
-      if (parole && id === "relancer") {
-        ecrireRelances(cle, { jour: jourLocal(/* @__PURE__ */ new Date()), n: lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) + 1 });
+      if (id === "relancer") {
+        if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(/* @__PURE__ */ new Date()), n: lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) + 1 });
+      } else {
+        const perso = parolePropre && Math.random() < 0.6;
+        const dit = !perso && direSpontane(Math.random() < 0.2 ? "salut" : "rien");
+        if (!dit && parolePropre) direPersonnel();
       }
       errance = { jusqua: t + 4 };
     } else {
       errance = { jusqua: t + entre(Math.random, 6, 12) };
-      choisir("repos");
+      choisir2("repos");
     }
   };
   const pesee = (id) => id === "causer" ? multIntention(reseau, "causer") * (1 - 0.5 * (reseau.int["setaire"] ?? 0)) : multIntention(reseau, id === "voir" ? "pointer" : id);
@@ -3788,7 +3977,8 @@ function mountLia(options = {}) {
       candidats(envies, {
         curseurRecent: curseurRecent(),
         cibles: vues.length,
-        parole: !!options.onSpontane && peutParlerSeule(),
+        parole: (!!options.onSpontane || parolePropre) && peutParlerSeule(),
+        delaiParole: parolePropre ? DELAI_PAROLE_PROPRE : 90,
         relance: relancesRestantes(),
         humeur: humeurNom,
         tranquille: t < tranquilleJusqua,
@@ -3954,21 +4144,45 @@ function mountLia(options = {}) {
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
     const colle = attention?.type === "element" && attention.colle;
-    if (sansMouvement || doux || still || colle) {
+    if (sansMouvement || doux || still) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
+      phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
     } else {
-      const k = glisse ? 260 : attention?.type === "element" && !attention.colle ? 150 : 95;
-      const zeta = 2 * Math.sqrt(k) * 0.9;
+      const demande = attention?.type === "element" && !attention.colle;
+      const suit = attention?.type === "curseur";
+      const balade = !glisse && !demande && !suit && !colle;
+      const k = colle ? 1600 : glisse ? 260 : demande ? 70 : suit ? 30 : 8;
+      const zeta = 2 * Math.sqrt(k) * (colle ? 1 : glisse ? 0.9 : demande ? 0.8 : suit ? 0.7 : 0.62);
+      const vmax = colle ? 2500 : balade ? 520 : demande ? 1100 : 900;
+      const amax = colle ? 2e4 : glisse ? 9e3 : balade ? 1500 : 3500;
       const n = Math.max(1, Math.ceil(dt / 8e-3));
       const h = dt / n;
       for (let q = 0; q < n; q++) {
-        pos.vx += (k * (cc.x - pos.x) - zeta * pos.vx) * h;
-        pos.vy += (k * (cc.y - pos.y) - zeta * pos.vy) * h;
+        let ax = k * (cc.x - pos.x) - zeta * pos.vx;
+        let ay = k * (cc.y - pos.y) - zeta * pos.vy;
+        const a = Math.hypot(ax, ay);
+        if (a > amax) {
+          ax *= amax / a;
+          ay *= amax / a;
+        }
+        pos.vx += ax * h;
+        pos.vy += ay * h;
+        const v2 = Math.hypot(pos.vx, pos.vy);
+        if (v2 > vmax) {
+          pos.vx *= vmax / v2;
+          pos.vy *= vmax / v2;
+        }
         pos.x += pos.vx * h;
         pos.y += pos.vy * h;
       }
+      const pas = Math.max(dt, 8e-3);
+      const lisse = 1 - Math.exp(-dt * 18);
+      phys.ax = limiter2(phys.ax + ((pos.vx - phys.vxPrec) / pas - phys.ax) * lisse, -2600, 2600);
+      phys.ay = limiter2(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
+      phys.vxPrec = pos.vx;
+      phys.vyPrec = pos.vy;
     }
     if (Math.hypot(pos.x - ancreDeplacement.x, pos.y - ancreDeplacement.y) > rayon * 0.5) {
       ancreDeplacement = { x: pos.x, y: pos.y };
@@ -3992,6 +4206,19 @@ function mountLia(options = {}) {
     const lts = {};
     for (const id of ST) lts[id] = sansMouvement ? 1.6 : t - (debut[id] ?? t);
     etatMoteur.lts = lts;
+    const mobile = !sansMouvement && !doux && !still;
+    const penche = mobile ? limiter2(pos.vx / 700, -1, 1) * 0.17 : 0;
+    const nb = Math.max(1, Math.ceil(dt / 0.01));
+    for (let q = 0; q < nb; q++) {
+      phys.vIncl += (55 * (penche - phys.incl) - 2 * 0.38 * Math.sqrt(55) * phys.vIncl) * (dt / nb);
+      phys.incl += phys.vIncl * (dt / nb);
+    }
+    if (!mobile) phys.incl = phys.vIncl = 0;
+    const filante = limiter2(vitesse / 700, 0, 1);
+    phys.flotte += ((mobile && vie && !glisse && !chatOuvert && !menuOuvert ? 1 : 0) - phys.flotte) * (still ? 1 : 1 - Math.exp(-dt * 2));
+    const amp = rayon * 0.26 * phys.flotte * (1 - 0.7 * filante);
+    const ox = amp * (Math.sin(t * 0.78 + 1.3) + 0.45 * Math.sin(t * 1.93));
+    const oy = amp * 0.85 * (Math.cos(t * 0.61) + 0.4 * Math.sin(t * 1.51 + 0.7)) + rayon * 0.05 * filante * Math.sin(t * 8.2);
     const cote = Math.round(rayon * 5);
     if (toile.style.width !== `${cote}px`) {
       toile.style.width = toile.style.height = `${cote}px`;
@@ -4009,10 +4236,14 @@ function mountLia(options = {}) {
         R: rayon,
         asp: 1,
         fly: v > 0.04 ? { dx: pos.vx, dy: pos.vy, v } : null,
+        acc: mobile ? { x: phys.ax, y: phys.ay } : null,
         snap: sansMouvement
       });
     }
-    corpsEl.style.transform = `translate(${pos.x.toFixed(1)}px,${pos.y.toFixed(1)}px)`;
+    corpsEl.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${(pos.y + oy).toFixed(1)}px)`;
+    const etire = 0.07 * filante;
+    const cap = Math.atan2(pos.vy, pos.vx);
+    toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${etire > 4e-3 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
       puceHumeur.hidden = chatOuvert;
       const dessous = Math.min(rayon * 1.05, Math.max(rayon * 0.6, z.y + z.h - pos.y - 26));
@@ -4046,7 +4277,7 @@ function mountLia(options = {}) {
     dernier = performance.now();
   };
   document.addEventListener("visibilitychange", surVisibilite);
-  choisir("repos");
+  choisir2("repos");
   if (sansMouvement) dessinerUneFois();
   else raf = requestAnimationFrame(boucle);
   if (options.salut) {
@@ -4062,7 +4293,7 @@ function mountLia(options = {}) {
     humeur: () => ({ nom: humeurNom, libelle: libelleHumeur(humeurNom), couleur: couleurHumeur(humeurNom) }),
     setEtat(e) {
       etatForce = e;
-      choisir(e ?? "repos");
+      choisir2(e ?? "repos");
     },
     setVieAutonome,
     suivreCurseur,
@@ -4133,6 +4364,7 @@ function Lia(props) {
       ...p.humeurVisible !== void 0 ? { humeurVisible: p.humeurVisible } : {},
       ...p.etat ? { etat: p.etat } : {},
       ...p.relancesParJour !== void 0 ? { relancesParJour: p.relancesParJour } : {},
+      ...p.parolePropre !== void 0 ? { parolePropre: p.parolePropre } : {},
       ...p.onSpontane ? { onSpontane: (m) => derniere.current.onSpontane?.(m) ?? null } : {},
       ...p.elements === false ? { elements: false } : p.elements ? {
         elements: {
