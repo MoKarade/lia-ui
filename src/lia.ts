@@ -289,6 +289,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     voix(texte);
     bulleFin = t + Math.max(5, totalVoix() + 3) + (chips.length ? 6 : 0);
     dernierMot = t;
+    // Sans boucle d'animation (mode « fixe »), rien d'autre ne place la bulle.
+    if (sansMouvement) dessinerUneFois();
     return true;
   };
 

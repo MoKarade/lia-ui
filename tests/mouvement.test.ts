@@ -94,6 +94,15 @@ describe("mouvement réduit : les trois modes", () => {
     expect(lia.suivreCurseur()).toBe(false);
   });
 
+  it("« fixe » place quand même sa bulle près d'elle (pas en haut à gauche)", () => {
+    lia = mountLia({ quandMouvementReduit: "fixe", vieAutonome: false });
+    expect(lia.dire("Bonjour.")).toBe(true);
+    const bulle = document.querySelector<HTMLElement>(".lia-ui__bulle");
+    expect(bulle?.hidden).toBe(false);
+    expect(bulle?.style.left).toMatch(/px$/);
+    expect(bulle?.style.top).toMatch(/px$/);
+  });
+
   it("sans demande du système, l'option ne change rien", () => {
     installerEnvironnement({ sansMouvement: false });
     lia = mountLia({ quandMouvementReduit: "fixe", vieAutonome: false });

@@ -2082,6 +2082,7 @@ function mountLia(options = {}) {
     voix(texte);
     bulleFin = t + Math.max(5, totalVoix() + 3) + (chips.length ? 6 : 0);
     dernierMot = t;
+    if (sansMouvement) dessinerUneFois();
     return true;
   };
   function creerPuce(c, contexte) {
