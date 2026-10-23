@@ -42,9 +42,11 @@ describe("pointPresDeLElement", () => {
     expect(p.x).toBe(549);
   });
 
-  it("se met sur l'élément quand il n'y a de place ni à droite ni à gauche", () => {
+  it("se range dans le coin haut-droit de l'élément quand il n'y a de place ni à droite ni à gauche (carte pleine largeur)", () => {
     const p = pointPresDeLElement(rect(10, 300, 990, 500), 60, fenetre);
-    expect(p.x).toBe(500);
+    expect(p).toEqual({ x: 948, y: 342 });
+    // Jamais au centre de la carte : elle cacherait ce qu'elle dit.
+    expect(p.x).toBeGreaterThan(10 + (990 - 10) * 0.66);
   });
 
   it("suit l'élément qui défile : le point bouge exactement comme lui", () => {

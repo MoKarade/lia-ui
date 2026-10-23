@@ -281,7 +281,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let entreesCourantes: Record<string, number> = {};
   let erreurMondeDite = false;
   /** L'élément regardé par Marc (sous son curseur, parmi les cibles) et depuis quand. */
-  let survol: { el: Element; depuis: number } | null = null;
+  let survol: { el: Element; depuis: number; centre?: boolean } | null = null;
+  /** Dernier défilement de la page (ms) : sans curseur, ce que Marc regarde est l'élément au centre de l'écran, quand ça s'est calmé. */
+  let dernierDefile = 0;
   const dernierAccompagne = new WeakMap<Element, number>();
   let elementSurvole: Element | null = null;
   let regarde: Element | null = null;
@@ -980,12 +982,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const surDefilement = (): void => {
     ajouterImpulsion(reseau, "scroll", 0.2);
     dernierMarc = Date.now();
+    dernierDefile = dernierMarc;
     if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
   const surGesteMarc = (e: Event): void => {
     dernierMarc = Date.now();
-    if (e.type !== "pointermove") return;
+    // Un doigt qui se pose et le clavier qui prend le focus valent un survol : au téléphone, c'est le seul « curseur » qu'elle a.
+    const pose = e.type === "pointerdown" && (e as PointerEvent).pointerType === "touch";
+    if (e.type !== "pointermove" && e.type !== "focusin" && !pose) return;
     let sous: Element | null = null;
     try {
       sous = e.target instanceof Element && !couche.contains(e.target) ? e.target.closest(selecteurCibles) : null;
@@ -994,7 +999,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
     if (sous !== survol?.el) survol = sous ? { el: sous, depuis: dernierMarc } : null;
   };
-  const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"] as const;
+  const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart", "focusin"] as const;
   for (const ev of GESTES_MARC) window.addEventListener(ev, surGesteMarc, { passive: true });
 
   function setVieAutonome(actifVie: boolean): void {
@@ -1086,9 +1091,19 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     pointeur.ms = performance.now();
     pointeur.fin = e.pointerType !== "touch";
     const r = couche.getBoundingClientRect();
-    regarder(limiter((e.clientX - r.left - pos.x) / 400, -1, 1), limiter((e.clientY - r.top - pos.y) / 400, -1, 1));
+    regarder(limiter((e.clientX - r.left - pos.x) / 400, -1, 1), limiter((e.clientY - r.top - pos.y) / 400, -1, 1), t);
   };
   window.addEventListener("pointermove", surCurseur, { passive: true });
+  // Un doigt qui se pose regarde aussi : ses yeux vont là où Marc touche, sans qu'elle bouge.
+  window.addEventListener("pointerdown", surCurseur, { passive: true });
+  /** Le clavier prend le focus quelque part : elle y jette un œil. */
+  const surFocus = (e: FocusEvent): void => {
+    if (!(e.target instanceof Element) || couche.contains(e.target)) return;
+    const r = couche.getBoundingClientRect();
+    const f = e.target.getBoundingClientRect();
+    regarder(limiter((f.left + f.width / 2 - r.left - pos.x) / 400, -1, 1), limiter((f.top + f.height / 2 - r.top - pos.y) / 400, -1, 1), t);
+  };
+  window.addEventListener("focusin", surFocus, { passive: true });
   const surClicHors = (e: PointerEvent): void => {
     if (menuOuvert && menu && !menu.contains(e.target as Node)) fermerMenu();
   };
@@ -1763,6 +1778,29 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   let erreursImage = 0;
   /* Présente tout le temps : si la page retire sa couche (rendu remplacé, erreur, navigation), elle la remet. */
+  /** Sans curseur (téléphone), ce que Marc regarde est l'élément au centre de l'écran, 1,5 s après le dernier défilement (maquette : `VUE.centre`). */
+  const veilleEcran = setInterval(() => {
+    if (detruit || pointeur.fin || document.hidden) return;
+    const maintenant = Date.now();
+    if (maintenant - dernierDefile < 1500 || maintenant - dernierMarc > 60_000) return;
+    if (survol && !survol.centre && survol.el.isConnected) return;
+    const f = fenetre();
+    const cx = f.w / 2;
+    const cy = f.h / 2;
+    let meilleur: Element | null = null;
+    let d0 = Infinity;
+    for (const x of regardables()) {
+      const b = x.getBoundingClientRect();
+      const d = Math.hypot((b.left + b.right) / 2 - cx, (b.top + b.bottom) / 2 - cy);
+      if (d < d0) {
+        d0 = d;
+        meilleur = x;
+      }
+    }
+    if (!meilleur) {
+      if (survol?.centre) survol = null;
+    } else if (survol?.el !== meilleur) survol = { el: meilleur, depuis: maintenant, centre: true };
+  }, 500);
   const veilleCouche = setInterval(() => {
     if (detruit || couche.isConnected) return;
     const hote = conteneur?.isConnected ? conteneur : document.body;
@@ -1836,9 +1874,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       document.removeEventListener("pointermove", surBougePage, true);
       for (const fin of ["pointerup", "pointercancel", "scroll"]) document.removeEventListener(fin, annulerAppuiPage, true);
       window.removeEventListener("scroll", surDefilement, true);
+      window.removeEventListener("focusin", surFocus);
+      window.removeEventListener("pointerdown", surCurseur);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
       clearInterval(veilleCouche);
+      clearInterval(veilleEcran);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);

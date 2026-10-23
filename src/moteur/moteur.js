@@ -361,7 +361,7 @@ function brut(sp){for(const[a,b,m]of TL){if(sp>=a&&sp<=b)return Math.pow(Math.si
 /* L'âme : regard, souffle, clignement, hochements, soupirs, hésitations, réactions */
 const ptr={x:0,y:0,t:-9,sp:0};
 /* Le regard suit le curseur : position normalisée (-1..1) dans le cadre de référence que l'hôte choisit. */
-export function regarder(nx,ny){ptr.sp=Math.min(1,Math.hypot(nx-ptr.x,ny-ptr.y)*6);ptr.x=nx;ptr.y=ny;ptr.t=performance.now()/1000;}
+export function regarder(nx,ny,t){ptr.sp=Math.min(1,Math.hypot(nx-ptr.x,ny-ptr.y)*6);ptr.x=nx;ptr.y=ny;ptr.t=typeof t==='number'?t:performance.now()/1000;}
 const HK={v:.35},THK={v:.008};
 const HZ={gx:0,gy:0,b:0,blink:0,kick:0,sq:0,mag:0,nod:0,hes:0,tilt:0,typeA:0,flash:0,cur:0,hop:0,yawn:0,shiv:0};
 const HUM={gx:0,gy:0,vx:0,vy:0,tgx:0,tgy:0,next:0,sacc:0,pend:null,phase:0,b:0,blinkAt:2,blinkT:-9,ts:0,last:'repos',sil:0,vs:0,seq:0,seqT:0,
