@@ -397,7 +397,7 @@ interface ContexteChoix {
     veille?: boolean;
     /** Ses intentions (0 à 1) ; absent = aucune. */
     intentions?: Readonly<Record<string, number>>;
-    /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 40 s, l'envie de bouger monte. */
+    /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 30 s, l'envie de bouger monte. */
     secondesImmobile?: number;
 }
 interface Candidat {

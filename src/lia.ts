@@ -1358,7 +1358,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
     } else {
-      const k = glisse ? 260 : 95;
+      // Quand Marc lui demande d'aller quelque part, elle y court plus vite que dans ses balades.
+      const k = glisse ? 260 : attention?.type === "element" && !attention.colle ? 150 : 95;
       const zeta = 2 * Math.sqrt(k) * 0.9;
       const n = Math.max(1, Math.ceil(dt / 0.008));
       const h = dt / n;
@@ -1440,11 +1441,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const boucle = (maintenant: number): void => {
     if (detruit) return;
     // Jamais négatif : l'horloge de rAF peut précéder `performance.now()` d'un instant, et un pas négatif ferait diverger le ressort.
-    const dt = Math.max(0, Math.min(0.05, (maintenant - dernier) / 1000 || 0));
+    const reel = Math.max(0, Math.min(1, (maintenant - dernier) / 1000 || 0));
     dernier = maintenant;
     if (!document.hidden) {
-      t += dt;
-      dessinerImage(false, dt);
+      // Son temps est le temps réel : sur un écran qui ne donne que quelques images par seconde, ses envies, ses délais et ses
+      // déplacements ne ralentissent pas (un pas borné à 0,05 s la faisait vivre 5 à 10 fois trop lentement). Seul le pas du dessin est borné.
+      t += reel;
+      dessinerImage(false, Math.min(reel, 0.25));
     }
     raf = requestAnimationFrame(boucle);
   };
@@ -1486,7 +1489,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     envoyer: envoyerVers,
     geste,
     venirPres,
-    rester: finAttention,
+    rester: () => {
+      finAttention();
+      pos.vx = pos.vy = 0;
+    },
     destroy() {
       if (detruit) return;
       detruit = true;

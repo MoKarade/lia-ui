@@ -106,7 +106,7 @@ function apresComportement(e, id) {
       return { ...e };
   }
 }
-var envieDeBouger = (secondesImmobile) => Math.min(1.2, Math.max(0, ((secondesImmobile ?? 0) - 40) / 50));
+var envieDeBouger = (secondesImmobile) => Math.min(3.6, Math.max(0, ((secondesImmobile ?? 0) - 30) / 20));
 function candidats(e, c) {
   const liste = [];
   const bouge = c.deplacement && !c.tranquille;
@@ -3755,7 +3755,7 @@ function mountLia(options = {}) {
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
     } else {
-      const k = glisse ? 260 : 95;
+      const k = glisse ? 260 : attention?.type === "element" && !attention.colle ? 150 : 95;
       const zeta = 2 * Math.sqrt(k) * 0.9;
       const n = Math.max(1, Math.ceil(dt / 8e-3));
       const h = dt / n;
@@ -3830,11 +3830,11 @@ function mountLia(options = {}) {
   }
   const boucle = (maintenant) => {
     if (detruit) return;
-    const dt = Math.max(0, Math.min(0.05, (maintenant - dernier) / 1e3 || 0));
+    const reel = Math.max(0, Math.min(1, (maintenant - dernier) / 1e3 || 0));
     dernier = maintenant;
     if (!document.hidden) {
-      t += dt;
-      dessinerImage(false, dt);
+      t += reel;
+      dessinerImage(false, Math.min(reel, 0.25));
     }
     raf = requestAnimationFrame(boucle);
   };
@@ -3874,7 +3874,10 @@ function mountLia(options = {}) {
     envoyer: envoyerVers,
     geste,
     venirPres,
-    rester: finAttention,
+    rester: () => {
+      finAttention();
+      pos.vx = pos.vy = 0;
+    },
     destroy() {
       if (detruit) return;
       detruit = true;
@@ -3929,4 +3932,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-5EEAS3UH.mjs.map
+//# sourceMappingURL=chunk-XMPGHAA7.mjs.map

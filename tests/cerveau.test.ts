@@ -144,17 +144,25 @@ describe("candidats", () => {
 });
 
 describe("envie de bouger avec l'immobilité", () => {
-  it("rien avant 40 s, puis elle monte jusqu'à 1,2", () => {
+  it("rien avant 30 s, +1 à 50 s, puis elle monte jusqu'à 3,6", () => {
     expect(envieDeBouger(undefined)).toBe(0);
-    expect(envieDeBouger(40)).toBe(0);
-    expect(envieDeBouger(65)).toBeCloseTo(0.5);
-    expect(envieDeBouger(1000)).toBe(1.2);
+    expect(envieDeBouger(30)).toBe(0);
+    expect(envieDeBouger(50)).toBeCloseTo(1);
+    expect(envieDeBouger(70)).toBeCloseTo(2);
+    expect(envieDeBouger(1000)).toBe(3.6);
   });
 
-  it("après 100 s sans bouger, se promener pèse plus que se reposer ; avant 40 s, non", () => {
+  it("après 60 s sans bouger, se promener pèse plus que se reposer ; avant 30 s, non", () => {
     const poids = (s: number, id: string): number => candidats(ENVIES_DEPART, { ...choix, secondesImmobile: s }).find((c) => c.id === id)?.poids ?? 0;
     expect(poids(10, "promener")).toBeLessThan(poids(10, "repos"));
-    expect(poids(100, "promener")).toBeGreaterThan(poids(100, "repos"));
+    expect(poids(60, "promener")).toBeGreaterThan(poids(60, "repos"));
+  });
+
+  it("après 100 s sans bouger, se promener bat même un appel de l'hôte (3,2) : elle ne reste jamais figée", () => {
+    const ctx = { ...choix, secondesImmobile: 100, monde: ["appeler" as const] };
+    const inquiete = { ...ENVIES_DEPART, inquiet: 0.8 };
+    const liste = candidats(inquiete, ctx);
+    expect(liste.find((c) => c.id === "promener")?.poids ?? 0).toBeGreaterThan(liste.find((c) => c.id === "appeler")?.poids ?? 9);
   });
 
   it("elle ne s'applique pas quand elle n'a pas le droit de se déplacer", () => {
