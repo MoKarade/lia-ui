@@ -43,6 +43,18 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__etat-humeur{position:absolute;left:0;top:0;transform:translateX(-50%);display:flex;align-items:center;gap:.4rem;padding:.25rem .7rem;border-radius:999px;border:1px solid color-mix(in srgb,var(--lia-point,var(--lia-accent)) 55%,var(--lia-border));background:var(--lia-glass);color:color-mix(in srgb,var(--lia-point,var(--lia-accent)) 70%,var(--lia-text));font-size:.8rem;line-height:1.2;white-space:nowrap;pointer-events:none;transition:border-color 1.2s ease,color 1.2s ease}
 .lia-ui__etat-humeur[hidden]{display:none}
 .lia-ui__etat-humeur i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--lia-point,var(--lia-accent))}
+.lia-ui__cadre{position:absolute;pointer-events:none;opacity:0;transform:scale(1.05);transition:opacity .35s ease,transform .45s cubic-bezier(.2,.8,.2,1);background:color-mix(in srgb,var(--lia-cadre,#2DD4BF) 6%,transparent);border-radius:6px;--lia-cadre:#2DD4BF;--lia-cadre2:#22D3EE}
+.lia-ui__cadre[hidden]{display:none}
+.lia-ui__cadre--pose{opacity:1;transform:none}
+.lia-ui__coin{position:absolute;width:22px;height:22px;border:0 solid var(--lia-cadre);border-radius:4px}
+.lia-ui__coin--hg{left:0;top:0;border-top-width:3px;border-left-width:3px}
+.lia-ui__coin--hd{right:0;top:0;border-top-width:3px;border-right-width:3px}
+.lia-ui__coin--bg{left:0;bottom:0;border-bottom-width:3px;border-left-width:3px}
+.lia-ui__coin--bd{right:0;bottom:0;border-bottom-width:3px;border-right-width:3px}
+.lia-ui__balai{position:absolute;left:6px;right:6px;top:0;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--lia-cadre2),transparent);box-shadow:0 0 10px var(--lia-cadre2);animation:lia-ui-balaye 1.8s ease-in-out infinite alternate}
+@keyframes lia-ui-balaye{from{top:0}to{top:calc(100% - 2px)}}
+.lia-ui__cadre--fixe,.lia-ui__cadre--fixe .lia-ui__balai{transition:none;animation:none}
+.lia-ui__cadre--fixe .lia-ui__balai{top:50%}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
 .lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
 .lia-ui__menu:not(.lia-ui__menu--element){min-width:264px}
