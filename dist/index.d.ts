@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle, H as HumeurLia } from './types-jU2aGFxk.js';
-export { A as ActionLia, D as DescriptionElement, E as EnvoiLia, G as GESTES, a as GesteLia, b as HUMEURS_LIA, c as HUMEURS_MENU, d as LIBELLE_HUMEUR, M as MotifSpontane, e as OptionsElements, P as ParoleSpontanee, f as PuceLia, R as ReponseLia, Z as ZoneVie } from './types-jU2aGFxk.js';
+import { O as OptionsLia, L as LiaHandle, H as HumeurLia } from './types-B8QiUS-n.js';
+export { A as ActionLia, D as DescriptionElement, E as EnvoiLia, G as GESTES, a as GesteLia, b as HUMEURS_LIA, c as HUMEURS_MENU, d as LIBELLE_HUMEUR, M as MotifSpontane, e as OptionsElements, P as ParoleSpontanee, f as PuceLia, R as ReponseLia, Z as ZoneVie } from './types-B8QiUS-n.js';
 
 /**
  * Fait vivre LIA : 100 traits en canvas 2D, vie propre, discussion au clic, menu au clic droit.

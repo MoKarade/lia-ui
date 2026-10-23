@@ -13,7 +13,7 @@ export interface LiaProps extends OptionsLia {
  * LIA pour React / Next.js. Rend `null` : elle vit dans sa propre couche, montée côté navigateur
  * seulement. Les callbacks (`ask`, `actions`, `onChip`…) peuvent changer à chaque rendu sans la remonter ;
  * `onSpontane` et `elements.decrire` aussi ; `container`, `rayon`, `cle`, `vieAutonome`, `cibles`, `silence`,
- * `relancesParJour` et `elements.selecteur` ne sont lus qu'au montage.
+ * `quandMouvementReduit`, `relancesParJour` et `elements.selecteur` ne sont lus qu'au montage.
  */
 export function Lia(props: LiaProps): null {
   const derniere = useRef(props);
@@ -29,6 +29,7 @@ export function Lia(props: LiaProps): null {
       ...(p.salut !== undefined ? { salut: p.salut } : {}),
       ...(p.cibles !== undefined ? { cibles: p.cibles } : {}),
       ...(p.silence ? { silence: p.silence } : {}),
+      ...(p.quandMouvementReduit ? { quandMouvementReduit: p.quandMouvementReduit } : {}),
       ...(p.relancesParJour !== undefined ? { relancesParJour: p.relancesParJour } : {}),
       ...(p.onSpontane
         ? { onSpontane: (m: MotifSpontane) => derniere.current.onSpontane?.(m) ?? null }

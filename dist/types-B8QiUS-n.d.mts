@@ -156,6 +156,12 @@ interface OptionsLia {
      * Pour une visite d'élément, sa phrase est l'attribut `data-lia-dit` de l'élément.
      */
     onSpontane?: (motif: MotifSpontane) => string | ParoleSpontanee | null | undefined;
+    /**
+     * Que faire quand le système demande de réduire les animations (`prefers-reduced-motion`).
+     * `"doux"` (défaut) : elle ne traverse jamais l'écran, mais respire, change de forme, fait ses gestes et parle sur place.
+     * `"fixe"` : une seule image, rien ne bouge. `"complet"` : ignore la demande du système (choix de l'hôte, par exemple pour une app personnelle).
+     */
+    quandMouvementReduit?: "doux" | "fixe" | "complet";
     /** Heures locales de silence [début, fin[ : aucune parole spontanée. Défaut [22, 7]. */
     silence?: readonly [number, number];
     /** Plafond de relances par jour (mémorisé dans le navigateur). Défaut 2. */
