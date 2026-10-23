@@ -19,9 +19,13 @@ export interface Envies {
 export const ENVIES_DEPART: Readonly<Envies> = { energie: 0.85, curiosite: 0.35, social: 0.45, inquiet: 0, joie: 0.3, ennui: 0.15 };
 
 /** Ce qu'elle choisit de faire quand rien ne se passe. `relancer` : une remarque que l'hôte voulait lui voir répéter (2 par jour au plus). */
-export type Comportement = "repos" | "suivre" | "promener" | "causer" | "relancer" | "jouer" | "voir" | "rentrer" | "dormir";
+export type Comportement = "repos" | "suivre" | "promener" | "causer" | "relancer" | "jouer" | "voir" | "rentrer" | "dormir" | MotifMonde | "veiller";
 
-export const COMPORTEMENTS: readonly Comportement[] = ["voir", "suivre", "promener", "causer", "relancer", "jouer", "rentrer", "dormir", "repos"];
+/** Ce que l'hôte sait lui faire dire de vrai : `appeler` (un problème), `resumer` (une tendance), `feliciter`, `rappeler`, `souvenir`. */
+export type MotifMonde = "appeler" | "resumer" | "feliciter" | "rappeler" | "souvenir";
+export const MOTIFS_MONDE: readonly MotifMonde[] = ["appeler", "resumer", "feliciter", "rappeler", "souvenir"];
+
+export const COMPORTEMENTS: readonly Comportement[] = ["voir", "suivre", "promener", "causer", "relancer", "jouer", "rentrer", "dormir", "repos", ...MOTIFS_MONDE, "veiller"];
 
 const borne = (x: number): number => Math.max(0, Math.min(1, x));
 
@@ -67,6 +71,8 @@ export function apresComportement(e: Readonly<Envies>, id: Comportement): Envies
       return { ...e, social: borne(e.social - 0.35) };
     case "voir":
       return { ...e, curiosite: borne(e.curiosite - 0.2) };
+    case "feliciter":
+      return { ...e, joie: borne(e.joie + 0.1) };
     default:
       return { ...e };
   }
@@ -91,6 +97,14 @@ export interface ContexteChoix {
   deplacement: boolean;
   /** Secondes depuis qu'elle a parlé seule : pas de remarque avant 90 s. */
   secondesDepuisParole: number;
+  /** Les motifs pour lesquels l'hôte a une proposition vraie et dont le délai est passé ; absent = aucun. */
+  monde?: readonly MotifMonde[];
+  /** Marc est là (il a bougé il y a moins d'une minute). */
+  present?: boolean;
+  /** C'est la nuit ou Marc est parti depuis un moment : elle peut veiller, et le délai de 4 min est passé. */
+  veille?: boolean;
+  /** Ses intentions (0 à 1) ; absent = aucune. */
+  intentions?: Readonly<Record<string, number>>;
 }
 
 export interface Candidat {
@@ -109,6 +123,16 @@ export function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[] {
   if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) });
   if (c.parole && c.secondesDepuisParole > 90) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 });
   if (c.parole && c.relance && c.secondesDepuisParole > 90) liste.push({ id: "relancer", poids: 0.15 });
+  const monde = c.monde ?? [];
+  const veut = (id: string): number => c.intentions?.[id] ?? 0;
+  if (monde.includes("appeler") && e.energie > 0.15 && e.inquiet > 0.35) liste.push({ id: "appeler", poids: 3.2 });
+  if (!c.tranquille && c.present) {
+    if (monde.includes("resumer")) liste.push({ id: "resumer", poids: 0.15 + veut("resumer") * 1.1 + (e.curiosite > 0.5 ? 0.15 : 0) });
+    if (monde.includes("rappeler")) liste.push({ id: "rappeler", poids: 0.2 + veut("rappeler") * 1.1 });
+    if (monde.includes("souvenir")) liste.push({ id: "souvenir", poids: 0.1 + veut("souvenir") * 1.1 });
+  }
+  if (c.present && monde.includes("feliciter")) liste.push({ id: "feliciter", poids: 0.2 + veut("feliciter") * 1.2 });
+  if (c.veille) liste.push({ id: "veiller", poids: 0.1 + veut("veiller") * 1.2 });
   liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.1 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
   if (c.deplacement && c.loinDeLaMaison && !c.tranquille) liste.push({ id: "rentrer", poids: 1.6 });
   if (e.energie < 0.3) liste.push({ id: "dormir", poids: (0.5 - e.energie) * 5 });

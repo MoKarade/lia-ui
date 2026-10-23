@@ -1,5 +1,7 @@
-import type { Envies, FaitLia } from "./cerveau.js";
+import type { Envies, FaitLia, MotifMonde } from "./cerveau.js";
 import type { GesteLia } from "./gestes.js";
+
+export type { MotifMonde };
 
 /** Les 12 humeurs de LIA (source : maquette validée du 22/10/2026). */
 export const HUMEURS_LIA = [
@@ -69,6 +71,15 @@ export interface ParoleSpontanee {
   chips?: readonly PuceLia[];
 }
 
+/** Ce que l'hôte propose qu'elle dise pour un motif. Le texte est de lui et doit être vrai ; ce paquet n'en écrit aucun. */
+export interface PropositionMonde {
+  text: string;
+  /** Réponses rapides sous la bulle. */
+  chips?: readonly PuceLia[];
+  /** L'élément où elle va se poser pour le dire (la carte de l'app concernée). Sans lui : elle le dit sur place (près du curseur pour `appeler`). */
+  element?: Element | null;
+}
+
 /** Ce que LIA sait d'un élément de la page : de quoi parler de lui, jamais plus. */
 export interface DescriptionElement {
   /** Ce que c'est, « une carte d'app », « un bouton » (dit comme dans « c'est … »). */
@@ -128,6 +139,14 @@ export interface OptionsLia {
    * Elles priment sur celles qu'elle calcule seule (heure, activité de Marc, rythme des échanges). Absent : elle vit sans monde.
    */
   entrees?: () => Readonly<Record<string, number>>;
+  /**
+   * Ce que l'hôte a de vrai à lui faire dire sur le monde, un motif à la fois : `appeler` (un problème à signaler),
+   * `resumer` (une tendance), `feliciter` (une bonne nouvelle), `rappeler` (une chose à ne pas oublier), `souvenir`.
+   * Renvoie la proposition, ou `null` quand il n'y a rien de vrai : elle n'a alors aucune raison de choisir ce comportement.
+   * Elle seule décide du moment (délais de 90 s à 30 min, ses envies, ses intentions) ; elle respecte les heures de `silence`.
+   * Appelée sans effet de bord, au plus une fois par motif toutes les 1,2 s.
+   */
+  monde?: (motif: MotifMonde) => PropositionMonde | null | undefined;
   /** Zone où LIA a le droit de se déplacer ; par défaut toute la couche. */
   bounds?: () => ZoneVie;
   /** Rayon du corps en pixels CSS ; défaut 56. */
