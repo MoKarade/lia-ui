@@ -119,8 +119,11 @@ const limiter = (x: number, a: number, b: number): number => Math.max(a, Math.mi
  * Une seule LIA par page. Aucun réseau, aucun secret : tout ce qu'elle sait passe par `options.ask`.
  */
 /** Délai minimal entre deux fois (secondes), comme la maquette V9. */
-const DELAI_MONDE: Record<MotifMonde | "veiller", number> = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, veiller: 240 };
-const ETAT_MONDE: Record<MotifMonde, string> = { appeler: "alerte", resumer: "surveille", feliciter: "reussi", rappeler: "surveille", souvenir: "content" };
+const DELAI_MONDE: Record<MotifMonde | "veiller", number> = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
+/** Marc regarde un élément depuis ce temps (ms) : elle vient regarder avec lui, au plus une fois par élément toutes les 3 minutes. */
+const SURVOL_MS = 4000;
+const DELAI_ACCOMPAGNER_MS = 180_000;
+const ETAT_MONDE: Record<MotifMonde, string> = { appeler: "alerte", resumer: "surveille", feliciter: "reussi", rappeler: "surveille", souvenir: "content", accompagner: "surveille" };
 const etatSur = (etat: string): string => (ST.includes(etat) ? etat : "repos");
 
 export function mountLia(options: OptionsLia = {}): LiaHandle {
@@ -237,6 +240,20 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let propositions: Partial<Record<MotifMonde, PropositionMonde>> = {};
   let entreesCourantes: Record<string, number> = {};
   let erreurMondeDite = false;
+  /** L'élément regardé par Marc (sous son curseur, parmi les cibles) et depuis quand. */
+  let survol: { el: Element; depuis: number } | null = null;
+  const dernierAccompagne = new WeakMap<Element, number>();
+  let elementSurvole: Element | null = null;
+  let regarde: Element | null = null;
+  const retirerRegard = (): void => {
+    regarde?.removeAttribute("data-regard");
+    regarde = null;
+  };
+  const marquerRegard = (el: Element): void => {
+    retirerRegard();
+    el.setAttribute("data-regard", "");
+    regarde = el;
+  };
   let derniereDecision = -999;
   let derniereParole = -999;
   let dort = false;
@@ -737,8 +754,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
-  const surGesteMarc = (): void => {
+  const surGesteMarc = (e: Event): void => {
     dernierMarc = Date.now();
+    if (e.type !== "pointermove") return;
+    let sous: Element | null = null;
+    try {
+      sous = e.target instanceof Element && !couche.contains(e.target) ? e.target.closest(selecteurCibles) : null;
+    } catch {
+      /* sélecteur invalide fourni par l'hôte : elle ne sait rien de ce que Marc regarde */
+    }
+    if (sous !== survol?.el) survol = sous ? { el: sous, depuis: dernierMarc } : null;
   };
   const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"] as const;
   for (const ev of GESTES_MARC) window.addEventListener(ev, surGesteMarc, { passive: true });
@@ -864,6 +889,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const peutBouger = (): boolean => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
 
   function finAttention(): void {
+    retirerRegard();
     if (!attention) return;
     attention = null;
     cible = { x: pos.x, y: pos.y };
@@ -954,6 +980,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   const visiter = (el: Element, secondes: number): void => {
     if (!allerVoir(el, secondes)) return;
+    marquerRegard(el);
     const dit = el.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (dit) direLa(el, dit, true);
   };
@@ -1006,6 +1033,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
     if (el && allerVoir(el, 9)) {
+      if (motif === "accompagner") marquerRegard(el);
       if (!etatForce) choisir(etatSur(ETAT_MONDE[motif]));
     } else {
       if (motif === "appeler") venirPres();
@@ -1053,10 +1081,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       dernierMotif["veiller"] = Date.now();
       passagere(etatSur("surveille"), entre(Math.random, 7, 12));
       calme(30);
-    } else if (id === "appeler" || id === "resumer" || id === "feliciter" || id === "rappeler" || id === "souvenir") {
+    } else if (id === "appeler" || id === "resumer" || id === "feliciter" || id === "rappeler" || id === "souvenir" || id === "accompagner") {
       const p = propositions[id];
       dernierMotif[id] = Date.now();
-      if (p) direMonde(id, p);
+      if (id === "accompagner" && elementSurvole) dernierAccompagne.set(elementSurvole, Date.now());
+      if (p) direMonde(id, id === "accompagner" && !p.element ? { ...p, element: elementSurvole } : p);
       if (id === "feliciter" && reseauActif) impulsion(reseau, "bon", 0.6);
       calme(40);
     } else if (id === "causer" || id === "relancer") {
@@ -1080,10 +1109,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     propositions = {};
     if (!options.monde || !peutParlerSeule()) return [];
     const maintenant = Date.now();
+    elementSurvole = null;
     for (const m of MOTIFS_MONDE) {
       if (maintenant - (dernierMotif[m] ?? 0) < DELAI_MONDE[m] * 1000) continue;
+      if (m === "accompagner") {
+        const s = survol;
+        if (t < tranquilleJusqua || !s || !s.el.isConnected || maintenant - s.depuis < SURVOL_MS || maintenant - (dernierAccompagne.get(s.el) ?? 0) < DELAI_ACCOMPAGNER_MS) continue;
+        elementSurvole = s.el;
+      }
       try {
-        const p = options.monde(m);
+        const p = m === "accompagner" && elementSurvole ? options.monde(m, elementSurvole) : options.monde(m);
         if (p?.text.trim()) propositions[m] = p;
       } catch (e) {
         if (!erreurMondeDite) console.error("LIA : monde a échoué, elle n'a rien à dire sur ce sujet", e);
@@ -1298,6 +1333,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     destroy() {
       if (detruit) return;
       detruit = true;
+      retirerRegard();
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
       clearInterval(minuterieEnvies);
