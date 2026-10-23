@@ -16,7 +16,7 @@
 - **Échec fermé** : sans `ask`, ou si `ask` échoue, LIA dit qu'elle est indisponible. Jamais de réponse inventée.
 - **Texte du modèle = DONNÉE** : tout texte reçu (réponse, bulle, puces) entre par `textContent`, jamais par `innerHTML`. Les blocs composés passent par `renderBlocks`, fourni et validé par l'hôte.
 - **Une seule LIA par page** (l'état du moteur est global). `mountLia` refuse un second montage ; `destroy()` libère tout.
-- **Elle ne bouge jamais l'écran de Marc** : couche `pointer-events: none` hors du corps, elle ne décide jamais de parler seule (seul l'hôte appelle `dire`), mouvement coupé si `prefers-reduced-motion`.
+- **Elle ne bouge jamais l'écran de Marc** : couche `pointer-events: none` hors du corps, elle ne décide jamais de parler seule (seul l'hôte appelle `dire`), avec `prefers-reduced-motion` elle ne traverse jamais l'écran (`quandMouvementReduit`, défaut « doux » : elle vit sur place).
 - **Moteur `src/moteur/moteur.js` = repris tel quel de la maquette validée (22/10/2026)**, volontairement non typé ; son contrat est `moteur.d.ts`. On ne le réécrit pas à l'œil : toute retouche de silhouette ou d'humeur passe par une maquette validée par Marc.
 - **Accessibilité** : cibles ≥ 44 px, champ à 16 px, focus visible, clavier complet (Entrée, Échap, flèches, touche Menu), pas d'emoji.
 - **Couleurs en variables `--lia-*`** (valeurs sombres par défaut du hub), jamais de police téléchargée : `font-family: inherit`.

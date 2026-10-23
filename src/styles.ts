@@ -3,7 +3,7 @@
  * (palette du hub) ; l'hôte les surcharge sur `.lia-ui` s'il le faut. Cibles ≥ 44 px, champs à 16 px.
  */
 export const CSS = `
-.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;
+.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;--lia-h-curieux:#93A0FF;--lia-h-calme:#5CC8B6;--lia-h-joyeux:#E3A23B;--lia-h-concentre:#9B7BE0;--lia-h-espiegle:#E5809F;--lia-h-fatigue:#8A8F98;
 position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inherit;color:var(--lia-text)}
 .lia-ui--conteneur{position:absolute;z-index:5}
 .lia-ui *{box-sizing:border-box}
@@ -40,5 +40,17 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__item{min-height:44px;display:flex;align-items:center;gap:.6rem;padding:0 .8rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;text-align:left;cursor:pointer}
 .lia-ui__item:hover{background:var(--lia-surface-2)}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
+.lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
+.lia-ui__menu:not(.lia-ui__menu--element){min-width:264px}
+.lia-ui__rangee{display:grid;gap:4px;padding:.2rem .1rem}
+.lia-ui__rangee--humeurs{grid-template-columns:repeat(3,1fr)}
+.lia-ui__rangee--gestes{grid-template-columns:repeat(4,1fr)}
+.lia-ui__humeur{justify-content:flex-start;gap:.4rem;padding:0 .5rem;font-size:.82rem;border:1px solid transparent}
+.lia-ui__humeur::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--lia-point,var(--lia-soft))}
+.lia-ui__humeur[aria-checked=true]{border-color:var(--lia-point,var(--lia-accent));background:var(--lia-surface-2)}
+.lia-ui__geste{justify-content:center;padding:0;color:var(--lia-soft)}
+.lia-ui__geste:hover,.lia-ui__geste:focus-visible{color:var(--lia-text)}
+.lia-ui__repere{position:absolute;pointer-events:none;border:2px solid var(--lia-accent);border-radius:12px;box-shadow:0 0 0 4px rgba(147,160,255,.18)}
+.lia-ui__repere[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){.lia-ui__points i{animation:none}}
 `;

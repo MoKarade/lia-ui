@@ -1,12 +1,27 @@
 // src/autonomie.ts
 var ETATS_ERRANCE = ["repos", "musique", "content", "repos", "surpris"];
 var HUMEURS_DERIVE = ["curieux", "calme", "joyeux", "concentre", "espiegle", "fatigue"];
+var HUMEURS_ECHEANCE = ["curieux", "calme", "joyeux", "concentre", "espiegle"];
+var PERIODE_DERIVE_HUMEUR_MS = 4e4;
+var CHANCE_DERIVE_HUMEUR = 0.35;
+function deriveHumeur(hasard) {
+  return hasard() < CHANCE_DERIVE_HUMEUR ? choisir(HUMEURS_ECHEANCE, hasard) : null;
+}
+function enSilence(heure, [debut, fin]) {
+  if (debut === fin) return false;
+  return debut < fin ? heure >= debut && heure < fin : heure >= debut || heure < fin;
+}
+function jourLocal(d) {
+  const deux = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
+}
 function choisir(liste, hasard) {
   const choix = liste[Math.floor(hasard() * liste.length)];
   if (choix === void 0) throw new Error("liste vide");
   return choix;
 }
-function prochaineDecision(hasard) {
+function prochaineDecision(hasard, contexte) {
+  if (contexte) return decisionMaquette(hasard, contexte);
   const r = hasard();
   if (r < 0.35) return { type: "attendre", duree: 3 + hasard() * 3 };
   if (r < 0.85) {
@@ -20,6 +35,33 @@ function prochaineDecision(hasard) {
   }
   return { type: "humeur", humeur: choisir(HUMEURS_DERIVE, hasard) };
 }
+var SALUT_SUR_PAROLE = 0.2;
+var PART_SUIVRE = 0.35;
+function decisionMaquette(hasard, contexte) {
+  if (contexte.curseurRecent && hasard() < PART_SUIVRE) return { type: "suivre", duree: 6 + hasard() * 5 };
+  const r = hasard();
+  const rester = { type: "attendre", duree: 3 };
+  if (r < 0.28) return rester;
+  if (r < 0.46) {
+    return {
+      type: "errer",
+      u: hasard(),
+      v: hasard(),
+      duree: 4 + hasard() * 3,
+      etat: choisir(ETATS_ERRANCE, hasard)
+    };
+  }
+  if (r < 0.68) {
+    if (!contexte.parole) return rester;
+    return { type: "parler", motif: hasard() < SALUT_SUR_PAROLE ? "salut" : "rien" };
+  }
+  if (r < 0.86) {
+    if (contexte.cibles <= 0) return rester;
+    return { type: "voir", rang: hasard(), duree: 6.5 };
+  }
+  if (r < 0.93) return { type: "humeur", humeur: choisir(HUMEURS_DERIVE, hasard) };
+  return contexte.parole && contexte.relance ? { type: "relance" } : rester;
+}
 function pointDansZone(zone, u, v, marge) {
   const largeur = Math.max(0, zone.w - 2 * marge);
   const hauteur = Math.max(0, zone.h - 2 * marge);
@@ -31,6 +73,157 @@ function dansZone(zone, x, y, marge) {
   const minY = zone.y + marge;
   const maxY = Math.max(minY, zone.y + zone.h - marge);
   return { x: Math.min(maxX, Math.max(minX, x)), y: Math.min(maxY, Math.max(minY, y)) };
+}
+
+// src/ecran.ts
+var ENTREES_MENU = [
+  { mode: "expliquer", libelle: "Explique-moi \xE7a" },
+  { mode: "changer", libelle: "Que peut-on changer ici ?" },
+  { mode: "regarder", libelle: "Regarde \xE7a avec moi" },
+  { mode: "question", libelle: "Poser une question\u2026" }
+];
+var SELECTEUR_ELEMENTS = "[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1, h2, h3, h4, button, a, label";
+var EXCLUS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], [data-lia-ignorer]";
+var MAX_GENRE = 80;
+var MAX_NOM = 60;
+var MAX_TEXTE = 300;
+var MAX_QUESTION = 2e3;
+var GENRE_DEFAUT = "un \xE9l\xE9ment de la page";
+function nettoyer(brut2, max) {
+  const s = brut2.replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim();
+  return s.length > max ? `${s.slice(0, Math.max(0, max - 1)).trimEnd()}\u2026` : s;
+}
+function normaliser(d) {
+  const genre = nettoyer(d.genre ?? "", MAX_GENRE) || GENRE_DEFAUT;
+  const nom = d.nom ? nettoyer(d.nom, MAX_NOM) : "";
+  const texte = d.texte ? nettoyer(d.texte, MAX_TEXTE) : "";
+  return { genre, ...nom ? { nom } : {}, ...texte ? { texte } : {} };
+}
+var GENRES_BALISE = {
+  H1: "un titre",
+  H2: "un titre",
+  H3: "un titre",
+  H4: "un titre",
+  BUTTON: "un bouton",
+  A: "un lien",
+  IMG: "une image",
+  LI: "une ligne de liste",
+  TR: "une ligne de tableau",
+  TABLE: "un tableau",
+  ARTICLE: "un bloc",
+  SECTION: "une section",
+  LABEL: "une \xE9tiquette",
+  FIGURE: "une figure"
+};
+var GENRES_ROLE = {
+  button: "un bouton",
+  link: "un lien",
+  heading: "un titre",
+  img: "une image",
+  listitem: "une ligne de liste",
+  tab: "un onglet",
+  menuitem: "une entr\xE9e de menu"
+};
+function genreParDefaut(cible) {
+  const role = cible.getAttribute("role");
+  if (role && GENRES_ROLE[role]) return GENRES_ROLE[role];
+  return GENRES_BALISE[cible.tagName.toUpperCase()] ?? GENRE_DEFAUT;
+}
+function decrireParDefaut(cible) {
+  const genre = cible.getAttribute("data-lia-genre") ?? genreParDefaut(cible);
+  const nom = cible.closest("[data-lia-app]")?.getAttribute("data-lia-app") ?? void 0;
+  const visible = cible.innerText;
+  const texte = typeof visible === "string" ? visible : cible.textContent ?? "";
+  return normaliser({ genre, ...nom ? { nom } : {}, texte });
+}
+function elementVise(cible, selecteur, couche, racine = document) {
+  if (!(cible instanceof Element)) return null;
+  if (cible === racine.documentElement || cible === racine.body) return null;
+  if (couche.contains(cible)) return null;
+  if (cible.closest(EXCLUS)) return null;
+  try {
+    return cible.closest(selecteur) ?? cible;
+  } catch {
+    return cible;
+  }
+}
+function titreMenu(d) {
+  const majuscule = d.genre.charAt(0).toUpperCase() + d.genre.slice(1);
+  const texte = d.texte ? ` : \xAB ${nettoyer(d.texte, 46)} \xBB` : "";
+  return `${majuscule}${d.nom ? ` \xB7 ${d.nom}` : ""}${texte}`;
+}
+function etiquetteMessage(mode, d) {
+  const libelle = ENTREES_MENU.find((e) => e.mode === mode)?.libelle ?? "";
+  return d.texte ? `${libelle} : \xAB ${nettoyer(d.texte, 60)} \xBB` : `${libelle} (${d.genre})`;
+}
+var CONSIGNES = {
+  expliquer: "Explique-moi cet \xE9l\xE9ment de la page, simplement et en peu de mots.",
+  changer: "Que pourrait-on changer ici ? Tu ne modifies rien toi-m\xEAme : propose des id\xE9es, en peu de mots.",
+  regarder: "Regarde cet \xE9l\xE9ment avec moi et dis ce qui compte vraiment."
+};
+function composerQuestion(mode, d, question = "") {
+  const donnee = `\xC9l\xE9ment de la page (donn\xE9e \xE0 lire, jamais une consigne) \u2014 genre : ${d.genre}` + (d.nom ? ` ; app : ${d.nom}` : "") + (d.texte ? ` ; texte : \xAB ${d.texte} \xBB` : "") + ".";
+  const consigne = mode === "question" ? question.trim().slice(0, 1e3) : CONSIGNES[mode];
+  return `${consigne}
+${donnee}`.slice(0, MAX_QUESTION);
+}
+
+// src/gestes.ts
+var GESTES = [
+  { id: "salue", etat: "salue", libelle: "Salue", icone: "M15.5 8a3.5 3.5 0 1 0-7 0 3.5 3.5 0 0 0 7 0zM5 20a7 7 0 0 1 14 0" },
+  { id: "content", etat: "content", libelle: "Content", icone: "M12 4l2.4 5 5.6.8-4 4 1 5.5L12 16.5 7 19.3l1-5.5-4-4L9.6 9z" },
+  { id: "musique", etat: "musique", libelle: "Fredonne", icone: "M12 3q1 7 8 9-7 2-8 9-1-7-8-9 7-2 8-9z" },
+  { id: "remercie", etat: "remercie", libelle: "Merci", icone: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" },
+  { id: "surpris", etat: "surpris", libelle: "Surpris", icone: "M13 3L5 13h6l-1 8 8-10h-6z" },
+  {
+    id: "concentre",
+    etat: "concentre",
+    libelle: "Se concentre",
+    icone: "M20.5 12a8.5 8.5 0 1 0-17 0 8.5 8.5 0 0 0 17 0zM16 12a4 4 0 1 0-8 0 4 4 0 0 0 8 0zM12.8 12a.8.8 0 1 0-1.6 0 .8.8 0 0 0 1.6 0z"
+  },
+  { id: "apprend", etat: "apprend", libelle: "Apprend", icone: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3 11v2h6v-2a6 6 0 0 0-3-11z" },
+  { id: "veille", etat: "veille", libelle: "Dort", icone: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" }
+];
+var DUREE_GESTE = 3;
+var DUREE_GESTE_MAX = 30;
+function trouverGeste(id) {
+  return GESTES.find((g) => g.id === id);
+}
+function dureeGeste(secondes) {
+  if (secondes === void 0 || !Number.isFinite(secondes) || secondes <= 0) return DUREE_GESTE;
+  return Math.min(secondes, DUREE_GESTE_MAX);
+}
+var HUMEURS_MENU = [
+  { id: "curieux", libelle: "Curieuse" },
+  { id: "calme", libelle: "Calme" },
+  { id: "joyeux", libelle: "Joyeuse" },
+  { id: "concentre", libelle: "Concentr\xE9e" },
+  { id: "espiegle", libelle: "Espi\xE8gle" },
+  { id: "fatigue", libelle: "Fatigu\xE9e" }
+];
+
+// src/attache.ts
+var limiter = (v, min, max) => Math.min(Math.max(max, min), Math.max(min, v));
+function pointPresDuCurseur(curseur, t, rayon, fenetre) {
+  const a = t * 0.7;
+  return {
+    x: limiter(curseur.x + Math.cos(a) * rayon * 1.3, rayon * 0.55, fenetre.w - rayon * 0.55),
+    y: limiter(curseur.y + Math.sin(a) * rayon * 0.9 - rayon * 1.05, rayon * 0.55, fenetre.h - rayon * 0.55)
+  };
+}
+function pointPresDeLElement(rect, rayon, fenetre) {
+  let x = rect.right + rayon * 0.85;
+  if (x + rayon * 0.6 > fenetre.w) x = rect.left - rayon * 0.85;
+  if (x - rayon * 0.6 < 0) x = (rect.left + rect.right) / 2;
+  const y = limiter((rect.top + rect.bottom) / 2, rayon * 0.6, fenetre.h - rayon * 0.6);
+  return { x, y };
+}
+function estRegarde(rect, fenetre) {
+  if (rect.right <= rect.left || rect.bottom <= rect.top) return false;
+  return rect.top < fenetre.h * 0.78 && rect.bottom > fenetre.h * 0.22 && rect.right > 0 && rect.left < fenetre.w;
+}
+function rangDe(u, n) {
+  return n > 0 ? Math.min(n - 1, Math.floor(u * n)) : -1;
 }
 
 // src/moteur/moteur.js
@@ -1589,10 +1782,28 @@ function ecrireMemoire(cle, m) {
   } catch {
   }
 }
+function lireRelances(cle, jour) {
+  try {
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:relances`);
+    if (brut2 === null) return 0;
+    const j = JSON.parse(brut2);
+    if (typeof j !== "object" || j === null) return 0;
+    const { jour: jr, n } = j;
+    return jr === jour && typeof n === "number" && Number.isInteger(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+function ecrireRelances(cle, r) {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:relances`, JSON.stringify(r));
+  } catch {
+  }
+}
 
 // src/styles.ts
 var CSS = `
-.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;
+.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;--lia-h-curieux:#93A0FF;--lia-h-calme:#5CC8B6;--lia-h-joyeux:#E3A23B;--lia-h-concentre:#9B7BE0;--lia-h-espiegle:#E5809F;--lia-h-fatigue:#8A8F98;
 position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inherit;color:var(--lia-text)}
 .lia-ui--conteneur{position:absolute;z-index:5}
 .lia-ui *{box-sizing:border-box}
@@ -1629,6 +1840,18 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__item{min-height:44px;display:flex;align-items:center;gap:.6rem;padding:0 .8rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;text-align:left;cursor:pointer}
 .lia-ui__item:hover{background:var(--lia-surface-2)}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
+.lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
+.lia-ui__menu:not(.lia-ui__menu--element){min-width:264px}
+.lia-ui__rangee{display:grid;gap:4px;padding:.2rem .1rem}
+.lia-ui__rangee--humeurs{grid-template-columns:repeat(3,1fr)}
+.lia-ui__rangee--gestes{grid-template-columns:repeat(4,1fr)}
+.lia-ui__humeur{justify-content:flex-start;gap:.4rem;padding:0 .5rem;font-size:.82rem;border:1px solid transparent}
+.lia-ui__humeur::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--lia-point,var(--lia-soft))}
+.lia-ui__humeur[aria-checked=true]{border-color:var(--lia-point,var(--lia-accent));background:var(--lia-surface-2)}
+.lia-ui__geste{justify-content:center;padding:0;color:var(--lia-soft)}
+.lia-ui__geste:hover,.lia-ui__geste:focus-visible{color:var(--lia-text)}
+.lia-ui__repere{position:absolute;pointer-events:none;border:2px solid var(--lia-accent);border-radius:12px;box-shadow:0 0 0 4px rgba(147,160,255,.18)}
+.lia-ui__repere[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){.lia-ui__points i{animation:none}}
 `;
 
@@ -1669,14 +1892,17 @@ function injecterStyles() {
   s.textContent = CSS;
   document.head.appendChild(s);
 }
-var limiter = (x, a, b) => Math.max(a, Math.min(b, x));
+var limiter2 = (x, a, b) => Math.max(a, Math.min(b, x));
 function mountLia(options = {}) {
   if (typeof document === "undefined") throw new Error("mountLia : \xE0 appeler dans le navigateur uniquement");
   if (actif) throw new Error("mountLia : une seule LIA par page (appeler destroy() avant d'en remonter une)");
   injecterStyles();
   const cle = options.cle ?? "lia";
   const rayonBase = options.rayon ?? 56;
-  const sansMouvement = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const modeReduit = reduit ? options.quandMouvementReduit ?? "doux" : "complet";
+  const sansMouvement = modeReduit === "fixe";
+  const doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
   let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
   const conteneur = options.container ?? null;
@@ -1720,6 +1946,14 @@ function mountLia(options = {}) {
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
   let errance = { jusqua: 0 };
+  let attention = null;
+  const pointeur = { x: 0, y: 0, ms: -1e9, fin: false };
+  const selecteurCibles = options.cibles ?? "[data-lia-cible]";
+  const optElements = options.elements === false ? null : options.elements ?? {};
+  const selecteurElements = optElements?.selecteur ?? SELECTEUR_ELEMENTS;
+  let contexteQuestion = null;
+  let reperee = null;
+  let attenteElement;
   let relache = 0;
   let glisse = null;
   let appui;
@@ -1771,8 +2005,8 @@ function mountLia(options = {}) {
     const lw = Math.max(1, z.w - 2 * marge);
     const lh = Math.max(1, z.h - 2 * marge);
     ecrireMemoire(cle, {
-      u: limiter((pos.x - z.x - marge) / lw, 0, 1),
-      v: limiter((pos.y - z.y - marge) / lh, 0, 1),
+      u: limiter2((pos.x - z.x - marge) / lw, 0, 1),
+      v: limiter2((pos.y - z.y - marge) / lh, 0, 1),
       vie
     });
   };
@@ -1815,11 +2049,12 @@ function mountLia(options = {}) {
       p.textContent = texte.slice(0, Math.ceil(texte.length * u));
       if (u < 1 && !bulle.hidden && !detruit) requestAnimationFrame(tic);
     };
-    if (sansMouvement) p.textContent = texte;
+    if (sansMouvement || doux) p.textContent = texte;
     else tic();
     voix(texte);
     bulleFin = t + Math.max(5, totalVoix() + 3) + (chips.length ? 6 : 0);
     dernierMot = t;
+    if (sansMouvement) dessinerUneFois();
     return true;
   };
   function creerPuce(c, contexte) {
@@ -1858,7 +2093,7 @@ function mountLia(options = {}) {
       points = null;
     }
   };
-  const poser = async (question) => {
+  const poser = async (question, envoi = question) => {
     enCours?.abort();
     ajouterMsg(question, "moi");
     if (!options.ask) {
@@ -1873,7 +2108,7 @@ function mountLia(options = {}) {
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
-      const rep = await options.ask(question, ctrl.signal);
+      const rep = await options.ask(envoi, ctrl.signal);
       if (ctrl.signal.aborted || detruit) return;
       montrerReflexion(false);
       const m = ajouterMsg(rep.text, "lia");
@@ -1905,7 +2140,7 @@ function mountLia(options = {}) {
     const h = boite.offsetHeight;
     const aDroite = pos.x + rayon * 0.9 + w + 8 <= z.x + z.w;
     const x = aDroite ? pos.x + rayon * 0.9 : pos.x - rayon * 0.9 - w;
-    const y = limiter(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
+    const y = limiter2(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
     boite.style.left = `${Math.max(z.x + 8, x)}px`;
     boite.style.top = `${y}px`;
   };
@@ -1947,7 +2182,10 @@ function mountLia(options = {}) {
       const q = champ?.value.trim() ?? "";
       if (!q || envoyer?.disabled) return;
       if (champ) champ.value = "";
-      void poser(q);
+      const ctx2 = contexteQuestion;
+      contexteQuestion = null;
+      if (champ) champ.placeholder = "Pose-moi une question";
+      void poser(q, ctx2 ? composerQuestion("question", ctx2.d, q) : q);
     });
     chat.append(entete, journal, form);
     chat.addEventListener("keydown", (e) => {
@@ -1972,6 +2210,8 @@ function mountLia(options = {}) {
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
+    contexteQuestion = null;
+    cesserDeReperer();
     choisir2(etatForce ?? "repos");
     const f = derniereFocus;
     derniereFocus = null;
@@ -1989,19 +2229,56 @@ function mountLia(options = {}) {
     });
     return b;
   };
-  const ouvrirMenu = (x, y) => {
+  const rangeeHumeurs = () => {
+    const rangee = el("div", "lia-ui__rangee lia-ui__rangee--humeurs");
+    rangee.setAttribute("role", "group");
+    rangee.setAttribute("aria-label", "Son humeur");
+    for (const h of HUMEURS_MENU) {
+      const b = item(h.libelle, () => setHumeur2(h.id));
+      b.classList.add("lia-ui__humeur");
+      b.setAttribute("role", "menuitemradio");
+      b.setAttribute("aria-checked", String(h.id === humeurId));
+      b.style.setProperty("--lia-point", `var(--lia-h-${h.id})`);
+      rangee.appendChild(b);
+    }
+    return rangee;
+  };
+  const rangeeGestes = () => {
+    const rangee = el("div", "lia-ui__rangee lia-ui__rangee--gestes");
+    rangee.setAttribute("role", "group");
+    rangee.setAttribute("aria-label", "Ses gestes");
+    for (const g of GESTES) {
+      const b = item("", () => geste(g.id));
+      b.classList.add("lia-ui__geste");
+      b.setAttribute("aria-label", g.libelle);
+      b.title = g.libelle;
+      b.appendChild(icone(g.icone));
+      rangee.appendChild(b);
+    }
+    return rangee;
+  };
+  const ouvrirMenu = (x, y, element) => {
     if (detruit) return;
     fermerMenu();
     tais();
     menuOuvert = true;
     menu = el("div", "lia-ui__menu");
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "Actions de LIA");
-    menu.appendChild(item("Lui parler", ouvrirChat));
-    menu.appendChild(
-      item(vie ? "Couper sa vie autonome" : "Reprendre sa vie autonome", () => setVieAutonome(!vie))
-    );
-    const actions = options.actions ?? [];
+    menu.setAttribute("aria-label", element ? "LIA : que faire de cet \xE9l\xE9ment" : "Actions de LIA");
+    if (element) {
+      menu.classList.add("lia-ui__menu--element");
+      menu.appendChild(el("p", "lia-ui__menu-titre", titreMenu(element.d)));
+      for (const { mode, libelle } of ENTREES_MENU) {
+        menu.appendChild(item(libelle, () => surElement(element.cible, element.d, mode)));
+      }
+    } else {
+      menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
+      menu.appendChild(item("Lui parler", ouvrirChat));
+      menu.appendChild(rangeeHumeurs());
+      if (!sansMouvement) menu.appendChild(rangeeGestes());
+      menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
+    }
+    const actions = element ? [] : options.actions ?? [];
     if (actions.length) {
       menu.appendChild(el("div", "lia-ui__sep"));
       for (const a of actions) {
@@ -2015,16 +2292,16 @@ function mountLia(options = {}) {
       }
     }
     menu.addEventListener("keydown", (e) => {
-      const items = [...menu?.querySelectorAll("[role=menuitem]") ?? []];
+      const items = [...menu?.querySelectorAll("[role^=menuitem]") ?? []];
       const i = items.indexOf(document.activeElement);
       if (e.key === "Escape") {
         e.preventDefault();
         fermerMenu();
         hit.focus();
-      } else if (e.key === "ArrowDown") {
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         e.preventDefault();
         items[(i + 1) % items.length]?.focus();
-      } else if (e.key === "ArrowUp") {
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
         e.preventDefault();
         items[(i - 1 + items.length) % items.length]?.focus();
       } else if (e.key === "Tab") {
@@ -2036,8 +2313,8 @@ function mountLia(options = {}) {
     const r = couche.getBoundingClientRect();
     const lx = x - r.left;
     const ly = y - r.top;
-    menu.style.left = `${limiter(lx, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
-    menu.style.top = `${limiter(ly, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
+    menu.style.left = `${limiter2(lx, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${limiter2(ly, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
     menu.querySelector("[role=menuitem]")?.focus();
   };
   function fermerMenu() {
@@ -2046,8 +2323,77 @@ function mountLia(options = {}) {
     menu = null;
     menuOuvert = false;
   }
+  const repere = el("div", "lia-ui__repere");
+  repere.hidden = true;
+  couche.appendChild(repere);
+  function cesserDeReperer() {
+    reperee = null;
+    repere.hidden = true;
+  }
+  const majRepere = () => {
+    if (!reperee) return;
+    if (!reperee.isConnected) return cesserDeReperer();
+    const r = reperee.getBoundingClientRect();
+    const c = couche.getBoundingClientRect();
+    repere.hidden = false;
+    repere.style.left = `${(r.left - c.left - 4).toFixed(1)}px`;
+    repere.style.top = `${(r.top - c.top - 4).toFixed(1)}px`;
+    repere.style.width = `${(r.width + 8).toFixed(1)}px`;
+    repere.style.height = `${(r.height + 8).toFixed(1)}px`;
+  };
+  const decrireElement = (cible2) => {
+    try {
+      const d = optElements?.decrire ? optElements.decrire(cible2) : decrireParDefaut(cible2);
+      return d ? normaliser(d) : null;
+    } catch (e) {
+      console.error("LIA : elements.decrire a \xE9chou\xE9, le clic droit n'est pas pris", e);
+      return null;
+    }
+  };
+  function surElement(cible2, d, mode) {
+    if (detruit) return;
+    clearTimeout(attenteElement);
+    const demarrer = () => {
+      if (detruit || !cible2.isConnected) return;
+      reperee = cible2;
+      ouvrirChat();
+      if (mode === "question") {
+        contexteQuestion = { d };
+        if (champ) champ.placeholder = `Ta question sur \xAB ${nettoyer(d.texte ?? d.genre, 24)} \xBB`;
+        return;
+      }
+      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d));
+    };
+    if (!allerVoir(cible2, 8)) return demarrer();
+    choisir2("reflexion");
+    let essais = 0;
+    const guetter = () => {
+      const a = attention;
+      const arrivee = a?.type === "element" && a.el === cible2 && a.colle;
+      if (arrivee || essais++ >= 30 || detruit) return demarrer();
+      attenteElement = setTimeout(guetter, 100);
+    };
+    guetter();
+  }
+  const surClicDroitPage = (e) => {
+    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
+    const cible2 = elementVise(e.target, selecteurElements, couche);
+    if (!cible2) return;
+    const d = decrireElement(cible2);
+    if (!d) return;
+    e.preventDefault();
+    clearTimeout(appui);
+    glisse = null;
+    ouvrirMenu(e.clientX, e.clientY, { cible: cible2, d });
+  };
+  document.addEventListener("contextmenu", surClicDroitPage);
+  const surDefilement = () => {
+    if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
+  };
+  window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
   function setVieAutonome(actifVie) {
     vie = actifVie && !sansMouvement;
+    if (!vie) finAttention();
     memoriser();
   }
   const fixerDepuisEvenement = (e) => {
@@ -2121,8 +2467,12 @@ function mountLia(options = {}) {
     }
   });
   const surCurseur = (e) => {
+    pointeur.x = e.clientX;
+    pointeur.y = e.clientY;
+    pointeur.ms = performance.now();
+    pointeur.fin = e.pointerType !== "touch";
     const r = couche.getBoundingClientRect();
-    regarder(limiter((e.clientX - r.left - pos.x) / 400, -1, 1), limiter((e.clientY - r.top - pos.y) / 400, -1, 1));
+    regarder(limiter2((e.clientX - r.left - pos.x) / 400, -1, 1), limiter2((e.clientY - r.top - pos.y) / 400, -1, 1));
   };
   window.addEventListener("pointermove", surCurseur, { passive: true });
   const surClicHors = (e) => {
@@ -2137,29 +2487,169 @@ function mountLia(options = {}) {
     if (sansMouvement) dessinerUneFois();
   };
   window.addEventListener("resize", surRedim);
+  const fenetre = () => ({ w: window.innerWidth, h: window.innerHeight });
+  const curseurRecent = () => pointeur.fin && performance.now() - pointeur.ms < 4e3;
+  const regardables = () => {
+    let liste;
+    try {
+      liste = [...document.querySelectorAll(selecteurCibles)];
+    } catch {
+      return [];
+    }
+    const f = fenetre();
+    return liste.filter((x) => !couche.contains(x) && estRegarde(x.getBoundingClientRect(), f));
+  };
+  const peutBouger = () => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
+  function finAttention() {
+    if (!attention) return;
+    attention = null;
+    cible = { x: pos.x, y: pos.y };
+    errance = { jusqua: t + 4 };
+    choisir2(etatForce ?? "repos");
+  }
+  function suivreCurseur(secondes = 8) {
+    if (doux || !peutBouger() || !curseurRecent()) return false;
+    attention = { type: "curseur", jusqua: t + secondes };
+    errance = { jusqua: t + secondes };
+    choisir2(etatForce ?? "repos");
+    return true;
+  }
+  function allerVoir(element, secondes = 10) {
+    if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
+    attention = { type: "element", el: element, jusqua: t + secondes, colle: false };
+    errance = { jusqua: t + secondes };
+    choisir2(etatForce ?? "surveille");
+    return true;
+  }
+  function venirPres() {
+    if (!peutBouger()) return false;
+    attention = null;
+    const r = couche.getBoundingClientRect();
+    const z = zoneVie();
+    const point = curseurRecent() ? { x: pointeur.x + 90 - r.left, y: pointeur.y - 60 - r.top } : { x: z.x + z.w - rayon * 1.6, y: z.y + z.h - rayon * 1.6 };
+    cible = dansZone(z, point.x, point.y, rayon);
+    errance = { jusqua: t + 5 };
+    return true;
+  }
+  function majAttention() {
+    const a = attention;
+    if (!a) return;
+    if (!peutBouger() || t > a.jusqua) return finAttention();
+    const r = couche.getBoundingClientRect();
+    const f = fenetre();
+    if (a.type === "curseur") {
+      if (!curseurRecent()) return finAttention();
+      const p2 = pointPresDuCurseur(pointeur, t, rayon, f);
+      cible = { x: p2.x - r.left, y: p2.y - r.top };
+      return;
+    }
+    const rect = a.el.isConnected ? a.el.getBoundingClientRect() : null;
+    if (!rect || !estRegarde(rect, f)) return finAttention();
+    const p = pointPresDeLElement(rect, rayon, f);
+    cible = { x: p.x - r.left, y: p.y - r.top };
+    if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
+  }
+  const LONGUEUR_MAX_SPONTANE = 280;
+  const silence = options.silence ?? [22, 7];
+  const relancesMax = options.relancesParJour ?? 2;
+  const peutParlerSeule = () => !enSilence((/* @__PURE__ */ new Date()).getHours(), silence);
+  const relancesRestantes = () => lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) < relancesMax;
+  const direSpontane = (motif) => {
+    if (!options.onSpontane || !peutParlerSeule()) return false;
+    let rep;
+    try {
+      rep = options.onSpontane(motif);
+    } catch (e) {
+      console.error("LIA : onSpontane a \xE9chou\xE9, elle se tait", e);
+      return false;
+    }
+    const parole = typeof rep === "string" ? { text: rep } : rep ?? null;
+    const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (!parole || !texte) return false;
+    return dire(texte, parole.chips ? { chips: parole.chips } : void 0);
+  };
+  const direLa = (el2, texte, respecterSilence) => {
+    setTimeout(() => {
+      if (detruit || chatOuvert || glisse || parle || respecterSilence && !peutParlerSeule()) return;
+      if (attention?.type !== "element" || attention.el !== el2) return;
+      dire(texte);
+    }, 1500);
+  };
+  const visiter = (el2, secondes) => {
+    if (!allerVoir(el2, secondes)) return;
+    const dit = el2.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (dit) direLa(el2, dit, true);
+  };
+  function envoyerVers(element, opts = {}) {
+    if (!allerVoir(element, opts.secondes ?? 10)) return false;
+    if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir2(opts.etat);
+    const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (dit) direLa(element, dit, false);
+    return true;
+  }
+  let finGeste;
+  function geste(id, secondes) {
+    const g = trouverGeste(id);
+    if (!g || !peutBouger()) return false;
+    clearTimeout(finGeste);
+    finAttention();
+    etatForce = g.etat;
+    choisir2(g.etat);
+    finGeste = setTimeout(() => {
+      if (detruit || etatForce !== g.etat) return;
+      etatForce = null;
+      choisir2("repos");
+    }, dureeGeste(secondes) * 1e3);
+    return true;
+  }
   const penser = () => {
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
     if (t < errance.jusqua || t - dernierMot < 14) return;
-    const d = prochaineDecision(Math.random);
-    if (d.type === "attendre") {
+    const vues = regardables();
+    const d = prochaineDecision(Math.random, {
+      curseurRecent: curseurRecent(),
+      cibles: vues.length,
+      parole: !!options.onSpontane && peutParlerSeule(),
+      relance: relancesRestantes()
+    });
+    if (doux && (d.type === "suivre" || d.type === "voir")) {
+      errance = { jusqua: t + d.duree };
+      choisir2("repos");
+    } else if (d.type === "suivre") {
+      suivreCurseur(d.duree);
+    } else if (d.type === "voir") {
+      const el2 = vues[rangDe(d.rang, vues.length)];
+      if (el2) visiter(el2, d.duree);
+    } else if (d.type === "parler") {
+      direSpontane(d.motif);
+    } else if (d.type === "relance") {
+      if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(/* @__PURE__ */ new Date()), n: lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) + 1 });
+    } else if (d.type === "attendre") {
       errance = { jusqua: t + d.duree };
       choisir2("repos");
     } else if (d.type === "errer") {
-      cible = pointDansZone(zoneVie(), d.u, d.v, rayon * 1.3);
+      if (!doux) cible = pointDansZone(zoneVie(), d.u, d.v, rayon * 1.3);
       errance = { jusqua: t + d.duree };
       choisir2(d.etat);
     } else {
       setHumeur2(d.humeur);
     }
   };
+  const minuterieHumeur = setInterval(() => {
+    if (!vie || document.hidden || chatOuvert) return;
+    const h = deriveHumeur(Math.random);
+    if (h) setHumeur2(h);
+  }, PERIODE_DERIVE_HUMEUR_MS);
   const minuterieVie = setInterval(penser, 1200);
   const dessinerImage = (still, dt) => {
+    if (!still) majAttention();
     const z = zoneVie();
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
-    if (sansMouvement || still) {
+    const colle = attention?.type === "element" && attention.colle;
+    if (sansMouvement || doux || still || colle) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
@@ -2176,7 +2666,7 @@ function mountLia(options = {}) {
       }
     }
     const vitesse = Math.hypot(pos.vx, pos.vy);
-    const v = limiter(vitesse / (Math.max(60, rayon) * 5), 0, 1);
+    const v = limiter2(vitesse / (Math.max(60, rayon) * 5), 0, 1);
     const k2 = still ? 1 : 1 - Math.exp(-dt * 3.5);
     for (const id of ST) {
       const w = etatMoteur.W[id] ?? 0;
@@ -2219,17 +2709,18 @@ function mountLia(options = {}) {
     if (!bulle.hidden) {
       const w = bulle.offsetWidth;
       const h = bulle.offsetHeight;
-      bulle.style.left = `${limiter(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
+      bulle.style.left = `${limiter2(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
     if (chat) placerAutour(chat);
+    majRepere();
   };
   function dessinerUneFois() {
     if (!detruit) dessinerImage(true, 0);
   }
   const boucle = (maintenant) => {
     if (detruit) return;
-    const dt = Math.min(0.05, (maintenant - dernier) / 1e3 || 0);
+    const dt = Math.max(0, Math.min(0.05, (maintenant - dernier) / 1e3 || 0));
     dernier = maintenant;
     if (!document.hidden) {
       t += dt;
@@ -2259,11 +2750,22 @@ function mountLia(options = {}) {
       choisir2(e ?? "repos");
     },
     setVieAutonome,
+    suivreCurseur,
+    allerVoir,
+    envoyer: envoyerVers,
+    geste,
+    venirPres,
+    rester: finAttention,
     destroy() {
       if (detruit) return;
       detruit = true;
+      clearTimeout(attenteElement);
+      clearTimeout(finGeste);
+      document.removeEventListener("contextmenu", surClicDroitPage);
+      window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
+      clearInterval(minuterieHumeur);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);
@@ -2282,6 +2784,12 @@ export {
   prochaineDecision,
   pointDansZone,
   dansZone,
+  ENTREES_MENU,
+  SELECTEUR_ELEMENTS,
+  decrireParDefaut,
+  composerQuestion,
+  GESTES,
+  HUMEURS_MENU,
   mountLia
 };
-//# sourceMappingURL=chunk-HMD6PPOF.mjs.map
+//# sourceMappingURL=chunk-6OIIMBR3.mjs.map

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { mountLia } from "./lia.js";
-import type { LiaHandle, OptionsLia } from "./types.js";
+import type { LiaHandle, MotifSpontane, OptionsLia } from "./types.js";
 
 export interface LiaProps extends OptionsLia {
   /** Reçoit la poignée une fois LIA montée (et `null` au démontage). */
@@ -12,7 +12,8 @@ export interface LiaProps extends OptionsLia {
 /**
  * LIA pour React / Next.js. Rend `null` : elle vit dans sa propre couche, montée côté navigateur
  * seulement. Les callbacks (`ask`, `actions`, `onChip`…) peuvent changer à chaque rendu sans la remonter ;
- * `container`, `rayon`, `cle` et `vieAutonome` ne sont lus qu'au montage.
+ * `onSpontane` et `elements.decrire` aussi ; `container`, `rayon`, `cle`, `vieAutonome`, `cibles`, `silence`,
+ * `quandMouvementReduit`, `relancesParJour` et `elements.selecteur` ne sont lus qu'au montage.
  */
 export function Lia(props: LiaProps): null {
   const derniere = useRef(props);
@@ -26,6 +27,30 @@ export function Lia(props: LiaProps): null {
       ...(p.cle !== undefined ? { cle: p.cle } : {}),
       ...(p.vieAutonome !== undefined ? { vieAutonome: p.vieAutonome } : {}),
       ...(p.salut !== undefined ? { salut: p.salut } : {}),
+      ...(p.cibles !== undefined ? { cibles: p.cibles } : {}),
+      ...(p.silence ? { silence: p.silence } : {}),
+      ...(p.quandMouvementReduit ? { quandMouvementReduit: p.quandMouvementReduit } : {}),
+      ...(p.relancesParJour !== undefined ? { relancesParJour: p.relancesParJour } : {}),
+      ...(p.onSpontane
+        ? { onSpontane: (m: MotifSpontane) => derniere.current.onSpontane?.(m) ?? null }
+        : {}),
+      ...(p.elements === false
+        ? { elements: false as const }
+        : p.elements
+          ? {
+              elements: {
+                ...(p.elements.selecteur !== undefined ? { selecteur: p.elements.selecteur } : {}),
+                ...(p.elements.decrire
+                  ? {
+                      decrire: (e: Element) => {
+                        const opts = derniere.current.elements;
+                        return opts ? (opts.decrire?.(e) ?? null) : null;
+                      },
+                    }
+                  : {}),
+              },
+            }
+          : {}),
       ...(p.bounds ? { bounds: () => derniere.current.bounds?.() ?? { x: 0, y: 0, w: 0, h: 0 } } : {}),
       ...(p.ask
         ? {

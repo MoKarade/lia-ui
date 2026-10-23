@@ -1,4 +1,13 @@
-import { dansZone, pointDansZone, prochaineDecision } from "./autonomie.js";
+import { estRegarde, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./attache.js";
+import {
+  PERIODE_DERIVE_HUMEUR_MS,
+  dansZone,
+  deriveHumeur,
+  enSilence,
+  jourLocal,
+  pointDansZone,
+  prochaineDecision,
+} from "./autonomie.js";
 import {
   ST,
   brut,
@@ -13,17 +22,35 @@ import {
   THK,
   type EtatMoteur,
 } from "./moteur/moteur.js";
-import { ecrireMemoire, lireMemoire } from "./stockage.js";
+import {
+  ENTREES_MENU,
+  SELECTEUR_ELEMENTS,
+  composerQuestion,
+  decrireParDefaut,
+  elementVise,
+  etiquetteMessage,
+  nettoyer,
+  normaliser,
+  titreMenu,
+  type ElementDecrit,
+  type ModeElement,
+} from "./ecran.js";
+import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
+import { ecrireMemoire, ecrireRelances, lireMemoire, lireRelances } from "./stockage.js";
 import { CSS } from "./styles.js";
 import {
   type ActionLia,
+  type EnvoiLia,
   type HumeurLia,
   type LiaHandle,
+  type MotifSpontane,
   type OptionsLia,
+  type ParoleSpontanee,
   type PuceLia,
   type ReponseLia,
   type ZoneVie,
 } from "./types.js";
+import type { GesteLia } from "./gestes.js";
 
 const DELAI_APPUI_LONG = 620;
 const DELAI_QUESTION = 30_000;
@@ -85,7 +112,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   const cle = options.cle ?? "lia";
   const rayonBase = options.rayon ?? 56;
-  const sansMouvement = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const modeReduit = reduit ? (options.quandMouvementReduit ?? "doux") : "complet";
+  /** « fixe » : une seule image, comme avant. */
+  const sansMouvement = modeReduit === "fixe";
+  /** « doux » : elle ne traverse jamais l'écran (pas de glissade, d'errance ni de suivi du curseur), mais vit sur place. */
+  const doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
   let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
 
@@ -134,6 +166,19 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
   let errance = { jusqua: 0 };
+  /** Ce qu'elle suit ou regarde en ce moment (rien = elle fait sa vie). Jamais de défilement de la page. */
+  type Attention =
+    | { type: "curseur"; jusqua: number }
+    | { type: "element"; el: Element; jusqua: number; colle: boolean };
+  let attention: Attention | null = null;
+  const pointeur = { x: 0, y: 0, ms: -1e9, fin: false };
+  const selecteurCibles = options.cibles ?? "[data-lia-cible]";
+  /* Clic droit sur n'importe quel élément (maquette V9) : `false` le coupe, sinon l'hôte peut le régler. */
+  const optElements = options.elements === false ? null : (options.elements ?? {});
+  const selecteurElements = optElements?.selecteur ?? SELECTEUR_ELEMENTS;
+  let contexteQuestion: { d: ElementDecrit } | null = null;
+  let reperee: Element | null = null;
+  let attenteElement: ReturnType<typeof setTimeout> | undefined;
   let relache = 0;
   let glisse: { x: number; y: number; x0: number; y0: number; deplace: boolean } | null = null;
   let appui: ReturnType<typeof setTimeout> | undefined;
@@ -239,11 +284,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       p.textContent = texte.slice(0, Math.ceil(texte.length * u));
       if (u < 1 && !bulle.hidden && !detruit) requestAnimationFrame(tic);
     };
-    if (sansMouvement) p.textContent = texte;
+    if (sansMouvement || doux) p.textContent = texte;
     else tic();
     voix(texte);
     bulleFin = t + Math.max(5, totalVoix() + 3) + (chips.length ? 6 : 0);
     dernierMot = t;
+    // Sans boucle d'animation (mode « fixe »), rien d'autre ne place la bulle.
+    if (sansMouvement) dessinerUneFois();
     return true;
   };
 
@@ -288,7 +335,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
   };
 
-  const poser = async (question: string): Promise<void> => {
+  /** `question` est ce que Marc lit dans la discussion ; `envoi` est ce que reçoit `ask` (par défaut la même chose). */
+  const poser = async (question: string, envoi: string = question): Promise<void> => {
     enCours?.abort();
     ajouterMsg(question, "moi");
     if (!options.ask) {
@@ -303,7 +351,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
-      const rep: ReponseLia = await options.ask(question, ctrl.signal);
+      const rep: ReponseLia = await options.ask(envoi, ctrl.signal);
       if (ctrl.signal.aborted || detruit) return;
       montrerReflexion(false);
       const m = ajouterMsg(rep.text, "lia");
@@ -379,7 +427,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const q = champ?.value.trim() ?? "";
       if (!q || envoyer?.disabled) return;
       if (champ) champ.value = "";
-      void poser(q);
+      const ctx = contexteQuestion;
+      contexteQuestion = null;
+      if (champ) champ.placeholder = "Pose-moi une question";
+      void poser(q, ctx ? composerQuestion("question", ctx.d, q) : q);
     });
     chat.append(entete, journal, form);
     chat.addEventListener("keydown", (e) => {
@@ -405,6 +456,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
+    contexteQuestion = null;
+    cesserDeReperer();
     choisir(etatForce ?? "repos");
     const f = derniereFocus;
     derniereFocus = null;
@@ -425,19 +478,61 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return b;
   };
 
-  const ouvrirMenu = (x: number, y: number): void => {
+  /** Les humeurs du menu : celle d'en ce moment est cochée, un clic la change. */
+  const rangeeHumeurs = (): HTMLElement => {
+    const rangee = el("div", "lia-ui__rangee lia-ui__rangee--humeurs");
+    rangee.setAttribute("role", "group");
+    rangee.setAttribute("aria-label", "Son humeur");
+    for (const h of HUMEURS_MENU) {
+      const b = item(h.libelle, () => setHumeur(h.id));
+      b.classList.add("lia-ui__humeur");
+      b.setAttribute("role", "menuitemradio");
+      b.setAttribute("aria-checked", String(h.id === humeurId));
+      b.style.setProperty("--lia-point", `var(--lia-h-${h.id})`);
+      rangee.appendChild(b);
+    }
+    return rangee;
+  };
+
+  /** Les gestes du menu : une silhouette de son moteur, tenue quelques secondes. Absents si le mouvement est réduit. */
+  const rangeeGestes = (): HTMLElement => {
+    const rangee = el("div", "lia-ui__rangee lia-ui__rangee--gestes");
+    rangee.setAttribute("role", "group");
+    rangee.setAttribute("aria-label", "Ses gestes");
+    for (const g of GESTES) {
+      const b = item("", () => geste(g.id));
+      b.classList.add("lia-ui__geste");
+      b.setAttribute("aria-label", g.libelle);
+      b.title = g.libelle;
+      b.appendChild(icone(g.icone));
+      rangee.appendChild(b);
+    }
+    return rangee;
+  };
+
+  /** Le menu de son corps (sans `element`) ou celui d'un élément de la page (clic droit n'importe où). */
+  const ouvrirMenu = (x: number, y: number, element?: { cible: Element; d: ElementDecrit }): void => {
     if (detruit) return;
     fermerMenu();
     tais();
     menuOuvert = true;
     menu = el("div", "lia-ui__menu");
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "Actions de LIA");
-    menu.appendChild(item("Lui parler", ouvrirChat));
-    menu.appendChild(
-      item(vie ? "Couper sa vie autonome" : "Reprendre sa vie autonome", () => setVieAutonome(!vie)),
-    );
-    const actions: readonly ActionLia[] = options.actions ?? [];
+    menu.setAttribute("aria-label", element ? "LIA : que faire de cet élément" : "Actions de LIA");
+    if (element) {
+      menu.classList.add("lia-ui__menu--element");
+      menu.appendChild(el("p", "lia-ui__menu-titre", titreMenu(element.d)));
+      for (const { mode, libelle } of ENTREES_MENU) {
+        menu.appendChild(item(libelle, () => surElement(element.cible, element.d, mode)));
+      }
+    } else {
+      menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
+      menu.appendChild(item("Lui parler", ouvrirChat));
+      menu.appendChild(rangeeHumeurs());
+      if (!sansMouvement) menu.appendChild(rangeeGestes());
+      menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
+    }
+    const actions: readonly ActionLia[] = element ? [] : (options.actions ?? []);
     if (actions.length) {
       menu.appendChild(el("div", "lia-ui__sep"));
       for (const a of actions) {
@@ -453,16 +548,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }
     }
     menu.addEventListener("keydown", (e) => {
-      const items = [...(menu?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
+      const items = [...(menu?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
       const i = items.indexOf(document.activeElement as HTMLElement);
       if (e.key === "Escape") {
         e.preventDefault();
         fermerMenu();
         hit.focus();
-      } else if (e.key === "ArrowDown") {
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         e.preventDefault();
         items[(i + 1) % items.length]?.focus();
-      } else if (e.key === "ArrowUp") {
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
         e.preventDefault();
         items[(i - 1 + items.length) % items.length]?.focus();
       } else if (e.key === "Tab") {
@@ -486,8 +581,91 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     menuOuvert = false;
   }
 
+  /* ── clic droit sur un élément de la page ── */
+  /** Un cadre fin autour de l'élément dont elle parle ; dans sa couche, la page de l'hôte n'est jamais modifiée. */
+  const repere = el("div", "lia-ui__repere");
+  repere.hidden = true;
+  couche.appendChild(repere);
+
+  function cesserDeReperer(): void {
+    reperee = null;
+    repere.hidden = true;
+  }
+
+  const majRepere = (): void => {
+    if (!reperee) return;
+    if (!reperee.isConnected) return cesserDeReperer();
+    const r = reperee.getBoundingClientRect();
+    const c = couche.getBoundingClientRect();
+    repere.hidden = false;
+    repere.style.left = `${(r.left - c.left - 4).toFixed(1)}px`;
+    repere.style.top = `${(r.top - c.top - 4).toFixed(1)}px`;
+    repere.style.width = `${(r.width + 8).toFixed(1)}px`;
+    repere.style.height = `${(r.height + 8).toFixed(1)}px`;
+  };
+
+  const decrireElement = (cible: Element): ElementDecrit | null => {
+    try {
+      const d = optElements?.decrire ? optElements.decrire(cible) : decrireParDefaut(cible);
+      return d ? normaliser(d) : null;
+    } catch (e) {
+      // L'hôte a mal décrit son élément : le menu du navigateur reste, la page continue.
+      console.error("LIA : elements.decrire a échoué, le clic droit n'est pas pris", e);
+      return null;
+    }
+  };
+
+  /**
+   * Elle vient d'abord se poser près de l'élément (sans faire défiler la page), puis la discussion
+   * s'ouvre à côté d'elle. En mode « question », la discussion s'ouvre et attend ce que Marc écrit.
+   */
+  function surElement(cible: Element, d: ElementDecrit, mode: ModeElement): void {
+    if (detruit) return;
+    clearTimeout(attenteElement);
+    const demarrer = (): void => {
+      if (detruit || !cible.isConnected) return;
+      reperee = cible;
+      ouvrirChat();
+      if (mode === "question") {
+        contexteQuestion = { d };
+        if (champ) champ.placeholder = `Ta question sur « ${nettoyer(d.texte ?? d.genre, 24)} »`;
+        return;
+      }
+      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d));
+    };
+    if (!allerVoir(cible, 8)) return demarrer();
+    choisir("reflexion");
+    let essais = 0;
+    const guetter = (): void => {
+      const a = attention;
+      const arrivee = a?.type === "element" && a.el === cible && a.colle;
+      if (arrivee || essais++ >= 30 || detruit) return demarrer();
+      attenteElement = setTimeout(guetter, 100);
+    };
+    guetter();
+  }
+
+  const surClicDroitPage = (e: MouseEvent): void => {
+    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
+    const cible = elementVise(e.target, selecteurElements, couche);
+    if (!cible) return;
+    const d = decrireElement(cible);
+    if (!d) return;
+    e.preventDefault();
+    clearTimeout(appui);
+    glisse = null;
+    ouvrirMenu(e.clientX, e.clientY, { cible, d });
+  };
+  document.addEventListener("contextmenu", surClicDroitPage);
+  /** Un menu ouvert sur la page se ferme au défilement, comme un menu du navigateur. */
+  const surDefilement = (): void => {
+    if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
+  };
+  window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
+
   function setVieAutonome(actifVie: boolean): void {
     vie = actifVie && !sansMouvement;
+    if (!vie) finAttention();
     memoriser();
   }
 
@@ -566,6 +744,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   });
 
   const surCurseur = (e: PointerEvent): void => {
+    pointeur.x = e.clientX;
+    pointeur.y = e.clientY;
+    pointeur.ms = performance.now();
+    pointeur.fin = e.pointerType !== "touch";
     const r = couche.getBoundingClientRect();
     regarder(limiter((e.clientX - r.left - pos.x) / 400, -1, 1), limiter((e.clientY - r.top - pos.y) / 400, -1, 1));
   };
@@ -583,32 +765,195 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   window.addEventListener("resize", surRedim);
 
+  /* ── suivre, regarder ── */
+  const fenetre = (): { w: number; h: number } => ({ w: window.innerWidth, h: window.innerHeight });
+  const curseurRecent = (): boolean => pointeur.fin && performance.now() - pointeur.ms < 4000;
+  const regardables = (): Element[] => {
+    let liste: Element[];
+    try {
+      liste = [...document.querySelectorAll(selecteurCibles)];
+    } catch {
+      // Sélecteur invalide fourni par l'hôte : elle n'a alors rien à aller voir, la vie continue.
+      return [];
+    }
+    const f = fenetre();
+    return liste.filter((x) => !couche.contains(x) && estRegarde(x.getBoundingClientRect(), f));
+  };
+  const peutBouger = (): boolean => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
+
+  function finAttention(): void {
+    if (!attention) return;
+    attention = null;
+    cible = { x: pos.x, y: pos.y };
+    errance = { jusqua: t + 4 };
+    choisir(etatForce ?? "repos");
+  }
+
+  function suivreCurseur(secondes = 8): boolean {
+    if (doux || !peutBouger() || !curseurRecent()) return false;
+    attention = { type: "curseur", jusqua: t + secondes };
+    errance = { jusqua: t + secondes };
+    choisir(etatForce ?? "repos");
+    return true;
+  }
+
+  function allerVoir(element: Element, secondes = 10): boolean {
+    if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
+    attention = { type: "element", el: element, jusqua: t + secondes, colle: false };
+    errance = { jusqua: t + secondes };
+    choisir(etatForce ?? "surveille");
+    return true;
+  }
+
+  function venirPres(): boolean {
+    if (!peutBouger()) return false;
+    attention = null;
+    const r = couche.getBoundingClientRect();
+    const z = zoneVie();
+    const point = curseurRecent()
+      ? { x: pointeur.x + 90 - r.left, y: pointeur.y - 60 - r.top }
+      : { x: z.x + z.w - rayon * 1.6, y: z.y + z.h - rayon * 1.6 };
+    cible = dansZone(z, point.x, point.y, rayon);
+    errance = { jusqua: t + 5 };
+    return true;
+  }
+
+  /** Met `cible` à jour d'après ce qu'elle suit ; l'arrête quand elle n'a plus de raison de le faire. */
+  function majAttention(): void {
+    const a = attention;
+    if (!a) return;
+    if (!peutBouger() || t > a.jusqua) return finAttention();
+    const r = couche.getBoundingClientRect();
+    const f = fenetre();
+    if (a.type === "curseur") {
+      if (!curseurRecent()) return finAttention();
+      const p = pointPresDuCurseur(pointeur, t, rayon, f);
+      cible = { x: p.x - r.left, y: p.y - r.top };
+      return;
+    }
+    const rect = a.el.isConnected ? a.el.getBoundingClientRect() : null;
+    if (!rect || !estRegarde(rect, f)) return finAttention();
+    const p = pointPresDeLElement(rect, rayon, f);
+    cible = { x: p.x - r.left, y: p.y - r.top };
+    if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
+  }
+
   /* ── vie propre ── */
+  const LONGUEUR_MAX_SPONTANE = 280;
+  const silence = options.silence ?? [22, 7];
+  const relancesMax = options.relancesParJour ?? 2;
+  const peutParlerSeule = (): boolean => !enSilence(new Date().getHours(), silence);
+  const relancesRestantes = (): boolean => lireRelances(cle, jourLocal(new Date())) < relancesMax;
+
+  /** Ce que l'hôte la fait dire seule. Son échec ne doit jamais arrêter sa vie : elle se tait et le dit dans la console. */
+  const direSpontane = (motif: MotifSpontane): boolean => {
+    if (!options.onSpontane || !peutParlerSeule()) return false;
+    let rep: string | ParoleSpontanee | null | undefined;
+    try {
+      rep = options.onSpontane(motif);
+    } catch (e) {
+      console.error("LIA : onSpontane a échoué, elle se tait", e);
+      return false;
+    }
+    const parole: ParoleSpontanee | null = typeof rep === "string" ? { text: rep } : (rep ?? null);
+    const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (!parole || !texte) return false;
+    return dire(texte, parole.chips ? { chips: parole.chips } : undefined);
+  };
+
+  /** Comme dans la maquette : elle arrive, puis dit sa phrase au bout d'une seconde et demie si elle y est encore. */
+  const direLa = (el: Element, texte: string, respecterSilence: boolean): void => {
+    setTimeout(() => {
+      if (detruit || chatOuvert || glisse || parle || (respecterSilence && !peutParlerSeule())) return;
+      if (attention?.type !== "element" || attention.el !== el) return;
+      dire(texte);
+    }, 1500);
+  };
+
+  const visiter = (el: Element, secondes: number): void => {
+    if (!allerVoir(el, secondes)) return;
+    const dit = el.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (dit) direLa(el, dit, true);
+  };
+
+  /** L'hôte l'envoie vers un élément. Ce qu'elle dit vient de lui (pas d'heure de silence : c'est lui qui décide). */
+  function envoyerVers(element: Element, opts: EnvoiLia = {}): boolean {
+    if (!allerVoir(element, opts.secondes ?? 10)) return false;
+    if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir(opts.etat);
+    const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (dit) direLa(element, dit, false);
+    return true;
+  }
+
+  let finGeste: ReturnType<typeof setTimeout> | undefined;
+  /** Prend la silhouette d'un geste un moment, puis reprend sa vie. Sans effet si elle ne peut pas bouger. */
+  function geste(id: GesteLia, secondes?: number): boolean {
+    const g = trouverGeste(id);
+    if (!g || !peutBouger()) return false;
+    clearTimeout(finGeste);
+    finAttention();
+    etatForce = g.etat;
+    choisir(g.etat);
+    finGeste = setTimeout(() => {
+      if (detruit || etatForce !== g.etat) return;
+      etatForce = null;
+      choisir("repos");
+    }, dureeGeste(secondes) * 1000);
+    return true;
+  }
+
   const penser = (): void => {
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
     if (t < errance.jusqua || t - dernierMot < 14) return;
-    const d = prochaineDecision(Math.random);
-    if (d.type === "attendre") {
+    const vues = regardables();
+    const d = prochaineDecision(Math.random, {
+      curseurRecent: curseurRecent(),
+      cibles: vues.length,
+      parole: !!options.onSpontane && peutParlerSeule(),
+      relance: relancesRestantes(),
+    });
+    if (doux && (d.type === "suivre" || d.type === "voir")) {
+      // Sans déplacement : elle reste là, comme si elle attendait.
+      errance = { jusqua: t + d.duree };
+      choisir("repos");
+    } else if (d.type === "suivre") {
+      suivreCurseur(d.duree);
+    } else if (d.type === "voir") {
+      const el = vues[rangDe(d.rang, vues.length)];
+      if (el) visiter(el, d.duree);
+    } else if (d.type === "parler") {
+      direSpontane(d.motif);
+    } else if (d.type === "relance") {
+      if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(new Date()), n: lireRelances(cle, jourLocal(new Date())) + 1 });
+    } else if (d.type === "attendre") {
       errance = { jusqua: t + d.duree };
       choisir("repos");
     } else if (d.type === "errer") {
-      cible = pointDansZone(zoneVie(), d.u, d.v, rayon * 1.3);
+      if (!doux) cible = pointDansZone(zoneVie(), d.u, d.v, rayon * 1.3);
       errance = { jusqua: t + d.duree };
       choisir(d.etat);
     } else {
       setHumeur(d.humeur);
     }
   };
+  const minuterieHumeur = setInterval(() => {
+    if (!vie || document.hidden || chatOuvert) return;
+    const h = deriveHumeur(Math.random);
+    if (h) setHumeur(h);
+  }, PERIODE_DERIVE_HUMEUR_MS);
   const minuterieVie = setInterval(penser, 1200);
 
   /* ── image par image ── */
   const dessinerImage = (still: boolean, dt: number): void => {
+    if (!still) majAttention();
     const z = zoneVie();
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
-    if (sansMouvement || still) {
+    // Collée à un élément : exactement sur lui, sans retard ni flottement quand la page défile.
+    const colle = attention?.type === "element" && attention.colle;
+    if (sansMouvement || doux || still || colle) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
@@ -674,6 +1019,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
     if (chat) placerAutour(chat);
+    majRepere();
   };
 
   function dessinerUneFois(): void {
@@ -682,7 +1028,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   const boucle = (maintenant: number): void => {
     if (detruit) return;
-    const dt = Math.min(0.05, (maintenant - dernier) / 1000 || 0);
+    // Jamais négatif : l'horloge de rAF peut précéder `performance.now()` d'un instant, et un pas négatif ferait diverger le ressort.
+    const dt = Math.max(0, Math.min(0.05, (maintenant - dernier) / 1000 || 0));
     dernier = maintenant;
     if (!document.hidden) {
       t += dt;
@@ -714,11 +1061,22 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       choisir(e ?? "repos");
     },
     setVieAutonome,
+    suivreCurseur,
+    allerVoir,
+    envoyer: envoyerVers,
+    geste,
+    venirPres,
+    rester: finAttention,
     destroy() {
       if (detruit) return;
       detruit = true;
+      clearTimeout(attenteElement);
+      clearTimeout(finGeste);
+      document.removeEventListener("contextmenu", surClicDroitPage);
+      window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
+      clearInterval(minuterieHumeur);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);

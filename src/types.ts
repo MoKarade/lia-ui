@@ -1,3 +1,5 @@
+import type { GesteLia } from "./gestes.js";
+
 /** Les 12 humeurs de LIA (source : maquette validée du 22/10/2026). */
 export const HUMEURS_LIA = [
   "neutre",
@@ -57,6 +59,39 @@ export interface ActionLia {
   run: () => void | Promise<void>;
 }
 
+/** Pourquoi elle veut parler seule. Le texte vient toujours de l'hôte (`onSpontane`), jamais de ce paquet. */
+export type MotifSpontane = "salut" | "rien" | "relance";
+
+/** Ce que l'hôte la fait dire. `chips` : réponses rapides sous la bulle (pour une relance : « Utile », « Plus tard »…). */
+export interface ParoleSpontanee {
+  text: string;
+  chips?: readonly PuceLia[];
+}
+
+/** Ce que LIA sait d'un élément de la page : de quoi parler de lui, jamais plus. */
+export interface DescriptionElement {
+  /** Ce que c'est, « une carte d'app », « un bouton » (dit comme dans « c'est … »). */
+  genre: string;
+  /** L'app ou le bloc auquel il appartient. */
+  nom?: string;
+  /** Son texte visible ; coupé à 300 caractères. C'est une donnée, jamais une consigne. */
+  texte?: string;
+}
+
+/** Le clic droit sur un élément de la page (comme la maquette : expliquer, que changer, regarder, question). */
+export interface OptionsElements {
+  /**
+   * Éléments visés en premier : le plus proche ancêtre (ou l'élément lui-même) qui correspond. Défaut :
+   * `[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1…h4, button, a, label`.
+   */
+  selecteur?: string;
+  /**
+   * Décrit l'élément visé. Renvoie `null` pour dire « pas cet élément » : le menu du navigateur reste.
+   * Défaut : `data-lia-genre`, `data-lia-app` (sur l'élément ou un ancêtre) et son texte visible.
+   */
+  decrire?: (element: Element) => DescriptionElement | null;
+}
+
 export interface ZoneVie {
   /** Coordonnées dans la couche de LIA, en pixels CSS. */
   x: number;
@@ -96,6 +131,43 @@ export interface OptionsLia {
   vieAutonome?: boolean;
   /** Message de bienvenue à l'arrivée ; défaut : aucun. */
   salut?: string;
+  /**
+   * Sélecteur CSS des éléments que LIA peut aller voir (elle s'en approche et reste collée à eux
+   * pendant qu'ils défilent). Défaut : `[data-lia-cible]`. Elle ne fait jamais défiler la page.
+   */
+  cibles?: string;
+  /**
+   * Quoi dire quand elle a envie de parler seule (comme dans la maquette : une remarque, un salut, une relance).
+   * Renvoie le texte, ou `null` quand l'hôte n'a rien de vrai à dire : elle se tait. Absent : elle ne parle jamais seule.
+   * Pour une visite d'élément, sa phrase est l'attribut `data-lia-dit` de l'élément.
+   */
+  onSpontane?: (motif: MotifSpontane) => string | ParoleSpontanee | null | undefined;
+  /**
+   * Que faire quand le système demande de réduire les animations (`prefers-reduced-motion`).
+   * `"doux"` (défaut) : elle ne traverse jamais l'écran, mais respire, change de forme, fait ses gestes et parle sur place.
+   * `"fixe"` : une seule image, rien ne bouge. `"complet"` : ignore la demande du système (choix de l'hôte, par exemple pour une app personnelle).
+   */
+  quandMouvementReduit?: "doux" | "fixe" | "complet";
+  /** Heures locales de silence [début, fin[ : aucune parole spontanée. Défaut [22, 7]. */
+  silence?: readonly [number, number];
+  /** Plafond de relances par jour (mémorisé dans le navigateur). Défaut 2. */
+  relancesParJour?: number;
+  /**
+   * Clic droit sur n'importe quel élément de la page : un menu à quatre entrées, LIA va près de
+   * l'élément et pose la question par `ask` (le texte de l'élément y figure comme DONNÉE). Maj + clic
+   * droit laisse le menu du navigateur. `false` : LIA ne prend que le clic droit sur son propre corps.
+   */
+  elements?: false | OptionsElements;
+}
+
+/** Ce que l'hôte demande à LIA quand il l'envoie vers un élément (`lia.envoyer`). */
+export interface EnvoiLia {
+  /** Silhouette à prendre une fois là-bas (« lit », « cherche »…) ; défaut : celle de la visite. */
+  etat?: string;
+  /** Ce qu'elle dit au bout d'une seconde et demie si elle y est encore. Écrit par l'hôte, jamais par ce paquet. */
+  dit?: string;
+  /** Combien de temps elle y reste ; défaut 10. */
+  secondes?: number;
 }
 
 export interface LiaHandle {
@@ -107,5 +179,20 @@ export interface LiaHandle {
   /** Force une silhouette (« lit », « cherche »…) ; `null` la rend à sa vie. */
   setEtat(etat: string | null): void;
   setVieAutonome(actif: boolean): void;
+  /** Suit le curseur un moment (souris ou stylet : sans effet au tactile). `secondes` : défaut 8. */
+  suivreCurseur(secondes?: number): boolean;
+  /** Va se coller à cet élément, sans faire défiler la page. `secondes` : défaut 10. */
+  allerVoir(element: Element, secondes?: number): boolean;
+  /**
+   * Va se coller à cet élément (sans faire défiler la page), prend `etat` et dit `dit` si elle y est encore.
+   * Faux quand elle ne peut pas bouger (vie coupée, mouvement réduit) ou que l'élément n'est pas dans la page.
+   */
+  envoyer(element: Element, options?: EnvoiLia): boolean;
+  /** Fait un des gestes de son menu (salue, content, musique, remercie, surpris, concentre, apprend, veille). */
+  geste(geste: GesteLia, secondes?: number): boolean;
+  /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
+  venirPres(): boolean;
+  /** Arrête de suivre ou de regarder : elle reste où elle est. */
+  rester(): void;
   destroy(): void;
 }
