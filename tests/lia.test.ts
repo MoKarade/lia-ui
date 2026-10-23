@@ -170,7 +170,7 @@ describe("menu", () => {
     lia = mountLia({ cle: "test" });
     touche(hit(), "ContextMenu");
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((b) => b.textContent === "La laisser tranquille")?.click();
-    expect(JSON.parse(localStorage.getItem("lia-ui:test") ?? "{}")).toMatchObject({ vie: false });
+    expect(JSON.parse(localStorage.getItem("lia-ui:test") ?? "{}")).toMatchObject({ choixVie: false });
   });
 });
 

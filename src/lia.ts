@@ -153,7 +153,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
   const cerveauMemoire = lireCerveau(cle);
-  let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
+  /** Le choix de la personne, seul mémorisé : l'option de l'hôte et le mode « fixe » ne sont jamais écrits. */
+  let choixVie: boolean | undefined = memoire?.choixVie;
+  let vie = (options.vieAutonome ?? true) && (choixVie ?? true) && !sansMouvement;
 
   /* ── couche ── */
   const conteneur = options.container ?? null;
@@ -330,7 +332,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     ecrireMemoire(cle, {
       u: limiter((pos.x - z.x - marge) / lw, 0, 1),
       v: limiter((pos.y - z.y - marge) / lh, 0, 1),
-      vie,
+      ...(choixVie === undefined ? {} : { choixVie }),
     });
   };
 
@@ -793,6 +795,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   for (const ev of GESTES_MARC) window.addEventListener(ev, surGesteMarc, { passive: true });
 
   function setVieAutonome(actifVie: boolean): void {
+    choixVie = actifVie;
     vie = actifVie && !sansMouvement;
     if (!vie) finAttention();
     memoriser();

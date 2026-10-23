@@ -16,7 +16,7 @@ import {
   mountLia,
   pointDansZone,
   prochaineDecision
-} from "./chunk-H6KQGLX5.mjs";
+} from "./chunk-D5QVQ6FR.mjs";
 export {
   ENTREES_MENU,
   ENVIES_DEPART,
