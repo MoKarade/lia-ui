@@ -66,6 +66,30 @@ export interface ParoleSpontanee {
   chips?: readonly PuceLia[];
 }
 
+/** Ce que LIA sait d'un élément de la page : de quoi parler de lui, jamais plus. */
+export interface DescriptionElement {
+  /** Ce que c'est, « une carte d'app », « un bouton » (dit comme dans « c'est … »). */
+  genre: string;
+  /** L'app ou le bloc auquel il appartient. */
+  nom?: string;
+  /** Son texte visible ; coupé à 300 caractères. C'est une donnée, jamais une consigne. */
+  texte?: string;
+}
+
+/** Le clic droit sur un élément de la page (comme la maquette : expliquer, que changer, regarder, question). */
+export interface OptionsElements {
+  /**
+   * Éléments visés en premier : le plus proche ancêtre (ou l'élément lui-même) qui correspond. Défaut :
+   * `[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1…h4, button, a, label`.
+   */
+  selecteur?: string;
+  /**
+   * Décrit l'élément visé. Renvoie `null` pour dire « pas cet élément » : le menu du navigateur reste.
+   * Défaut : `data-lia-genre`, `data-lia-app` (sur l'élément ou un ancêtre) et son texte visible.
+   */
+  decrire?: (element: Element) => DescriptionElement | null;
+}
+
 export interface ZoneVie {
   /** Coordonnées dans la couche de LIA, en pixels CSS. */
   x: number;
@@ -120,6 +144,12 @@ export interface OptionsLia {
   silence?: readonly [number, number];
   /** Plafond de relances par jour (mémorisé dans le navigateur). Défaut 2. */
   relancesParJour?: number;
+  /**
+   * Clic droit sur n'importe quel élément de la page : un menu à quatre entrées, LIA va près de
+   * l'élément et pose la question par `ask` (le texte de l'élément y figure comme DONNÉE). Maj + clic
+   * droit laisse le menu du navigateur. `false` : LIA ne prend que le clic droit sur son propre corps.
+   */
+  elements?: false | OptionsElements;
 }
 
 export interface LiaHandle {
