@@ -1,6 +1,6 @@
 # HANDOVER — lia-ui
 
-*État au 23/10/2026, tâche lia-ui#11 (clic droit partout).*
+*État au 23/10/2026, tâche lia-ui#13 (menu de son corps et envoyer).*
 
 ## Fait
 - Moteur de 100 traits repris de la maquette v5 validée par Marc (38 silhouettes, 12 humeurs).
@@ -10,6 +10,7 @@
 - **v0.2.0 (lia-ui#5)** : suit le curseur, va voir un élément `[data-lia-cible]` et s'y colle (0 px d'écart au défilement, mesuré dans Chromium), vient près de Marc (`venirPres`), sans jamais faire défiler la page ; 62 tests. Cause de la plainte de Marc (22/10 22:08Z) : v0.1.0 n'avait que l'errance au hasard et les yeux au curseur ; les envies, la mémoire et les remarques spontanées de l'accueil v2 sont la tâche lia-ui#6.
 - **v0.2.1 (lia-ui#6)** : sa tirette de décisions et sa parole sont celles de la maquette v5 (`maison.js`, `penser`) : 28 % rester, 18 % errer, 22 % parler, 18 % visiter un élément (phrase `data-lia-dit`), 7 % humeur, 7 % relance ; dérive d'humeur toutes les 40 s ; `onSpontane` (texte de l'hôte), silence 22 h-7 h, 2 relances par jour. Marc, 22/10 22:35Z : « exactement pareil que la maquette ». Reste : envies et mémoire de l'accueil v2, voir lia-ui#6.
 - **v0.4.0 (lia-ui#11)** : clic droit sur n'importe quel élément (option `elements`, quatre entrées de la maquette V9, LIA vient se poser près de l'élément et le cadre, la question part par `ask` avec l'élément comme donnée annoncée). Marc, 23/10 12:15Z : « manque le clique droit ». Corrigé en passant : `<Lia />` (React) ne transmettait ni `onSpontane`, ni `cibles`, ni `silence`, ni `relancesParJour` à `mountLia` (v0.2.0 à v0.3.0) : une app qui les passait en React n'avait aucun effet ; tests ajoutés. Écart complet avec la maquette V9 : mission .github#557 ; reste à faire dans lia-ui : envies et mémoire (lia-ui#6), réseau V9 (225 neurones, 40 humeurs mélangées, crochet `HUM_MIX` dans le moteur), comportements riches et interface `monde` (avec la vue de l'écran : survol et centre, que le clic droit de cette version ne fournit pas).
+- **v0.5.0 (lia-ui#13)** : le menu de son corps est celui de la maquette v5 (titre, six humeurs avec la sienne cochée, huit gestes, « La laisser tranquille / La laisser vivre »), `lia.geste(nom, secondes)` et `lia.envoyer(element, { etat, dit, secondes })` pour l'hôte (futur « monde »). Marc, 23/10 12:15Z : « manque le clique droit, sa personnalité, mouvements ». Le défilement ne ferme plus que le menu d'un élément de la page, pas celui de son corps. Aucune phrase écrite dans ce paquet. Reste : lia-ui#6 (envies, mémoire), réseau V9, comportements riches et interface `monde`.
 - Corrigé en passant : un pas de temps négatif (horloge rAF en avance sur `performance.now()`) pouvait faire diverger le ressort.
 
 ## À faire

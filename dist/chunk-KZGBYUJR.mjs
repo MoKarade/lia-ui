@@ -168,6 +168,40 @@ function composerQuestion(mode, d, question = "") {
 ${donnee}`.slice(0, MAX_QUESTION);
 }
 
+// src/gestes.ts
+var GESTES = [
+  { id: "salue", etat: "salue", libelle: "Salue", icone: "M15.5 8a3.5 3.5 0 1 0-7 0 3.5 3.5 0 0 0 7 0zM5 20a7 7 0 0 1 14 0" },
+  { id: "content", etat: "content", libelle: "Content", icone: "M12 4l2.4 5 5.6.8-4 4 1 5.5L12 16.5 7 19.3l1-5.5-4-4L9.6 9z" },
+  { id: "musique", etat: "musique", libelle: "Fredonne", icone: "M12 3q1 7 8 9-7 2-8 9-1-7-8-9 7-2 8-9z" },
+  { id: "remercie", etat: "remercie", libelle: "Merci", icone: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" },
+  { id: "surpris", etat: "surpris", libelle: "Surpris", icone: "M13 3L5 13h6l-1 8 8-10h-6z" },
+  {
+    id: "concentre",
+    etat: "concentre",
+    libelle: "Se concentre",
+    icone: "M20.5 12a8.5 8.5 0 1 0-17 0 8.5 8.5 0 0 0 17 0zM16 12a4 4 0 1 0-8 0 4 4 0 0 0 8 0zM12.8 12a.8.8 0 1 0-1.6 0 .8.8 0 0 0 1.6 0z"
+  },
+  { id: "apprend", etat: "apprend", libelle: "Apprend", icone: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3 11v2h6v-2a6 6 0 0 0-3-11z" },
+  { id: "veille", etat: "veille", libelle: "Dort", icone: "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" }
+];
+var DUREE_GESTE = 3;
+var DUREE_GESTE_MAX = 30;
+function trouverGeste(id) {
+  return GESTES.find((g) => g.id === id);
+}
+function dureeGeste(secondes) {
+  if (secondes === void 0 || !Number.isFinite(secondes) || secondes <= 0) return DUREE_GESTE;
+  return Math.min(secondes, DUREE_GESTE_MAX);
+}
+var HUMEURS_MENU = [
+  { id: "curieux", libelle: "Curieuse" },
+  { id: "calme", libelle: "Calme" },
+  { id: "joyeux", libelle: "Joyeuse" },
+  { id: "concentre", libelle: "Concentr\xE9e" },
+  { id: "espiegle", libelle: "Espi\xE8gle" },
+  { id: "fatigue", libelle: "Fatigu\xE9e" }
+];
+
 // src/attache.ts
 var limiter = (v, min, max) => Math.min(Math.max(max, min), Math.max(min, v));
 function pointPresDuCurseur(curseur, t, rayon, fenetre) {
@@ -1769,7 +1803,7 @@ function ecrireRelances(cle, r) {
 
 // src/styles.ts
 var CSS = `
-.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;
+.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;--lia-h-curieux:#93A0FF;--lia-h-calme:#5CC8B6;--lia-h-joyeux:#E3A23B;--lia-h-concentre:#9B7BE0;--lia-h-espiegle:#E5809F;--lia-h-fatigue:#8A8F98;
 position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inherit;color:var(--lia-text)}
 .lia-ui--conteneur{position:absolute;z-index:5}
 .lia-ui *{box-sizing:border-box}
@@ -1807,6 +1841,15 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__item:hover{background:var(--lia-surface-2)}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
 .lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
+.lia-ui__menu:not(.lia-ui__menu--element){min-width:264px}
+.lia-ui__rangee{display:grid;gap:4px;padding:.2rem .1rem}
+.lia-ui__rangee--humeurs{grid-template-columns:repeat(3,1fr)}
+.lia-ui__rangee--gestes{grid-template-columns:repeat(4,1fr)}
+.lia-ui__humeur{justify-content:flex-start;gap:.4rem;padding:0 .5rem;font-size:.82rem;border:1px solid transparent}
+.lia-ui__humeur::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--lia-point,var(--lia-soft))}
+.lia-ui__humeur[aria-checked=true]{border-color:var(--lia-point,var(--lia-accent));background:var(--lia-surface-2)}
+.lia-ui__geste{justify-content:center;padding:0;color:var(--lia-soft)}
+.lia-ui__geste:hover,.lia-ui__geste:focus-visible{color:var(--lia-text)}
 .lia-ui__repere{position:absolute;pointer-events:none;border:2px solid var(--lia-accent);border-radius:12px;box-shadow:0 0 0 4px rgba(147,160,255,.18)}
 .lia-ui__repere[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){.lia-ui__points i{animation:none}}
@@ -2182,6 +2225,34 @@ function mountLia(options = {}) {
     });
     return b;
   };
+  const rangeeHumeurs = () => {
+    const rangee = el("div", "lia-ui__rangee lia-ui__rangee--humeurs");
+    rangee.setAttribute("role", "group");
+    rangee.setAttribute("aria-label", "Son humeur");
+    for (const h of HUMEURS_MENU) {
+      const b = item(h.libelle, () => setHumeur2(h.id));
+      b.classList.add("lia-ui__humeur");
+      b.setAttribute("role", "menuitemradio");
+      b.setAttribute("aria-checked", String(h.id === humeurId));
+      b.style.setProperty("--lia-point", `var(--lia-h-${h.id})`);
+      rangee.appendChild(b);
+    }
+    return rangee;
+  };
+  const rangeeGestes = () => {
+    const rangee = el("div", "lia-ui__rangee lia-ui__rangee--gestes");
+    rangee.setAttribute("role", "group");
+    rangee.setAttribute("aria-label", "Ses gestes");
+    for (const g of GESTES) {
+      const b = item("", () => geste(g.id));
+      b.classList.add("lia-ui__geste");
+      b.setAttribute("aria-label", g.libelle);
+      b.title = g.libelle;
+      b.appendChild(icone(g.icone));
+      rangee.appendChild(b);
+    }
+    return rangee;
+  };
   const ouvrirMenu = (x, y, element) => {
     if (detruit) return;
     fermerMenu();
@@ -2191,15 +2262,17 @@ function mountLia(options = {}) {
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", element ? "LIA : que faire de cet \xE9l\xE9ment" : "Actions de LIA");
     if (element) {
+      menu.classList.add("lia-ui__menu--element");
       menu.appendChild(el("p", "lia-ui__menu-titre", titreMenu(element.d)));
       for (const { mode, libelle } of ENTREES_MENU) {
         menu.appendChild(item(libelle, () => surElement(element.cible, element.d, mode)));
       }
     } else {
+      menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
       menu.appendChild(item("Lui parler", ouvrirChat));
-      menu.appendChild(
-        item(vie ? "Couper sa vie autonome" : "Reprendre sa vie autonome", () => setVieAutonome(!vie))
-      );
+      menu.appendChild(rangeeHumeurs());
+      if (!sansMouvement) menu.appendChild(rangeeGestes());
+      menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
     }
     const actions = element ? [] : options.actions ?? [];
     if (actions.length) {
@@ -2215,16 +2288,16 @@ function mountLia(options = {}) {
       }
     }
     menu.addEventListener("keydown", (e) => {
-      const items = [...menu?.querySelectorAll("[role=menuitem]") ?? []];
+      const items = [...menu?.querySelectorAll("[role^=menuitem]") ?? []];
       const i = items.indexOf(document.activeElement);
       if (e.key === "Escape") {
         e.preventDefault();
         fermerMenu();
         hit.focus();
-      } else if (e.key === "ArrowDown") {
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         e.preventDefault();
         items[(i + 1) % items.length]?.focus();
-      } else if (e.key === "ArrowUp") {
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
         e.preventDefault();
         items[(i - 1 + items.length) % items.length]?.focus();
       } else if (e.key === "Tab") {
@@ -2311,7 +2384,7 @@ function mountLia(options = {}) {
   };
   document.addEventListener("contextmenu", surClicDroitPage);
   const surDefilement = () => {
-    if (menuOuvert && menu?.firstElementChild?.classList.contains("lia-ui__menu-titre")) fermerMenu();
+    if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
   function setVieAutonome(actifVie) {
@@ -2491,15 +2564,40 @@ function mountLia(options = {}) {
     if (!parole || !texte) return false;
     return dire(texte, parole.chips ? { chips: parole.chips } : void 0);
   };
-  const visiter = (el2, secondes) => {
-    if (!allerVoir(el2, secondes)) return;
+  const direLa = (el2, texte, respecterSilence) => {
     setTimeout(() => {
-      if (detruit || chatOuvert || glisse || parle || !peutParlerSeule()) return;
+      if (detruit || chatOuvert || glisse || parle || respecterSilence && !peutParlerSeule()) return;
       if (attention?.type !== "element" || attention.el !== el2) return;
-      const dit = el2.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
-      if (dit) dire(dit);
+      dire(texte);
     }, 1500);
   };
+  const visiter = (el2, secondes) => {
+    if (!allerVoir(el2, secondes)) return;
+    const dit = el2.getAttribute("data-lia-dit")?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (dit) direLa(el2, dit, true);
+  };
+  function envoyerVers(element, opts = {}) {
+    if (!allerVoir(element, opts.secondes ?? 10)) return false;
+    if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir2(opts.etat);
+    const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    if (dit) direLa(element, dit, false);
+    return true;
+  }
+  let finGeste;
+  function geste(id, secondes) {
+    const g = trouverGeste(id);
+    if (!g || !peutBouger()) return false;
+    clearTimeout(finGeste);
+    finAttention();
+    etatForce = g.etat;
+    choisir2(g.etat);
+    finGeste = setTimeout(() => {
+      if (detruit || etatForce !== g.etat) return;
+      etatForce = null;
+      choisir2("repos");
+    }, dureeGeste(secondes) * 1e3);
+    return true;
+  }
   const penser = () => {
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
@@ -2647,12 +2745,15 @@ function mountLia(options = {}) {
     setVieAutonome,
     suivreCurseur,
     allerVoir,
+    envoyer: envoyerVers,
+    geste,
     venirPres,
     rester: finAttention,
     destroy() {
       if (detruit) return;
       detruit = true;
       clearTimeout(attenteElement);
+      clearTimeout(finGeste);
       document.removeEventListener("contextmenu", surClicDroitPage);
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
@@ -2680,6 +2781,8 @@ export {
   SELECTEUR_ELEMENTS,
   decrireParDefaut,
   composerQuestion,
+  GESTES,
+  HUMEURS_MENU,
   mountLia
 };
-//# sourceMappingURL=chunk-UOPPKP27.mjs.map
+//# sourceMappingURL=chunk-KZGBYUJR.mjs.map
