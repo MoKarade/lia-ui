@@ -48,7 +48,18 @@ import {
   type ModeElement,
 } from "./ecran.js";
 import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
-import { ecrireCerveau, ecrireLente, ecrireMemoire, ecrireRelances, lireCerveau, lireLente, lireMemoire, lireRelances } from "./stockage.js";
+import {
+  ecrireCerveau,
+  ecrireLente,
+  ecrireMemoire,
+  ecrireMouvement,
+  ecrireRelances,
+  lireCerveau,
+  lireLente,
+  lireMemoire,
+  lireMouvement,
+  lireRelances,
+} from "./stockage.js";
 import { CSS } from "./styles.js";
 import {
   HUMEURS_LIA,
@@ -135,11 +146,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const cle = options.cle ?? "lia";
   const rayonBase = options.rayon ?? 56;
   const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const modeReduit = reduit ? (options.quandMouvementReduit ?? "doux") : "complet";
+  const modeReduit = reduit ? (lireMouvement(cle) ?? options.quandMouvementReduit ?? "complet") : "complet";
   /** « fixe » : une seule image, comme avant. */
   const sansMouvement = modeReduit === "fixe";
   /** « doux » : elle ne traverse jamais l'écran (pas de glissade, d'errance ni de suivi du curseur), mais vit sur place. */
-  const doux = modeReduit === "doux";
+  let doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
   const cerveauMemoire = lireCerveau(cle);
   let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
@@ -598,6 +609,18 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return rangee;
   };
 
+  /** Le système réduit les animations : Marc peut les rendre complètes (ou les calmer), le choix reste dans ce navigateur. */
+  const caseAnimations = (): HTMLButtonElement => {
+    const b = item("Animations complètes", () => {
+      doux = !doux;
+      ecrireMouvement(cle, doux ? "doux" : "complet");
+      if (doux) finAttention();
+    });
+    b.setAttribute("role", "menuitemcheckbox");
+    b.setAttribute("aria-checked", String(!doux));
+    return b;
+  };
+
   /** Le menu de son corps (sans `element`) ou celui d'un élément de la page (clic droit n'importe où). */
   const ouvrirMenu = (x: number, y: number, element?: { cible: Element; d: ElementDecrit }): void => {
     if (detruit) return;
@@ -619,6 +642,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       menu.appendChild(item("Lui parler", ouvrirChat));
       menu.appendChild(rangeeHumeurs());
       if (!sansMouvement) menu.appendChild(rangeeGestes());
+      if (reduit && !sansMouvement) menu.appendChild(caseAnimations());
       menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
     }
     const actions: readonly ActionLia[] = element ? [] : (options.actions ?? []);
