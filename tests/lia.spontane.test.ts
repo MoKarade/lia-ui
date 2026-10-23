@@ -35,7 +35,7 @@ afterEach(() => {
 
 describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)", () => {
   it("dit seule une remarque quand l'hôte en a une", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.5); // 22 % : parler, motif « rien »
+    vi.spyOn(Math, "random").mockReturnValue(0.3); // choix pondéré : causer, motif « rien »
     const motifs: MotifSpontane[] = [];
     lia = mountLia({
       onSpontane: (m) => {
@@ -49,7 +49,7 @@ describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)",
   });
 
   it("se tait quand l'hôte n'a rien de vrai à dire", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.spyOn(Math, "random").mockReturnValue(0.3);
     const onSpontane = vi.fn(() => null);
     lia = mountLia({ onSpontane });
     await vi.waitFor(() => expect(onSpontane).toHaveBeenCalled(), { timeout: 4000 });
@@ -57,7 +57,7 @@ describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)",
   });
 
   it("ne parle jamais seule sans onSpontane", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.spyOn(Math, "random").mockReturnValue(0.3);
     lia = mountLia({});
     await new Promise((r) => setTimeout(r, 3500));
     expect(bulle().hidden).toBe(true);
@@ -65,7 +65,7 @@ describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)",
 
   it("se tait la nuit, même si l'hôte a quelque chose à dire", async () => {
     vi.setSystemTime(new Date(2026, 9, 22, 23, 30, 0));
-    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.spyOn(Math, "random").mockReturnValue(0.3);
     const onSpontane = vi.fn(() => "Bonsoir.");
     lia = mountLia({ onSpontane });
     await new Promise((r) => setTimeout(r, 3500));
@@ -74,7 +74,7 @@ describe("parole spontanée (comme dans la maquette, texte fourni par l'hôte)",
   });
 
   it("l'échec de l'hôte n'arrête pas sa vie : elle se tait et le dit dans la console", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.spyOn(Math, "random").mockReturnValue(0.3);
     const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
     lia = mountLia({
       onSpontane: () => {
@@ -90,7 +90,7 @@ describe("relances : au plus deux par jour", () => {
   const jour = (): string => jourLocal(new Date());
 
   it("fait une relance et la compte", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.95); // 7 % : relance
+    vi.spyOn(Math, "random").mockReturnValue(0.55); // choix pondéré : relancer
     localStorage.setItem("lia-ui:lia:relances", JSON.stringify({ jour: jour(), n: 1 }));
     const motifs: MotifSpontane[] = [];
     lia = mountLia({
@@ -106,7 +106,7 @@ describe("relances : au plus deux par jour", () => {
   });
 
   it("n'en fait plus au plafond du jour", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.95);
+    vi.spyOn(Math, "random").mockReturnValue(0.9); // choix pondéré : repos (jamais de relance au plafond)
     localStorage.setItem("lia-ui:lia:relances", JSON.stringify({ jour: jour(), n: 2 }));
     const onSpontane = vi.fn(() => "Relance.");
     lia = mountLia({ onSpontane });
@@ -115,7 +115,7 @@ describe("relances : au plus deux par jour", () => {
   });
 
   it("le compteur d'hier ne compte pas aujourd'hui", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.95);
+    vi.spyOn(Math, "random").mockReturnValue(0.55);
     localStorage.setItem("lia-ui:lia:relances", JSON.stringify({ jour: "2026-10-21", n: 2 }));
     const onSpontane = vi.fn(() => "Relance.");
     lia = mountLia({ onSpontane });
@@ -124,8 +124,13 @@ describe("relances : au plus deux par jour", () => {
 });
 
 describe("visite d'un élément : sa phrase après une seconde et demie", () => {
+  beforeEach(() => {
+    const envies = { energie: 0.85, curiosite: 0.6, social: 0.45, inquiet: 0, joie: 0.3, ennui: 0.15 };
+    localStorage.setItem("lia-ui:lia:cerveau", JSON.stringify({ envies, journal: [] }));
+  });
+
   it("va voir l'élément puis dit son data-lia-dit", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.7); // 18 % : voir
+    vi.spyOn(Math, "random").mockReturnValue(0.1); // choix pondéré : voir (curiosité à 0,6)
     const carte = document.createElement("section");
     carte.setAttribute("data-lia-cible", "");
     carte.setAttribute("data-lia-dit", "Le souper de 18 h approche.");
@@ -135,7 +140,7 @@ describe("visite d'un élément : sa phrase après une seconde et demie", () => 
   });
 
   it("sans data-lia-dit, elle visite en silence", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.7);
+    vi.spyOn(Math, "random").mockReturnValue(0.1);
     const carte = document.createElement("section");
     carte.setAttribute("data-lia-cible", "");
     document.body.appendChild(carte);

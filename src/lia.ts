@@ -6,8 +6,20 @@ import {
   enSilence,
   jourLocal,
   pointDansZone,
-  prochaineDecision,
 } from "./autonomie.js";
+import {
+  ENVIES_DEPART,
+  SILHOUETTES_JEU,
+  ajouterFait,
+  apresComportement,
+  candidats,
+  choisirComportement,
+  entre,
+  majEnvies,
+  type Comportement,
+  type Envies,
+  type FaitLia,
+} from "./cerveau.js";
 import {
   ST,
   brut,
@@ -36,7 +48,7 @@ import {
   type ModeElement,
 } from "./ecran.js";
 import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
-import { ecrireMemoire, ecrireRelances, lireMemoire, lireRelances } from "./stockage.js";
+import { ecrireCerveau, ecrireMemoire, ecrireRelances, lireCerveau, lireMemoire, lireRelances } from "./stockage.js";
 import { CSS } from "./styles.js";
 import {
   type ActionLia,
@@ -119,6 +131,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** « doux » : elle ne traverse jamais l'écran (pas de glissade, d'errance ni de suivi du curseur), mais vit sur place. */
   const doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
+  const cerveauMemoire = lireCerveau(cle);
   let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
 
   /* ── couche ── */
@@ -190,6 +203,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let chatOuvert = false;
   let menuOuvert = false;
   let detruit = false;
+  /* Son cerveau (src/cerveau.ts) : ses envies, ce qu'elle fait, et ce dont elle se souvient. */
+  let envies: Envies = { ...(cerveauMemoire?.envies ?? ENVIES_DEPART) };
+  let faits: FaitLia[] = cerveauMemoire?.journal ?? [];
+  let comportement: Comportement | null = null;
+  let tranquilleJusqua = 0;
+  let derniereDecision = -999;
+  let derniereParole = -999;
+  let dort = false;
+  /** Quand une silhouette passagère (jeu, réveil) se termine ; 0 = aucune. */
+  let finEtatTemp = 0;
   let raf = 0;
 
   const zoneVie = (): ZoneVie => {
@@ -229,6 +252,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
     cible = { x: pos.x, y: pos.y };
   }
+  /** Là où elle se sent chez elle : elle y revient quand elle s'est trop éloignée. */
+  const maison = { x: pos.x, y: pos.y };
 
   const memoriser = (): void => {
     const z = zoneVie();
@@ -266,6 +291,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   const dire: LiaHandle["dire"] = (texte, o) => {
     if (detruit || chatOuvert || glisse) return false;
+    reveiller();
     bulle.replaceChildren();
     const p = el("p");
     p.style.margin = "0";
@@ -391,6 +417,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   const ouvrirChat = (): void => {
     if (detruit || chatOuvert) return;
+    reveiller();
     fermerMenu();
     tais();
     derniereFocus = document.activeElement;
@@ -513,6 +540,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** Le menu de son corps (sans `element`) ou celui d'un élément de la page (clic droit n'importe où). */
   const ouvrirMenu = (x: number, y: number, element?: { cible: Element; d: ElementDecrit }): void => {
     if (detruit) return;
+    reveiller();
     fermerMenu();
     tais();
     menuOuvert = true;
@@ -684,6 +712,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
     const p = fixerDepuisEvenement(e);
     glisse = { x: p.x, y: p.y, x0: p.x, y0: p.y, deplace: false };
+    reveiller();
     tais();
     clearTimeout(appui);
     appui = setTimeout(() => {
@@ -902,42 +931,106 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return true;
   }
 
+  /* ── son cerveau : elle choisit selon ses envies (src/cerveau.ts), puis le fait ── */
+  /** Une silhouette passagère (jeu, réveil) : elle reprend le repos à sa fin si rien d'autre ne la tient. */
+  const passagere = (etat: string, secondes: number): void => {
+    choisir(etat);
+    finEtatTemp = t + secondes;
+    errance = { jusqua: t + secondes };
+  };
+  const finirPassagere = (): void => {
+    finEtatTemp = 0;
+    if (!parle && !etatForce && !chatOuvert && !attention && !dort) choisir("repos");
+  };
+  function reveiller(): void {
+    if (!dort) return;
+    dort = false;
+    passagere("reveille", 2.6);
+  }
+
+  const lancer = (id: Comportement, vues: Element[]): void => {
+    comportement = id;
+    derniereDecision = t;
+    faits = ajouterFait(faits, { t: Date.now(), quoi: id });
+    envies = apresComportement(envies, id);
+    const calme = (secondes: number): void => {
+      tranquilleJusqua = t + secondes;
+    };
+    if (id === "jouer") {
+      const pool = SILHOUETTES_JEU[humeurId] ?? ["repos"];
+      passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 3.6, 5.6));
+    } else if (id === "promener") {
+      cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
+      errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
+      choisir("repos");
+      calme(30);
+    } else if (id === "suivre") {
+      suivreCurseur(entre(Math.random, 6, 11));
+      calme(40);
+    } else if (id === "voir") {
+      const el = vues[rangDe(Math.random(), vues.length)];
+      if (el) visiter(el, 6.5);
+      calme(20);
+    } else if (id === "rentrer") {
+      cible = { x: maison.x, y: maison.y };
+      errance = { jusqua: t + 5.7 };
+      choisir("repos");
+      calme(30);
+    } else if (id === "dormir") {
+      dort = true;
+      errance = { jusqua: t + 1e9 };
+      choisir("veille");
+    } else if (id === "causer" || id === "relancer") {
+      derniereParole = t; // même muette (l'hôte n'avait rien de vrai à dire) : pas de nouvelle tentative avant 90 s
+      const parole = id === "relancer" ? direSpontane("relance") : direSpontane(Math.random() < 0.2 ? "salut" : "rien");
+      if (parole && id === "relancer") {
+        ecrireRelances(cle, { jour: jourLocal(new Date()), n: lireRelances(cle, jourLocal(new Date())) + 1 });
+      }
+      errance = { jusqua: t + 4 };
+    } else {
+      errance = { jusqua: t + entre(Math.random, 8, 16) };
+      choisir("repos");
+    }
+  };
+
   const penser = (): void => {
+    if (finEtatTemp && t > finEtatTemp) finirPassagere();
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
-    if (t < errance.jusqua || t - dernierMot < 14) return;
+    if (dort || t < errance.jusqua || t - dernierMot < 14) return;
     const vues = regardables();
-    const d = prochaineDecision(Math.random, {
-      curseurRecent: curseurRecent(),
-      cibles: vues.length,
-      parole: !!options.onSpontane && peutParlerSeule(),
-      relance: relancesRestantes(),
-    });
-    if (doux && (d.type === "suivre" || d.type === "voir")) {
-      // Sans déplacement : elle reste là, comme si elle attendait.
-      errance = { jusqua: t + d.duree };
-      choisir("repos");
-    } else if (d.type === "suivre") {
-      suivreCurseur(d.duree);
-    } else if (d.type === "voir") {
-      const el = vues[rangDe(d.rang, vues.length)];
-      if (el) visiter(el, d.duree);
-    } else if (d.type === "parler") {
-      direSpontane(d.motif);
-    } else if (d.type === "relance") {
-      if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(new Date()), n: lireRelances(cle, jourLocal(new Date())) + 1 });
-    } else if (d.type === "attendre") {
-      errance = { jusqua: t + d.duree };
-      choisir("repos");
-    } else if (d.type === "errer") {
-      if (!doux) cible = pointDansZone(zoneVie(), d.u, d.v, rayon * 1.3);
-      errance = { jusqua: t + d.duree };
-      choisir(d.etat);
-    } else {
-      setHumeur(d.humeur);
-    }
+    const z = zoneVie();
+    const id = choisirComportement(
+      candidats(envies, {
+        curseurRecent: curseurRecent(),
+        cibles: vues.length,
+        parole: !!options.onSpontane && peutParlerSeule(),
+        relance: relancesRestantes(),
+        humeur: humeurId,
+        tranquille: t < tranquilleJusqua,
+        loinDeLaMaison: z.w > 0 && z.h > 0 && Math.hypot(pos.x - maison.x, pos.y - maison.y) > 0.3 * Math.hypot(z.w, z.h),
+        deplacement: !doux,
+        secondesDepuisParole: t - derniereParole,
+      }),
+      Math.random,
+      comportement,
+    );
+    lancer(id, vues);
   };
+  let tics = 0;
+  const minuterieEnvies = setInterval(() => {
+    if (document.hidden || detruit) return;
+    envies = majEnvies(envies, 1, {
+      dort,
+      occupee: t < errance.jusqua,
+      auRepos: comportement === null || comportement === "repos",
+      secondesDepuisDecision: t - derniereDecision,
+      inquietude: 0,
+    });
+    if (dort && envies.energie >= 0.85) reveiller();
+    if (++tics % 10 === 0) ecrireCerveau(cle, { envies, journal: faits });
+  }, 1000);
   const minuterieHumeur = setInterval(() => {
     if (!vie || document.hidden || chatOuvert) return;
     const h = deriveHumeur(Math.random);
@@ -1063,6 +1156,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     setVieAutonome,
     suivreCurseur,
     allerVoir,
+    envies: () => ({ ...envies }),
+    journal: () => faits.map((f) => ({ ...f })),
     envoyer: envoyerVers,
     geste,
     venirPres,
@@ -1072,6 +1167,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       detruit = true;
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
+      clearInterval(minuterieEnvies);
+      ecrireCerveau(cle, { envies, journal: faits });
       document.removeEventListener("contextmenu", surClicDroitPage);
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);

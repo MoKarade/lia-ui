@@ -1,3 +1,4 @@
+import type { Envies, FaitLia } from "./cerveau.js";
 import type { GesteLia } from "./gestes.js";
 
 /** Les 12 humeurs de LIA (source : maquette validée du 22/10/2026). */
@@ -190,6 +191,10 @@ export interface LiaHandle {
   envoyer(element: Element, options?: EnvoiLia): boolean;
   /** Fait un des gestes de son menu (salue, content, musique, remercie, surpris, concentre, apprend, veille). */
   geste(geste: GesteLia, secondes?: number): boolean;
+  /** Ses six envies en ce moment (0 à 1) : energie, curiosite, social, inquiet, joie, ennui. Une copie : la modifier ne change rien. */
+  envies(): Envies;
+  /** Ce qu'elle a fait ces derniers temps (20 faits au plus, gardés dans le navigateur) : à l'hôte d'en faire une phrase. */
+  journal(): FaitLia[];
   /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
   venirPres(): boolean;
   /** Arrête de suivre ou de regarder : elle reste où elle est. */

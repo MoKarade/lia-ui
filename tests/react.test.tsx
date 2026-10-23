@@ -41,7 +41,7 @@ describe("<Lia />", () => {
   });
 
   it("transmet la parole spontanée, le clic droit sur un élément et ses réglages à LIA", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.5); // 22 % : parler, motif « rien »
+    vi.spyOn(Math, "random").mockReturnValue(0.3); // choix pondéré : causer, motif « rien »
     const onSpontane = vi.fn(() => "Il est calme ici.");
     const decrire = vi.fn((e: Element) => (e.id === "carte" ? { genre: "une carte", texte: "Bonjour" } : null));
     const racine = document.createElement("div");
