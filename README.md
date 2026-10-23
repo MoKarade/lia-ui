@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.10.1
+npm i github:MoKarade/lia-ui#v0.11.0
 ```
 
 ## Utiliser
@@ -104,6 +104,10 @@ Beaucoup de machines (Windows : *Effets d'animation* désactivés) annoncent `pr
 - `"fixe"` : une seule image, rien ne bouge (comportement d'avant).
 
 Le menu de son corps (clic droit sur elle) a, quand le système réduit les animations, une ligne **Animations complètes** à cocher : le choix est mémorisé dans le navigateur (`lia-ui:<cle>:mouvement`) et l'emporte sur l'option de l'hôte.
+
+## Son humeur, visible
+
+Depuis v0.11.0 le paquet dessine lui-même une pastille sous son corps : un point de couleur et le nom de l'humeur du moment (« Sérénité », « Joie », « Inquiétude »…), pour les 40 humeurs du réseau. Elle est donc identique dans toutes les apps, l'hôte n'a rien à dessiner. `humeurVisible: false` la retire ; `lia.humeur()` rend `{ nom, libelle, couleur }` ; `libelleHumeur(nom)` et `couleurHumeur(nom)` sont exportés. `onHumeur` ne signale toujours que les douze humeurs historiques.
 
 ## Garanties
 

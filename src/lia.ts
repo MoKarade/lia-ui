@@ -16,7 +16,7 @@ import {
   type MotifMonde,
 } from "./cerveau.js";
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
-import { PROFILS_V9, type ProfilHumeur } from "./humeurs.js";
+import { PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { ajouterImpulsion, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
 import {
   HUMEURS as HUMEURS_MOTEUR,
@@ -172,6 +172,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   hit.setAttribute("aria-label", "LIA : ouvrir la discussion");
   hit.setAttribute("aria-haspopup", "dialog");
   corpsEl.append(toile, hit);
+  /** Sa pastille d'humeur : dessinée par le paquet, donc la même dans toutes les apps (l'hôte n'a rien à refaire). */
+  const puceHumeur = options.humeurVisible === false ? null : el("div", "lia-ui__etat-humeur");
+  const pointHumeur = puceHumeur ? el("i") : null;
+  const texteHumeur = puceHumeur ? el("span") : null;
+  if (puceHumeur && pointHumeur && texteHumeur) {
+    pointHumeur.setAttribute("aria-hidden", "true");
+    puceHumeur.append(pointHumeur, texteHumeur);
+    corpsEl.appendChild(puceHumeur);
+  }
   couche.appendChild(corpsEl);
   const bulle = el("div", "lia-ui__bulle");
   bulle.hidden = true;
@@ -286,9 +295,19 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     etat = e;
   };
 
+  const afficherHumeur = (nom: string): void => {
+    if (!puceHumeur || !pointHumeur || !texteHumeur) return;
+    const libelle = libelleHumeur(nom);
+    texteHumeur.textContent = libelle.charAt(0).toUpperCase() + libelle.slice(1);
+    puceHumeur.style.setProperty("--lia-point", couleurHumeur(nom));
+    puceHumeur.setAttribute("aria-label", `Humeur : ${libelle}`);
+  };
+  afficherHumeur(humeurNom);
+
   const appliquerHumeur = (nom: string): void => {
     if (nom === humeurNom) return;
     humeurNom = nom;
+    afficherHumeur(nom);
     if ((HUMEURS_LIA as readonly string[]).includes(nom)) {
       humeurId = nom as HumeurLia;
       options.onHumeur?.(humeurId);
@@ -1292,6 +1311,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       });
     }
     corpsEl.style.transform = `translate(${pos.x.toFixed(1)}px,${pos.y.toFixed(1)}px)`;
+    if (puceHumeur) {
+      puceHumeur.hidden = chatOuvert;
+      // Sous son corps ; près du bas de la zone, elle se glisse plus haut pour ne jamais sortir de l'écran.
+      const dessous = Math.min(rayon * 1.05, Math.max(rayon * 0.6, z.y + z.h - pos.y - 26));
+      puceHumeur.style.top = `${dessous.toFixed(1)}px`;
+    }
     const diametreHit = Math.round(rayon * 1.5);
     hit.style.width = hit.style.height = `${Math.max(44, diametreHit)}px`;
     if (!bulle.hidden) {
@@ -1338,6 +1363,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     ouvrirChat,
     fermerChat,
     setHumeur,
+    humeur: () => ({ nom: humeurNom, libelle: libelleHumeur(humeurNom), couleur: couleurHumeur(humeurNom) }),
     setEtat(e) {
       etatForce = e;
       choisir(e ?? "repos");

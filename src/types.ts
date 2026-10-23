@@ -134,6 +134,11 @@ export interface OptionsLia {
   /** Appelé quand son humeur dominante change et qu'elle est l'une des 12 humeurs de LIA (pour un voyant côté hôte). */
   onHumeur?: (humeur: HumeurLia) => void;
   /**
+   * Dessine sous son corps une pastille avec son humeur du moment (l'une des 40 de son réseau : point de la couleur de
+   * l'humeur et son nom). Défaut vrai : c'est la même LIA partout, l'hôte n'a pas à refaire sa propre pastille.
+   */
+  humeurVisible?: boolean;
+  /**
    * Ce que l'hôte sait du monde, appelé chaque seconde : des entrées du réseau interne de LIA entre 0 et 1
    * (`alerte`, `nbAlertes`, `toutVert`, `changement`, `recurrence`, `tendBonne`, `tendMauvaise`, `g_<app>`, `v_<app>`…).
    * Elles priment sur celles qu'elle calcule seule (heure, activité de Marc, rythme des échanges). Absent : elle vit sans monde.
@@ -205,6 +210,8 @@ export interface LiaHandle {
   ouvrirChat(): void;
   fermerChat(): void;
   setHumeur(humeur: HumeurLia): void;
+  /** Son humeur du moment (l'une des 40 de son réseau), avec son nom et sa couleur : ce que montre la pastille. */
+  humeur(): { nom: string; libelle: string; couleur: string };
   /** Force une silhouette (« lit », « cherche »…) ; `null` la rend à sa vie. */
   setEtat(etat: string | null): void;
   setVieAutonome(actif: boolean): void;
