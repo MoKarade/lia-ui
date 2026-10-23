@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estRegarde, pointPresDeLElement, pointPresDuCurseur, rangDe } from "../src/attache.js";
+import { estRegarde, estVisible, pointPresDeLElement, pointPresDuCurseur, rangDe } from "../src/attache.js";
 
 const fenetre = { w: 1000, h: 800 };
 const rect = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom });
@@ -71,6 +71,19 @@ describe("estRegarde", () => {
     expect(estRegarde(rect(100, 700, 400, 900), fenetre)).toBe(false);
     expect(estRegarde(rect(100, 300, 100, 500), fenetre)).toBe(false);
     expect(estRegarde(rect(1100, 300, 1400, 500), fenetre)).toBe(false);
+  });
+});
+
+describe("estVisible", () => {
+  it("accepte un élément en haut ou en bas de la fenêtre, que la bande centrale refuse", () => {
+    expect(estVisible(rect(100, 0, 400, 100), fenetre)).toBe(true);
+    expect(estVisible(rect(100, 700, 400, 900), fenetre)).toBe(true);
+  });
+
+  it("refuse un élément hors écran ou vide", () => {
+    expect(estVisible(rect(100, -500, 400, -10), fenetre)).toBe(false);
+    expect(estVisible(rect(100, 300, 100, 500), fenetre)).toBe(false);
+    expect(estVisible(rect(1100, 300, 1400, 500), fenetre)).toBe(false);
   });
 });
 

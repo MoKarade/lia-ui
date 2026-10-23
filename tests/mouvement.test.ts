@@ -110,3 +110,19 @@ describe("mouvement réduit : les trois modes", () => {
     expect(lia.allerVoir(carte)).toBe(true);
   });
 });
+
+describe("demande explicite vers un élément hors de la bande centrale", () => {
+  it("elle va jusqu'à un élément tout en haut de l'écran, au lieu d'abandonner au premier pas", () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("lia-ui")) return rectDe({ left: 0, top: 0, right: 1000, bottom: 800 });
+      if (this === carte) return rectDe({ left: 100, top: 0, right: 400, bottom: 100 });
+      return rectDe({ left: 0, top: 0, right: 0, bottom: 0 });
+    });
+    lia = mountLia({ quandMouvementReduit: "complet", vieAutonome: false });
+    expect(lia.allerVoir(carte, 20)).toBe(true);
+    vi.advanceTimersByTime(4_000);
+    const [x, y] = position();
+    expect(Math.hypot(x - 448, y - 50)).toBeLessThan(60);
+  });
+});
