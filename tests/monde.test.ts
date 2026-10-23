@@ -199,6 +199,8 @@ describe("ce qu'elle fait quand Marc est là", () => {
     ["rappeler", "DriveAI : le quota approche. Je te le rappelle."],
     ["souvenir", "Il y a une heure, tu me parlais de DriveAI."],
   ] as const)("%s : elle dit le texte de l'hôte, rien d'autre", (motif, texte) => {
+    // Tirage fixé : après 40 s sans bouger, « promener » pèse plus (envie de bouger) ; 0,8 tombe sur le motif de l'hôte.
+    vi.spyOn(Math, "random").mockReturnValue(0.8);
     lia = mountLia({ monde: seule(motif, texte) });
     expect(attendreDit(texte, 150, true)).toBe(true);
     expect(lia.journal().some((f) => f.quoi === motif)).toBe(true);
