@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.12.2
+npm i github:MoKarade/lia-ui#v0.13.0
 ```
 
 ## Utiliser
@@ -72,6 +72,8 @@ Son corps n'a plus une humeur au tirage : un réseau de 225 neurones (reprise du
 ## Le menu de son corps
 
 Un clic droit sur LIA elle-même (ou la touche Menu, ou un appui long) ouvre, comme la maquette : *Lui parler*, six humeurs (curieuse, calme, joyeuse, concentrée, espiègle, fatiguée ; la sienne est cochée), huit gestes (*Salue*, *Content*, *Fredonne*, *Merci*, *Surpris*, *Se concentre*, *Apprend*, *Dort*), puis *La laisser tranquille* ou *La laisser vivre*, et les `actions` de l'hôte. Un geste prend la silhouette correspondante 3 secondes puis elle reprend sa vie ; la rangée des gestes n'existe pas seulement en mode « fixe » de `prefers-reduced-motion`. Flèches haut, bas, gauche et droite parcourent le menu, cibles de 44 px. Aucune phrase n'est écrite dans ce paquet : ce qu'elle dit vient de l'hôte.
+
+**Ses 39 actions (v0.13.0).** Le menu de son corps a une ligne *Toutes ses actions* qui déplie les 39 silhouettes du moteur par famille (Présence, Pensée, Recherche, Création, Calcul, Alerte, Émotion, Travail) : un clic la fait jouer 5 secondes. Elle les montre aussi d'elle-même, selon ce qu'elle fait : une question de Marc la fait se souvenir, calculer, chercher, écrire, traduire, ranger, vérifier, analyser… selon son sujet (puis se concentrer à 6 s et attendre à 15 s si la réponse tarde) ; en allant voir un élément elle cherche, puis analyse un bloc, lit un texte, calcule une jauge ou un graphique, surveille une alerte, écrit dans un champ, programme devant du code ; en jouant elle puise dans les actions de son humeur ; une réponse qui pose une question la fait « demander » jusqu'à ce que Marc réponde. L'hôte la dicte quand il sait : `data-lia-activite="traduit"` sur un élément, `etat: "calcule"` dans la réponse de `ask` (montrée 1,6 s avant qu'elle parle) ou dans la proposition de `monde()`, et `lia.activite("synchronise", 6)` quand elle fait vraiment ce travail. La silhouette du moment est lisible dans `data-etat` sur `.lia-ui__corps`. Aucune phrase n'est écrite pour autant : ce qu'elle dit vient de l'hôte.
 
 Côté hôte : `lia.geste("salue", 3)` fait le même geste ; `lia.envoyer(element, { etat: "lit", dit: "Regarde cette carte.", secondes: 10 })` l'envoie près d'un élément, sans faire défiler la page, avec la silhouette voulue, et elle dit `dit` au bout d'une seconde et demie si elle y est encore (280 caractères au plus, et c'est l'hôte qui décide : pas d'heure de silence). Les couleurs des humeurs sont les variables `--lia-h-curieux`, `--lia-h-calme`… sur `.lia-ui`.
 

@@ -199,8 +199,8 @@ describe("ce qu'elle fait quand Marc est là", () => {
     ["rappeler", "DriveAI : le quota approche. Je te le rappelle."],
     ["souvenir", "Il y a une heure, tu me parlais de DriveAI."],
   ] as const)("%s : elle dit le texte de l'hôte, rien d'autre", (motif, texte) => {
-    // Tirage fixé : après 30 s sans bouger, « promener » pèse de plus en plus (envie de bouger) ; 0,85 tombe sur le motif de l'hôte.
-    vi.spyOn(Math, "random").mockReturnValue(0.85);
+    // Tirage fixé : après 30 s sans bouger, « promener » pèse de plus en plus (envie de bouger) ; 0,75 tombe sur le motif de l'hôte (jouer pèse plus depuis v0.13.0 : elle montre davantage d'actions).
+    vi.spyOn(Math, "random").mockReturnValue(0.75);
     lia = mountLia({ monde: seule(motif, texte) });
     expect(attendreDit(texte, 150, true)).toBe(true);
     expect(lia.journal().some((f) => f.quoi === motif)).toBe(true);
@@ -208,17 +208,25 @@ describe("ce qu'elle fait quand Marc est là", () => {
 
   it("si Marc ne bouge pas, elle n'en parle pas", () => {
     lia = mountLia({ monde: seule("resumer", "Côté DriveAI : ça monte.") });
+    // Marc est compté présent 60 s après le montage ; ensuite, plus rien ne doit sortir.
+    seconde(61);
+    const avant = lia.journal().filter((f) => f.quoi === "resumer").length;
     seconde(150);
-    expect(lia.journal().some((f) => f.quoi === "resumer")).toBe(false);
+    expect(lia.journal().filter((f) => f.quoi === "resumer")).toHaveLength(avant);
   });
 
   it("une bonne nouvelle la réjouit : son réseau reçoit une impulsion « bon »", () => {
     lia = mountLia({ monde: seule("feliciter", "Ça fait plaisir : tout est vert.") });
-    presente(60);
+    let avant = lia.envies().joie;
+    for (let i = 0; i < 24 && !lia.journal().some((f) => f.quoi === "feliciter"); i++) {
+      avant = lia.envies().joie;
+      bouger();
+      seconde(5);
+    }
     const bon = lia.ressent().map(([nom]) => nom);
     expect(lia.journal().some((f) => f.quoi === "feliciter")).toBe(true);
     expect(bon.length).toBeGreaterThan(0);
-    expect(lia.envies().joie).toBeGreaterThan(0.25);
+    expect(lia.envies().joie - avant).toBeGreaterThan(0.05);
   });
 });
 

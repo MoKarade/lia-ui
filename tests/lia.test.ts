@@ -146,7 +146,7 @@ describe("menu", () => {
     lia = mountLia({ actions: [{ id: "bail", label: "Voir le bail", run }] });
     hit().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
     const libelles = [...document.querySelectorAll('[role="menuitem"]')].map((i) => i.textContent).filter(Boolean);
-    expect(libelles).toEqual(["Lui parler", "La laisser tranquille", "Voir le bail"]);
+    expect(libelles).toEqual(["Lui parler", "Toutes ses actions", "La laisser tranquille", "Voir le bail"]);
     [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((b) => b.textContent === "Voir le bail")?.click();
     await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
     expect(document.querySelector('[role="menu"]')).toBeNull();

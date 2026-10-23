@@ -71,6 +71,8 @@ interface ReponseLia {
     chips?: PuceLia[];
     mood?: HumeurLia;
     blocks?: readonly unknown[];
+    /** Ce qu'elle a fait pour répondre, une des 39 actions (« souvient », « calcule », « analyse »…) : elle la montre 1,6 s avant de parler. Un nom inconnu est ignoré. */
+    etat?: string;
 }
 /** Une action proposée dans le menu du clic droit. L'hôte seul décide ce qu'elle fait. */
 interface ActionLia {
@@ -92,6 +94,8 @@ interface PropositionMonde {
     chips?: readonly PuceLia[];
     /** L'élément où elle va se poser pour le dire (la carte de l'app concernée). Sans lui : elle le dit sur place (près du curseur pour `appeler`). */
     element?: Element | null;
+    /** Ce qu'elle fait en le disant, une des 39 actions ; sans lui : celle du motif (« alerte » pour un problème, « planifie » pour un rappel, « souvient » pour un souvenir…). */
+    etat?: string;
 }
 /** Ce que LIA sait d'un élément de la page : de quoi parler de lui, jamais plus. */
 interface DescriptionElement {
@@ -247,6 +251,8 @@ interface LiaHandle {
     envoyer(element: Element, options?: EnvoiLia): boolean;
     /** Fait un des gestes de son menu (salue, content, musique, remercie, surpris, concentre, apprend, veille). */
     geste(geste: GesteLia, secondes?: number): boolean;
+    /** Montre une des 39 actions de son moteur (« analyse », « lit », « ecrit », « calcule », « synchronise »…) quelques secondes (3 par défaut, 30 au plus), puis elle reprend sa vie. `false` si le nom est inconnu ou si elle ne peut pas bouger. */
+    activite(etat: string, secondes?: number): boolean;
     /** Ses six envies en ce moment (0 à 1) : energie, curiosite, social, inquiet, joie, ennui. Une copie : la modifier ne change rien. */
     envies(): Envies;
     /** Ce qu'elle ressent, du plus fort au plus faible (trois humeurs au plus, de 0 à 1) : `[["inquiet", 0.55], …]`. */
