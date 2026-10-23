@@ -16,7 +16,7 @@ import {
   type MotifMonde,
 } from "./cerveau.js";
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
-import { PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
+import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
 import {
@@ -336,7 +336,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
     if (sansMouvement) dessinerUneFois();
   };
-  const setHumeur = (h: HumeurLia): void => {
+  const setHumeur = (h: string): void => {
+    if (!LIBELLES_HUMEURS[h]) return;
     if (reseauActif) {
       forcee = { jusqua: Date.now() + 100_000 };
       pousserHumeur(reseau, h, Date.now(), 1.6);
@@ -710,7 +711,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     rangee.setAttribute("role", "group");
     rangee.setAttribute("aria-label", "Son humeur");
     for (const h of HUMEURS_MENU) {
-      const b = item(h.libelle, () => setHumeur(h.id));
+      const b = item(h.libelle, () => {
+        setHumeur(h.id);
+        const phrase = PHRASES_MENU[h.id];
+        if (phrase) dire(phrase);
+      });
       b.classList.add("lia-ui__humeur");
       b.setAttribute("role", "menuitemradio");
       b.setAttribute("aria-checked", String(h.id === humeurNom));

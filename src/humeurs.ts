@@ -83,3 +83,13 @@ export function couleurHumeur(nom: string): string {
   const tc = PROFILS_V9[nom]?.tc;
   return tc ? `#${hex2(tc[0])}${hex2(tc[1])}${hex2(tc[2])}` : COULEURS_12["neutre"] ?? "#A7AEBD";
 }
+
+/** Ce qu'elle dit quand Marc choisit une humeur dans son menu (maquette v5 `agir('hum:…')`). */
+export const PHRASES_MENU: Readonly<Record<string, string>> = {
+  curieux: "Je regarde partout.",
+  calme: "On respire.",
+  joyeux: "Ça va bien !",
+  concentre: "Je me concentre.",
+  espiegle: "Tu vas voir.",
+  fatigue: "Un peu fatiguée.",
+};

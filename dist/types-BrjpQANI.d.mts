@@ -264,7 +264,8 @@ interface ContexteLia {
 interface ReponseLia {
     text: string;
     chips?: PuceLia[];
-    mood?: HumeurLia;
+    /** Une des 40 humeurs (`HUMEURS_DETAILLEES`) ; un nom inconnu est ignoré. */
+    mood?: HumeurLia | (string & {});
     blocks?: readonly unknown[];
     /** Ce qu'elle a fait pour répondre, une des 39 actions (« souvient », « calcule », « analyse »…) : elle la montre 1,6 s avant de parler. Un nom inconnu est ignoré. */
     etat?: string;

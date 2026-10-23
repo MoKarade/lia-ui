@@ -176,7 +176,7 @@ export function activiteElement(el: Element, geo?: GeometrieElement): string {
 
 /**
  * Ce qu'elle fait quand elle « joue » : selon son humeur (maquette `POOL`), et toutes les actions de travail
- * y passent à leur tour. Les humeurs inconnues prennent le neutre.
+ * y passent à leur tour. Les 40 humeurs ont leur lot (`POOL` de la maquette) ; une humeur inconnue prend le neutre.
  */
 export const ACTIVITES_JEU: Readonly<Record<string, readonly string[]>> = {
   joyeux: ["musique", "content", "salue", "image", "remercie"],
@@ -191,4 +191,32 @@ export const ACTIVITES_JEU: Readonly<Record<string, readonly string[]>> = {
   concentre: ["concentre", "code", "calcule", "analyse", "verifie", "ecrit", "traduit"],
   fier: ["content", "reussi", "envoie", "remercie"],
   timide: ["reflexion", "attend", "lit", "apprend"],
+  serein: ["reflexion", "attend", "musique"],
+  attentif: ["surveille", "lit", "attend"],
+  vigilant: ["surveille", "securise", "attend"],
+  protecteur: ["securise", "surveille", "verifie"],
+  mefiant: ["surveille", "verifie"],
+  boudeur: ["triste", "attend"],
+  nostalgique: ["souvient", "reflexion"],
+  reveur: ["reflexion", "souvient", "musique"],
+  ennuye: ["attend", "cherche", "musique"],
+  taquin: ["musique", "salue", "cherche"],
+  soulage: ["content", "reussi"],
+  emerveille: ["surpris", "content", "apprend"],
+  gene: ["attend", "reflexion"],
+  determine: ["concentre", "planifie", "verifie"],
+  agace: ["attend", "securise"],
+  tendre: ["salue", "content", "remercie"],
+  confiant: ["content", "reussi", "attend"],
+  reconnaissant: ["remercie", "content"],
+  amuse: ["musique", "salue", "content"],
+  dubitatif: ["verifie", "reflexion", "surveille"],
+  impatient: ["attend", "cherche"],
+  compatissant: ["remercie", "attend", "reflexion"],
+  euphorique: ["musique", "content", "reussi"],
+  paisible: ["reflexion", "attend", "musique"],
+  pensif: ["reflexion", "souvient"],
+  empresse: ["planifie", "organise", "cherche"],
+  solidaire: ["salue", "content", "verifie"],
+  optimiste: ["content", "reussi", "musique"],
 };
