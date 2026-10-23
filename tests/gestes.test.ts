@@ -87,7 +87,7 @@ describe("menu de son corps", () => {
     expect(document.querySelector(".lia-ui__menu-titre")?.textContent).toBe("LIA");
     const humeurs = [...document.querySelectorAll<HTMLElement>("[role=menuitemradio]")];
     expect(humeurs.map((h) => h.textContent)).toEqual(HUMEURS_MENU.map((h) => h.libelle));
-    expect(humeurs.filter((h) => h.getAttribute("aria-checked") === "true").map((h) => h.textContent)).toEqual(["Curieuse"]);
+    expect(humeurs.filter((h) => h.getAttribute("aria-checked") === "true").map((h) => h.textContent)).toEqual([]); // elle est « neutre » au départ : aucune des six n'est cochée
     const gestes = [...document.querySelectorAll<HTMLElement>(".lia-ui__geste")];
     expect(gestes.map((g) => g.getAttribute("aria-label"))).toEqual(GESTES.map((g) => g.libelle));
     expect(gestes.every((g) => g.querySelector("svg path"))).toBe(true);

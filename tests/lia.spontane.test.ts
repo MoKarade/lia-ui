@@ -90,7 +90,7 @@ describe("relances : au plus deux par jour", () => {
   const jour = (): string => jourLocal(new Date());
 
   it("fait une relance et la compte", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.55); // choix pondéré : relancer
+    vi.spyOn(Math, "random").mockReturnValue(0.5); // choix pondéré : relancer
     localStorage.setItem("lia-ui:lia:relances", JSON.stringify({ jour: jour(), n: 1 }));
     const motifs: MotifSpontane[] = [];
     lia = mountLia({
@@ -115,7 +115,7 @@ describe("relances : au plus deux par jour", () => {
   });
 
   it("le compteur d'hier ne compte pas aujourd'hui", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.55);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
     localStorage.setItem("lia-ui:lia:relances", JSON.stringify({ jour: "2026-10-21", n: 2 }));
     const onSpontane = vi.fn(() => "Relance.");
     lia = mountLia({ onSpontane });

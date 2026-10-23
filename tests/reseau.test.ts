@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { HUMEURS } from "../src/moteur/moteur.js";
 import { PROFILS_V9 } from "../src/humeurs.js";
 import { INTK, L2K, MOODS } from "../src/poids.js";
-import { TAU_LENT, creerReseau, etatLent, impulsion, melange, multIntention, pousserHumeur, reseauPas, top3, type Reseau } from "../src/reseau.js";
+import { TAU_LENT, ajouterImpulsion, creerReseau, etatLent, impulsion, melange, multIntention, pousserHumeur, reseauPas, top3, type Reseau } from "../src/reseau.js";
 import { ecrireLente, lireLente } from "../src/stockage.js";
 
 const profils = { ...(HUMEURS as object), ...PROFILS_V9 } as Record<string, never>;
@@ -264,5 +264,18 @@ describe("réseau interne : pureté", () => {
     vivre(a, { ...base, alerte: 50, nbAlertes: -3 }, 20);
     vivre(b, { ...base, alerte: 1, nbAlertes: 0 }, 20);
     expect(a.act).toEqual(b.act);
+  });
+});
+
+describe("ajouterImpulsion", () => {
+  it("s'ajoute à ce qui reste, plafonne à 1 et ne descend jamais sous 0", () => {
+    const r = creerReseau(profils);
+    ajouterImpulsion(r, "scroll", 0.2);
+    ajouterImpulsion(r, "scroll", 0.2);
+    expect(r.imp["scroll"]).toBeCloseTo(0.4, 10);
+    ajouterImpulsion(r, "scroll", 5);
+    expect(r.imp["scroll"]).toBe(1);
+    ajouterImpulsion(r, "touche", -3);
+    expect(r.imp["touche"]).toBe(0);
   });
 });

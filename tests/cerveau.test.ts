@@ -154,6 +154,13 @@ describe("choisirComportement", () => {
     expect(choisirComportement(liste, () => 0.3)).toBe(choisirComportement(liste, () => 0.3));
   });
 
+  it("la pesée de ses intentions multiplie chaque poids : ce qu'elle veut faire passe devant", () => {
+    const pesee = (id: string): number => (id === "repos" ? 20 : 1);
+    expect(choisirComportement(liste, () => 0.3)).toBe("jouer");
+    expect(choisirComportement(liste, () => 0.3, null, pesee)).toBe("repos");
+    expect(choisirComportement(liste, () => 0.3, null, () => 1)).toBe("jouer");
+  });
+
   it("un poids plus fort passe plus souvent", () => {
     const forte = [
       { id: "jouer" as const, poids: 3 },

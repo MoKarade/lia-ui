@@ -99,6 +99,11 @@ export function impulsion(r: Reseau, nom: Impulsion, valeur = 1): void {
   r.imp[nom] = clamp01(Math.max(r.imp[nom] ?? 0, valeur));
 }
 
+/** Comme `impulsion`, mais s'ajoute à ce qui reste (le défilement, les touchers : plusieurs petits gestes font un grand). */
+export function ajouterImpulsion(r: Reseau, nom: Impulsion, delta: number): void {
+  r.imp[nom] = clamp01((r.imp[nom] ?? 0) + delta);
+}
+
 /** Pousse une humeur de l'extérieur pendant cent secondes (comme la maquette quand l'hôte la lui souffle). */
 export function pousserHumeur(r: Reseau, humeur: string, maintenant: number, v = 1.5): void {
   if (SORTIES[humeur]) r.pousse[humeur] = { v, until: maintenant + 100_000 };

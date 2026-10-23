@@ -1,12 +1,6 @@
 // src/autonomie.ts
 var ETATS_ERRANCE = ["repos", "musique", "content", "repos", "surpris"];
 var HUMEURS_DERIVE = ["curieux", "calme", "joyeux", "concentre", "espiegle", "fatigue"];
-var HUMEURS_ECHEANCE = ["curieux", "calme", "joyeux", "concentre", "espiegle"];
-var PERIODE_DERIVE_HUMEUR_MS = 4e4;
-var CHANCE_DERIVE_HUMEUR = 0.35;
-function deriveHumeur(hasard) {
-  return hasard() < CHANCE_DERIVE_HUMEUR ? choisir(HUMEURS_ECHEANCE, hasard) : null;
-}
 function enSilence(heure, [debut, fin]) {
   if (debut === fin) return false;
   return debut < fin ? heure >= debut && heure < fin : heure >= debut || heure < fin;
@@ -125,8 +119,8 @@ function candidats(e, c) {
   liste.push({ id: "repos", poids: 0.9 });
   return liste;
 }
-function choisirComportement(liste, hasard, courant = null) {
-  const w = liste.map((c) => Math.exp((c.poids - (c.id === courant ? 0.5 : 0)) * 2.4));
+function choisirComportement(liste, hasard, courant = null, pesee) {
+  const w = liste.map((c) => Math.exp((c.poids - (c.id === courant ? 0.5 : 0)) * 2.4) * (pesee?.(c.id) ?? 1));
   const total = w.reduce((s, x) => s + x, 0);
   let r = hasard() * total;
   for (let i = 0; i < liste.length; i++) {
@@ -283,6 +277,36 @@ var HUMEURS_MENU = [
   { id: "fatigue", libelle: "Fatigu\xE9e" }
 ];
 
+// src/types.ts
+var HUMEURS_LIA = [
+  "neutre",
+  "joyeux",
+  "calme",
+  "curieux",
+  "fatigue",
+  "inquiet",
+  "excite",
+  "triste",
+  "concentre",
+  "espiegle",
+  "fier",
+  "timide"
+];
+var LIBELLE_HUMEUR = {
+  neutre: "neutre",
+  joyeux: "joie",
+  calme: "calme",
+  curieux: "curiosit\xE9",
+  fatigue: "fatigue",
+  inquiet: "inqui\xE9tude",
+  excite: "excitation",
+  triste: "tristesse",
+  concentre: "concentration",
+  espiegle: "espi\xE8glerie",
+  fier: "fiert\xE9",
+  timide: "timidit\xE9"
+};
+
 // src/attache.ts
 var limiter = (v, min, max) => Math.min(Math.max(max, min), Math.max(min, v));
 function pointPresDuCurseur(curseur, t, rayon, fenetre) {
@@ -305,6 +329,456 @@ function estRegarde(rect, fenetre) {
 }
 function rangDe(u, n) {
   return n > 0 ? Math.min(n - 1, Math.floor(u * n)) : -1;
+}
+
+// src/entrees.ts
+var borne2 = (x) => Math.max(0, Math.min(1, x));
+function entreesLocales(c) {
+  const now = c.maintenant.getTime();
+  const h = c.maintenant.getHours() + c.maintenant.getMinutes() / 60;
+  const jour = c.maintenant.getDay();
+  const recents = c.echanges.filter((e) => now - e.t < 15 * 6e4).slice(-6);
+  const moyenne = recents.length ? recents.reduce((s, e) => s + e.longueur, 0) / recents.length : 0;
+  const dernierEchange = c.echanges.at(-1);
+  return {
+    ...c.envies,
+    nuit: h >= 23 || h < 6 ? 1 : h >= 21 ? 0.5 : h < 7 ? 0.4 : 0,
+    matin: h >= 6 && h < 10 ? 1 : h >= 10 && h < 11 ? 0.4 : 0,
+    midi: h >= 11 && h < 14 ? 1 : 0,
+    soir: h >= 18 && h < 23 ? 1 : 0,
+    weekend: jour % 6 === 0 ? 1 : 0,
+    aube: h >= 5 && h < 7 ? 1 : 0,
+    apresmidi: h >= 14 && h < 18 ? 1 : 0,
+    vendredi: jour === 5 ? 1 : 0,
+    lundi: jour === 1 ? 1 : 0,
+    actif: borne2(1 - (now - c.dernierMarc) / 8e3),
+    absent: borne2((now - c.dernierMarc - 6e4) / 18e4),
+    sessionLongue: borne2((now - c.debut) / 36e5),
+    conv: dernierEchange ? borne2(1 - (now - dernierEchange.t) / 12e4) : 0,
+    silence: borne2((now - (c.dernierPropos || c.debut)) / (15 * 6e4)),
+    calmeMonde: borne2((now - (c.dernierMonde || c.debut)) / 6e5),
+    questions: recents.length ? recents.filter((e) => e.question).length / recents.length : 0,
+    bref: recents.length && moyenne < 60 ? 1 - moyenne / 60 : 0,
+    bavard: moyenne > 100 ? borne2((moyenne - 100) / 100) : 0,
+    rythme: borne2(recents.length / 6)
+  };
+}
+
+// src/humeurs.ts
+var PROFILS_V9 = {
+  confiant: { bs: 0.85, ba: 1, blr: 0.8, ga: 0.9, en: 1, tint: 0.08, sag: 0, jit: 0.5, tc: [170, 215, 200] },
+  reconnaissant: { bs: 0.8, ba: 0.9, blr: 0.9, ga: 0.7, en: 1, tint: 0.12, sag: 0.01, jit: 0.5, tc: [255, 205, 160] },
+  amuse: { bs: 1.15, ba: 1, blr: 1.2, ga: 1.3, en: 1.1, tint: 0.15, sag: 0, jit: 1.3, tc: [255, 190, 140], wigI: 9, hopI: 20, hopV: 2 },
+  dubitatif: { bs: 0.95, ba: 0.6, blr: 1, ga: 1.2, en: 0.85, tint: 0.05, sag: 0.01, jit: 1, tc: [190, 185, 225], wigI: 20 },
+  impatient: { bs: 1.35, ba: 0.8, blr: 0.6, ga: 1.2, en: 1.1, tint: 0.12, sag: 0, jit: 1.8, tc: [255, 175, 120], hopI: 25, hopV: 2 },
+  compatissant: { bs: 0.75, ba: 0.9, blr: 1, ga: 0.7, en: 0.9, tint: 0.12, sag: 0.02, jit: 0.4, tc: [255, 185, 205] },
+  euphorique: { bs: 1.4, ba: 1.4, blr: 0.4, ga: 1.6, en: 1.4, tint: 0.25, sag: -0.04, jit: 1.6, tc: [255, 220, 140], hopI: 7, hopV: 4 },
+  paisible: { bs: 0.7, ba: 0.8, blr: 1, ga: 0.5, en: 0.85, tint: -0.08, sag: 0.01, jit: 0.3, tc: [160, 215, 205], yawnI: 70 },
+  pensif: { bs: 0.75, ba: 0.85, blr: 1.3, ga: 0.5, en: 0.8, tint: -0.1, sag: 0.01, jit: 0.6, tc: [185, 175, 235] },
+  empresse: { bs: 1.35, ba: 1.2, blr: 0.5, ga: 1.5, en: 1.2, tint: 0.15, sag: -0.03, jit: 1.2, tc: [255, 185, 120] },
+  solidaire: { bs: 0.95, ba: 1.1, blr: 0.7, ga: 0.9, en: 1.1, tint: 0.1, sag: 0, jit: 0.5, tc: [200, 190, 255] },
+  optimiste: { bs: 1, ba: 1.1, blr: 0.7, ga: 1, en: 1.15, tint: 0.12, sag: -0.01, jit: 0.8, tc: [190, 225, 255], hopI: 40, hopV: 2 },
+  serein: { bs: 0.75, ba: 0.75, blr: 0.8, ga: 0.7, en: 0.85, tint: -0.05, sag: 0, jit: 0.4, tc: [150, 215, 200], yawnI: 90 },
+  attentif: { bs: 1, ba: 0.8, blr: 0.6, ga: 1.3, en: 1, tint: 0.05, sag: 0, jit: 0.8 },
+  vigilant: { bs: 1.3, ba: 0.6, blr: 0.5, ga: 1.8, en: 1, tint: 0.1, sag: -0.01, jit: 1.1, tc: [255, 215, 150] },
+  protecteur: { bs: 1, ba: 1.1, blr: 0.6, ga: 1, en: 1.2, tint: 0.15, sag: -0.03, jit: 0.6, tc: [255, 190, 120] },
+  mefiant: { bs: 1.1, ba: 0.6, blr: 0.8, ga: 1.4, en: 0.9, tint: 0.05, sag: 0.01, jit: 1.3, tc: [190, 170, 230], shivI: 30 },
+  boudeur: { bs: 0.8, ba: 0.6, blr: 1.3, ga: 0.3, en: 0.6, tint: -0.1, sag: 0.03, jit: 0.5, tc: [200, 150, 200] },
+  nostalgique: { bs: 0.7, ba: 0.8, blr: 1.1, ga: 0.6, en: 0.7, tint: -0.15, sag: 0.02, jit: 0.5, tc: [220, 185, 150], yawnI: 80 },
+  reveur: { bs: 0.7, ba: 0.9, blr: 1.5, ga: 0.5, en: 0.85, tint: -0.05, sag: 0, jit: 0.8, tc: [190, 170, 255], wigI: 25 },
+  ennuye: { bs: 0.75, ba: 0.5, blr: 1.4, ga: 0.8, en: 0.65, tint: -0.15, sag: 0.02, jit: 0.6, yawnI: 28 },
+  taquin: { bs: 1.2, ba: 1, blr: 1.1, ga: 1.5, en: 1.15, tint: 0.18, sag: 0, jit: 1.5, tc: [255, 170, 120], wigI: 7, hopI: 16, hopV: 2.5 },
+  soulage: { bs: 0.85, ba: 1.1, blr: 0.9, ga: 0.8, en: 0.95, tint: 0.1, sag: 0.03, jit: 0.5, tc: [160, 230, 190], yawnI: 40 },
+  emerveille: { bs: 1.2, ba: 1.3, blr: 0.5, ga: 1.5, en: 1.35, tint: 0.25, sag: -0.02, jit: 1.3, tc: [180, 230, 255], hopI: 12, hopV: 3.5 },
+  gene: { bs: 1.3, ba: 0.6, blr: 1.7, ga: 0.4, en: 0.8, tint: 0.15, sag: 0.02, jit: 1.5, tc: [255, 150, 160], wigI: 10 },
+  determine: { bs: 1.1, ba: 1.3, blr: 0.4, ga: 1, en: 1.2, tint: 0.05, sag: -0.05, jit: 0.3, tc: [255, 180, 110] },
+  agace: { bs: 1.4, ba: 0.8, blr: 1, ga: 1.1, en: 1.1, tint: 0.2, sag: 0, jit: 2.2, tc: [255, 130, 110], shivI: 12 },
+  tendre: { bs: 0.8, ba: 0.9, blr: 1, ga: 0.7, en: 1, tint: 0.12, sag: 0, jit: 0.5, tc: [255, 185, 205] }
+};
+
+// src/poids.ts
+var APP_IDS = ["financeai", "batchchef", "jobai", "driveai", "carai", "memoryai"];
+var ENTREES = [
+  ...["energie", "curiosite", "social", "inquiet", "joie", "ennui", "nuit", "matin", "midi", "soir", "weekend", "actif", "absent", "alerte", "nbAlertes", "toutVert", "nouveau", "touche", "parle", "reponse", "rejet", "scroll", "demande", "bon", "mauvais", "sessionLongue", "conv", "calmeMonde", "changement", "recurrence"],
+  ...APP_IDS.map((x) => "g_" + x),
+  ...APP_IDS.map((x) => "v_" + x),
+  ...["aube", "apresmidi", "vendredi", "lundi", "tendBonne", "tendMauvaise", "hierPire", "hierMieux", "instable", "retour", "questions", "bref", "bavard", "rythme", "souvenirs", "piste", "silence", "quota", "cout", "attentionMarc"]
+];
+var L1 = {
+  a_danger: { alerte: 1, nbAlertes: 0.6, inquiet: 0.6, mauvais: 0.4, _b: -0.05 },
+  a_urgence: { alerte: 0.8, mauvais: 0.5, changement: 0.3, nuit: -0.2, _b: -0.05 },
+  a_recurrence: { recurrence: 1, mauvais: 0.2 },
+  a_solitude: { absent: 1, social: 0.5, parle: -0.3, reponse: -0.6, _b: -0.1 },
+  a_compagnie: { actif: 0.6, reponse: 0.6, parle: 0.3, touche: 0.3, conv: 0.4, _b: -0.1 },
+  a_reconnaissance: { reponse: 0.6, bon: 0.5, conv: 0.2, _b: -0.1 },
+  a_nouveaute: { changement: 0.7, curiosite: 0.4, nouveau: 0.5, bon: 0.2, _b: -0.1 },
+  a_routine: { calmeMonde: 0.7, toutVert: 0.4, changement: -0.5, _b: -0.05 },
+  a_surcharge: { alerte: 0.5, scroll: 0.5, demande: 0.4, nbAlertes: 0.5, touche: 0.3, _b: -0.1 },
+  a_succes: { bon: 1, toutVert: 0.3, joie: 0.4, _b: -0.1 },
+  a_echec: { mauvais: 1, rejet: 0.5, alerte: 0.3, _b: -0.05 },
+  a_fatigue: { energie: -1.5, nuit: 0.4, sessionLongue: 0.3, _b: 1 },
+  a_eveil: { energie: 0.6, matin: 0.5, midi: 0.2, actif: 0.3, nuit: -0.6, _b: -0.2 },
+  a_reverie: { nuit: 0.3, absent: 0.5, calmeMonde: 0.4, ennui: 0.3, actif: -0.4, _b: -0.1 },
+  a_jeu: { touche: 0.6, joie: 0.5, energie: 0.3, curiosite: 0.2, _b: -0.3 },
+  a_attention: { actif: 0.5, scroll: 0.3, demande: 0.6, conv: 0.5, _b: -0.1 },
+  a_intimite: { nuit: 0.3, soir: 0.4, conv: 0.5, reponse: 0.4, weekend: 0.2, _b: -0.2 },
+  a_ennui: { ennui: 1.6, curiosite: -0.4, actif: -0.3, calmeMonde: 0.3, _b: -0.1 },
+  a_fierte: { bon: 0.9, toutVert: 0.12, joie: 0.2, _b: -0.3 },
+  a_inquietude: { nbAlertes: 0.8, inquiet: 0.4, recurrence: 0.2, _b: -0.05 },
+  a_tendresse: { soir: 0.3, conv: 0.5, reponse: 0.5, joie: 0.3, nuit: 0.2, _b: -0.3 },
+  a_irritation: { touche: 0.6, rejet: 0.6, scroll: 0.4, mauvais: 0.3, _b: -0.3 },
+  a_gene: { touche: 0.8, parle: 0.2, _b: -0.3 },
+  a_curioApp: { curiosite: 0.5, v_financeai: 0.15, v_batchchef: 0.15, v_jobai: 0.15, v_driveai: 0.15, v_carai: 0.15, v_memoryai: 0.15, _b: -0.1 },
+  a_devoir: { nbAlertes: 0.6, changement: 0.4, energie: 0.3, _b: -0.1 },
+  a_vigilanceNuit: { nuit: 0.5, nbAlertes: 0.5, alerte: 0.5, _b: -0.1 },
+  a_detente: { weekend: 1, toutVert: 0.3, soir: 0.2, _b: -0.1 },
+  a_attenteRep: { conv: 0.6, demande: 0.3, _b: -0.1 },
+  a_sympathie: { scroll: 0.4, rejet: 0.4, mauvais: 0.3, nuit: 0.2, _b: -0.1 },
+  a_emerveille: { bon: 0.5, changement: 0.5, curiosite: 0.5, _b: -0.4 },
+  a_melancolie: { nuit: 0.3, absent: 0.4, joie: -0.5, ennui: 0.2, _b: -0.05 },
+  a_confiance: { toutVert: 0.4, reponse: 0.3, nouveau: -0.6, recurrence: -0.4, _b: 0.1 },
+  a_defiance: { recurrence: 0.7, mauvais: 0.4, rejet: 0.3, _b: -0.1 },
+  a_lassitude: { sessionLongue: 0.6, ennui: 0.4, energie: -0.4, _b: -0.1 },
+  a_espiegle: { joie: 0.4, touche: 0.4, energie: 0.3, ennui: 0.3, soir: 0.1, _b: -0.3 },
+  a_soulagement: {},
+  a_progres: { tendBonne: 1, hierMieux: 0.6, toutVert: 0.3, _b: -0.15 },
+  a_regression: { tendMauvaise: 1, hierPire: 0.7, mauvais: 0.2, _b: -0.15 },
+  a_retrouvailles: { retour: 1, nouveau: -0.2, actif: 0.3, _b: -0.1 },
+  a_questions: { questions: 0.9, conv: 0.4, curiosite: 0.2, _b: -0.2 },
+  a_discretion: { bref: 0.8, scroll: 0.3, rythme: -0.3, actif: 0.2, _b: -0.2 },
+  a_bavardage: { bavard: 0.8, rythme: 0.6, conv: 0.4, _b: -0.2 },
+  a_prudenceBudget: { quota: 0.9, cout: 0.7, _b: -0.3 },
+  a_intrigue: { piste: 0.9, curiosite: 0.4, recurrence: 0.3, _b: -0.1 },
+  a_silencePesant: { silence: 1, social: 0.4, absent: -0.3, _b: -0.2 },
+  a_instabilite: { instable: 1, changement: 0.4, nbAlertes: 0.3, _b: -0.1 },
+  a_matinee: { aube: 0.7, matin: 0.5, energie: 0.2, _b: -0.1 },
+  a_finSemaine: { vendredi: 0.8, weekend: 0.5, soir: 0.2, _b: -0.2 },
+  a_lundi: { lundi: 1, matin: 0.3, energie: -0.2, _b: -0.2 },
+  a_apresMidi: { apresmidi: 0.8, calmeMonde: 0.3, _b: -0.1 },
+  a_memoire: { souvenirs: 0.7, conv: 0.3, nouveau: -0.5, _b: -0.2 },
+  a_regard: { attentionMarc: 0.9, actif: 0.3, _b: -0.1 }
+};
+var L1B = {
+  i_progresGlobal: { a_progres: 1, a_succes: 0.5, a_confiance: 0.3, a_regression: -0.8, a_danger: -0.6 },
+  i_inquietudeFond: { a_regression: 0.7, a_recurrence: 0.6, a_instabilite: 0.5, a_inquietude: 0.4, a_prudenceBudget: 0.3, a_confiance: -0.4 },
+  i_fete: { a_succes: 0.6, a_progres: 0.5, a_finSemaine: 0.4, a_fierte: 0.4, a_danger: -0.7 },
+  i_besoinCalme: { a_surcharge: 0.7, a_discretion: 0.6, a_irritation: 0.4, a_fatigue: 0.3 },
+  i_besoinPresence: { a_solitude: 0.6, a_silencePesant: 0.7, a_retrouvailles: 0.4, a_intimite: 0.3 },
+  i_vigilanceLongue: { a_recurrence: 0.6, a_defiance: 0.5, a_instabilite: 0.5, a_vigilanceNuit: 0.4, a_routine: -0.3 },
+  i_confianceGagnee: { a_confiance: 0.8, a_progres: 0.5, a_reconnaissance: 0.4, a_defiance: -0.6 },
+  i_surpriseAgreable: { a_nouveaute: 0.6, a_succes: 0.4, a_emerveille: 0.5, a_echec: -0.5 },
+  i_deception: { a_echec: 0.7, a_regression: 0.5, a_irritation: 0.3, a_succes: -0.6 },
+  i_attente: { a_attenteRep: 0.8, a_questions: 0.4, a_curioApp: 0.2, a_silencePesant: 0.2 },
+  i_urgenceReelle: { a_danger: 0.8, a_urgence: 0.7, a_inquietude: 0.4, a_routine: -0.7 },
+  i_retourMaison: { a_retrouvailles: 1, a_compagnie: 0.4, a_matinee: 0.2 },
+  i_curiositePartagee: { a_questions: 0.7, a_regard: 0.6, a_curioApp: 0.4, a_attention: 0.4 },
+  i_fatigueMarc: { a_discretion: 0.5, a_lassitude: 0.5, a_sympathie: 0.5, nuit: 0.3, sessionLongue: 0.3 },
+  i_douceur: { a_intimite: 0.5, a_tendresse: 0.5, a_routine: 0.3, a_finSemaine: 0.3, a_danger: -0.6 },
+  i_doute: { a_intrigue: 0.7, a_defiance: 0.4, a_instabilite: 0.3, a_confiance: -0.4 },
+  i_complicite: { a_bavardage: 0.6, a_jeu: 0.5, a_compagnie: 0.5, a_espiegle: 0.3, a_surcharge: -0.5 },
+  i_sobriete: { a_prudenceBudget: 0.7, a_regression: 0.3, a_discretion: 0.3 }
+};
+var L2 = {
+  e_joie: { a_succes: 0.9, a_compagnie: 0.4, a_fierte: 0.3, a_jeu: 0.3, a_danger: -0.7, a_echec: -0.8, e_peine: -0.5, _b: 0.1 },
+  e_peine: { a_echec: 0.7, a_solitude: 0.5, a_melancolie: 0.7, a_sympathie: 0.2, e_joie: -0.4, _b: -0.05 },
+  e_peur: { a_danger: 0.9, a_urgence: 0.5, a_recurrence: 0.3, a_vigilanceNuit: 0.4, e_apaisement: -0.6, _b: -0.05 },
+  e_colere: { a_irritation: 1, a_echec: 0.3, a_surcharge: 0.3, e_serenite: -0.4, _b: -0.1 },
+  e_surprise: { a_nouveaute: 0.8, a_emerveille: 0.3, a_urgence: 0.3, _b: -0.1 },
+  e_tendresse: { a_tendresse: 0.9, a_intimite: 0.5, a_compagnie: 0.4, a_reconnaissance: 0.3, e_colere: -0.5 },
+  e_fierte: { a_fierte: 1, a_succes: 0.4, a_confiance: 0.2 },
+  e_gene: { a_gene: 1, e_fierte: -0.2 },
+  e_curiosite: { a_nouveaute: 0.4, a_curioApp: 0.7, a_attention: 0.3, e_ennui: -0.5, e_fatigue: -0.3, _b: -0.05 },
+  e_ennui: { a_ennui: 1, a_lassitude: 0.4, a_routine: 0.2, e_curiosite: -0.4 },
+  e_fatigue: { a_fatigue: 1.1, a_lassitude: 0.3, a_eveil: -0.8 },
+  e_apaisement: { a_routine: 0.5, a_detente: 0.5, a_confiance: 0.4, e_peur: -0.7, e_colere: -0.4 },
+  e_vigilance: { a_danger: 0.5, a_urgence: 0.4, a_vigilanceNuit: 0.5, a_devoir: 0.4, a_defiance: 0.3, e_apaisement: -0.3, _b: -0.05 },
+  e_determination: { a_devoir: 0.7, a_urgence: 0.3, a_attention: 0.3, a_eveil: 0.3, e_fatigue: -0.3, _b: -0.2 },
+  e_nostalgie: { a_melancolie: 0.7, a_reverie: 0.4, a_intimite: 0.3, a_solitude: 0.2 },
+  e_reverie: { a_reverie: 1, a_detente: 0.3, e_vigilance: -0.5 },
+  e_malice: { a_espiegle: 1, a_jeu: 0.5, e_peine: -0.3, e_peur: -0.3 },
+  e_soulagement: { a_soulagement: 1.2, e_peur: -0.2 },
+  e_solitude: { a_solitude: 1, a_melancolie: 0.3, e_tendresse: -0.2 },
+  e_enthousiasme: { a_succes: 0.4, a_emerveille: 0.5, a_eveil: 0.5, a_jeu: 0.3, e_fatigue: -0.5, _b: -0.35 },
+  e_mefiance: { a_defiance: 1, a_recurrence: 0.4, a_confiance: -0.5 },
+  e_attachement: { a_compagnie: 0.5, a_reconnaissance: 0.5, a_intimite: 0.4, a_confiance: 0.4, a_solitude: 0.2, _b: -0.2 },
+  e_concentration: { a_attention: 0.7, a_devoir: 0.4, a_eveil: 0.3, a_nouveaute: 0.1, e_reverie: -0.4, _b: -0.15 },
+  e_serenite: { a_routine: 0.5, a_confiance: 0.5, a_detente: 0.4, e_peur: -0.6, e_colere: -0.5, a_danger: -0.5, _b: -0.1 }
+};
+Object.assign(L2, {
+  e_espoir: { i_progresGlobal: 0.7, i_surpriseAgreable: 0.3, i_confianceGagnee: 0.4, i_deception: -0.5, _b: -0.1 },
+  e_gratitude: { i_confianceGagnee: 0.6, i_complicite: 0.4, i_retourMaison: 0.3, a_reconnaissance: 0.4, _b: -0.15 },
+  e_amusement: { i_complicite: 0.7, a_espiegle: 0.4, a_jeu: 0.3, i_urgenceReelle: -0.6, _b: -0.15 },
+  e_doute: { i_doute: 1, i_inquietudeFond: 0.3, e_serenite: -0.3, _b: -0.1 },
+  e_confiance: { i_confianceGagnee: 0.9, e_peur: -0.4, a_routine: 0.3, e_mefiance: -0.5, _b: -0.1 },
+  e_impatience: { i_attente: 0.8, a_silencePesant: 0.4, e_serenite: -0.2, _b: -0.2 },
+  e_compassion: { i_fatigueMarc: 0.9, i_deception: 0.3, i_besoinCalme: 0.3, e_colere: -0.4, _b: -0.15 },
+  e_euphorie: { i_fete: 1, i_progresGlobal: 0.4, e_fatigue: -0.5, i_urgenceReelle: -0.6, _b: -0.3 },
+  e_paix: { i_douceur: 0.8, i_besoinCalme: 0.3, e_peur: -0.5, e_colere: -0.5, _b: -0.1 },
+  e_pensivite: { i_sobriete: 0.4, i_doute: 0.3, a_memoire: 0.5, a_reverie: 0.3, i_vigilanceLongue: 0.2, _b: -0.2 },
+  e_empressement: { i_urgenceReelle: 0.7, i_retourMaison: 0.3, a_regard: 0.2, _b: -0.2 },
+  e_solidarite: { i_curiositePartagee: 0.6, i_besoinPresence: 0.4, a_attention: 0.3, _b: -0.2 }
+});
+var ajouter = (k, w) => {
+  Object.assign(L2[k] ?? {}, w);
+};
+ajouter("e_peur", { i_urgenceReelle: 0.5, i_inquietudeFond: 0.3 });
+ajouter("e_joie", { i_fete: 0.5, i_progresGlobal: 0.3 });
+ajouter("e_serenite", { i_douceur: 0.3, i_confianceGagnee: 0.3 });
+ajouter("e_peine", { i_deception: 0.4, i_besoinPresence: 0.3 });
+ajouter("e_curiosite", { i_curiositePartagee: 0.4 });
+ajouter("e_vigilance", { i_vigilanceLongue: 0.5, i_urgenceReelle: 0.3 });
+ajouter("e_tendresse", { i_douceur: 0.4, i_besoinPresence: 0.2 });
+ajouter("e_solitude", { i_besoinPresence: 0.5 });
+var SORTIES = {
+  neutre: { _b: 0.45 },
+  joyeux: { e_joie: 1.4, e_serenite: 0.3, e_peur: -0.6, _b: -0.2 },
+  excite: { e_enthousiasme: 1.2, e_joie: 0.6, e_surprise: 0.4, _b: -0.4 },
+  calme: { e_apaisement: 0.8, e_serenite: 0.5, e_fatigue: 0.2, e_peur: -0.5, _b: 0.1 },
+  serein: { e_serenite: 1.3, e_apaisement: 0.5, e_peur: -0.8, _b: -0.1 },
+  curieux: { e_curiosite: 1.3, e_surprise: 0.3, _b: -0.1 },
+  concentre: { e_concentration: 1.3, e_determination: 0.3, _b: -0.1 },
+  attentif: { e_attachement: 0.4, a_attention: 0.7, e_concentration: 0.4, a_attenteRep: 0.5, _b: -0.2 },
+  fatigue: { e_fatigue: 1.8, _b: -0.15 },
+  inquiet: { e_peur: 1.3, e_vigilance: 0.4, a_inquietude: 0.5, _b: -0.1 },
+  vigilant: { e_vigilance: 1.3, e_peur: 0.3, e_determination: 0.2, _b: -0.15 },
+  protecteur: { e_vigilance: 0.6, e_attachement: 0.7, e_determination: 0.4, a_danger: 0.3, _b: -0.3 },
+  mefiant: { e_mefiance: 1.3, e_vigilance: 0.3, _b: -0.1 },
+  triste: { e_peine: 1.4, e_solitude: 0.4, _b: -0.1 },
+  boudeur: { e_solitude: 0.9, e_attachement: 0.4, e_colere: 0.3, e_peine: 0.3, _b: -0.3 },
+  nostalgique: { e_nostalgie: 1.4, e_tendresse: 0.2, _b: -0.1 },
+  reveur: { e_reverie: 1.4, e_serenite: 0.2, _b: -0.1 },
+  ennuye: { e_ennui: 1.7, _b: -0.1 },
+  espiegle: { e_malice: 1.1, e_joie: 0.4, e_enthousiasme: 0.3, _b: -0.2 },
+  taquin: { e_malice: 1, e_attachement: 0.4, a_jeu: 0.4, a_gene: 0.2, _b: -0.3 },
+  fier: { e_fierte: 1.5, e_joie: 0.3, _b: -0.3 },
+  soulage: { e_soulagement: 1.6, e_joie: 0.3, _b: -0.2 },
+  emerveille: { e_surprise: 0.6, a_emerveille: 0.8, e_curiosite: 0.5, e_enthousiasme: 0.4, _b: -0.4 },
+  gene: { e_gene: 1.4, _b: -0.1 },
+  determine: { e_determination: 1.4, e_vigilance: 0.3, e_concentration: 0.3, _b: -0.2 },
+  agace: { e_colere: 1.4, a_irritation: 0.4, _b: -0.1 },
+  timide: { nouveau: 0.8, e_gene: 0.3, e_attachement: -0.2, a_attention: -0.1, _b: -0.3 },
+  tendre: { e_tendresse: 1.4, e_attachement: 0.4, e_serenite: 0.2, _b: -0.15 },
+  confiant: { e_confiance: 1.4, e_serenite: 0.3, e_doute: -0.6, _b: -0.2 },
+  reconnaissant: { e_gratitude: 1.5, e_attachement: 0.4, _b: -0.3 },
+  amuse: { e_amusement: 1.4, e_malice: 0.3, e_joie: 0.3, _b: -0.25 },
+  dubitatif: { e_doute: 1.4, e_mefiance: 0.3, _b: -0.2 },
+  impatient: { e_impatience: 1.4, e_vigilance: 0.2, _b: -0.3 },
+  compatissant: { e_compassion: 1.5, e_tendresse: 0.4, _b: -0.3 },
+  euphorique: { e_euphorie: 1.5, e_enthousiasme: 0.5, e_joie: 0.4, _b: -0.5 },
+  paisible: { e_paix: 1.4, e_serenite: 0.5, e_fatigue: 0.1, _b: -0.2 },
+  pensif: { e_pensivite: 1.4, e_reverie: 0.4, e_nostalgie: 0.2, _b: -0.2 },
+  empresse: { e_empressement: 1.4, e_determination: 0.4, e_vigilance: 0.3, _b: -0.4 },
+  solidaire: { e_solidarite: 1.4, e_attachement: 0.4, e_concentration: 0.2, _b: -0.3 },
+  optimiste: { e_espoir: 1.5, e_joie: 0.3, e_serenite: 0.2, _b: -0.3 }
+};
+var INTENT = {
+  appeler: { a_danger: 0.9, a_urgence: 0.8, e_vigilance: 0.5, e_peur: 0.5, a_attention: -0.3, e_serenite: -0.5, _b: -0.6 },
+  analyser: { e_curiosite: 1, a_curioApp: 0.8, a_nouveaute: 0.6, e_concentration: 0.4, _b: -0.5 },
+  pointer: { e_curiosite: 0.7, e_concentration: 0.5, a_attention: 0.4, _b: -0.4 },
+  accompagner: { a_attention: 0.8, e_attachement: 0.6, e_curiosite: 0.3, _b: -0.5 },
+  suivre: { e_attachement: 0.7, a_solitude: 0.5, e_malice: 0.5, e_joie: 0.3, _b: -0.7 },
+  promener: { e_ennui: 0.9, e_malice: 0.3, e_enthousiasme: 0.4, a_eveil: 0.2, e_fatigue: -0.6, _b: -0.4 },
+  causer: { a_solitude: 0.7, e_tendresse: 0.5, e_attachement: 0.5, e_joie: 0.3, e_ennui: 0.3, e_nostalgie: 0.2, _b: -0.5 },
+  jouer: { e_malice: 0.8, e_joie: 0.6, e_enthousiasme: 0.6, a_jeu: 0.6, _b: -0.7 },
+  rentrer: { e_fatigue: 0.3, e_serenite: 0.3, e_gene: 0.4, a_surcharge: 0.5, _b: -0.3 },
+  dormir: { e_fatigue: 1.4, a_lassitude: 0.4, e_reverie: 0.3, _b: -0.9 },
+  repos: { e_apaisement: 0.6, e_serenite: 0.6, e_reverie: 0.4, e_fatigue: 0.3, _b: -0.1 },
+  setaire: { a_surcharge: 0.7, a_attention: 0.4, e_concentration: 0.5, e_gene: 0.3, _b: -0.3 },
+  resumer: { a_progres: 0.7, a_regression: 0.5, i_progresGlobal: 0.5, a_matinee: 0.4, a_retrouvailles: 0.4, a_attention: 0.3, _b: -0.7 },
+  feliciter: { i_fete: 1, a_succes: 0.5, e_fierte: 0.3, e_joie: 0.3, _b: -0.8 },
+  rappeler: { a_devoir: 0.6, a_prudenceBudget: 0.4, i_urgenceReelle: 0.4, e_determination: 0.3, _b: -0.7 },
+  souvenir: { a_memoire: 0.7, e_nostalgie: 0.5, e_pensivite: 0.5, a_silencePesant: 0.3, a_ennui: 0.3, _b: -0.8 },
+  veiller: { a_vigilanceNuit: 0.7, i_vigilanceLongue: 0.6, nuit: 0.4, absent: 0.3, e_vigilance: 0.4, _b: -0.7 }
+};
+var MOODS = Object.keys(SORTIES);
+var L1K = Object.keys(L1);
+var L1BK = Object.keys(L1B);
+var L2K = Object.keys(L2);
+var INTK = Object.keys(INTENT);
+var compter = (t) => Object.values(t).reduce((n, w) => n + Object.keys(w).filter((k) => k !== "_b").length, 0);
+var TAILLE_RESEAU = {
+  neurones: ENTREES.length + L1K.length + L1BK.length + L2K.length + MOODS.length + INTK.length,
+  liens: [L1, L1B, L2, SORTIES, INTENT].reduce((n, t) => n + compter(t), 0)
+};
+
+// src/reseau.ts
+var TAU_IMP = { touche: 12, parle: 6, reponse: 10, rejet: 25, scroll: 2.5, demande: 10, bon: 12, mauvais: 20 };
+var TAU_LENT = 20 * 60;
+var clamp01 = (x) => Math.max(0, Math.min(1, x));
+var somme = (w, V) => {
+  let s = w["_b"] ?? 0;
+  for (const k in w) {
+    if (k !== "_b") s += (w[k] ?? 0) * (V[k] ?? 0);
+  }
+  return s;
+};
+function creerReseau(profils, lente, ageMs = 0) {
+  const r = {
+    profils,
+    imp: { touche: 0, parle: 0, reponse: 0, rejet: 0, scroll: 0, demande: 0, bon: 0, mauvais: 0 },
+    V: {},
+    fast: {},
+    slow: {},
+    noise: {},
+    act: {},
+    Z: {},
+    int: {},
+    pousse: {},
+    tref: 0,
+    dom: "neutre",
+    domDepuis: 0,
+    mix: { bs: 1, ba: 1, blr: 1, ga: 1, en: 1, tint: 0, sag: 0, jit: 1 },
+    pas: 0
+  };
+  for (const k of ENTREES) r.V[k] = 0;
+  for (const k of L1K) r.V[k] = 0, r.noise[k] = 0;
+  for (const k of L1BK) r.V[k] = 0, r.noise[k] = 0;
+  const oubli = Math.exp(-Math.max(0, ageMs) / 1e3 / TAU_LENT);
+  for (const k of L2K) {
+    const v = lente?.[k];
+    r.slow[k] = Number.isFinite(v) ? clamp01(v) * oubli : 0;
+    r.fast[k] = (r.slow[k] ?? 0) * 0.5;
+    r.V[k] = 0;
+  }
+  for (const m of MOODS) r.act[m] = m === "neutre" ? 1 : 0;
+  for (const k of INTK) r.int[k] = 0.3;
+  r.mix = melange(r);
+  return r;
+}
+function impulsion(r, nom, valeur = 1) {
+  r.imp[nom] = clamp01(Math.max(r.imp[nom] ?? 0, valeur));
+}
+function ajouterImpulsion(r, nom, delta) {
+  r.imp[nom] = clamp01((r.imp[nom] ?? 0) + delta);
+}
+function pousserHumeur(r, humeur2, maintenant, v = 1.5) {
+  if (SORTIES[humeur2]) r.pousse[humeur2] = { v, until: maintenant + 1e5 };
+}
+function reseauPas(r, entrees, dt, hasard, maintenant) {
+  const V = r.V;
+  for (const k of ENTREES) V[k] = clamp01(entrees[k] ?? 0);
+  for (const k in r.imp) V[k] = r.imp[k] ?? 0;
+  for (const k in r.imp) r.imp[k] = (r.imp[k] ?? 0) * Math.exp(-dt / (TAU_IMP[k] ?? 10));
+  const l1 = 1 - Math.exp(-dt / 1.5);
+  const l2 = 1 - Math.exp(-dt / 3);
+  const ls = dt / TAU_LENT;
+  const bruit = (k, amplitude) => {
+    const n = (r.noise[k] ?? 0) + -(r.noise[k] ?? 0) * dt / 8 + (hasard() - 0.5) * amplitude * Math.sqrt(dt);
+    r.noise[k] = n;
+    return n;
+  };
+  for (const k of L1K) {
+    if (k === "a_soulagement") continue;
+    const n = bruit(k, 0.09);
+    V[k] = (V[k] ?? 0) + (Math.tanh(1.3 * Math.max(0, somme(L1[k] ?? {}, V) + n)) - (V[k] ?? 0)) * l1;
+  }
+  for (const k of L1BK) {
+    const n = bruit(k, 0.06);
+    V[k] = (V[k] ?? 0) + (Math.tanh(1.3 * Math.max(0, somme(L1B[k] ?? {}, V) + n)) - (V[k] ?? 0)) * l1;
+  }
+  const danger = V["a_danger"] ?? 0;
+  r.tref += (danger - r.tref) * dt / 20;
+  V["a_soulagement"] = (V["a_soulagement"] ?? 0) + (clamp01((r.tref - danger) * 5) - (V["a_soulagement"] ?? 0)) * l1;
+  const prev = {};
+  for (const k of L2K) prev[k] = V[k] ?? 0;
+  for (const k of L2K) {
+    const w = L2[k] ?? {};
+    let s = w["_b"] ?? 0;
+    for (const j in w) {
+      if (j !== "_b") s += (w[j] ?? 0) * (j.startsWith("e") ? prev[j] ?? 0 : V[j] ?? 0);
+    }
+    const rapide = (r.fast[k] ?? 0) + (Math.tanh(1.9 * Math.max(0, s)) - (r.fast[k] ?? 0)) * l2;
+    const lente = (r.slow[k] ?? 0) + (rapide - (r.slow[k] ?? 0)) * ls;
+    r.fast[k] = rapide;
+    r.slow[k] = lente;
+    V[k] = 0.7 * rapide + 0.3 * lente;
+  }
+  const T = 0.2;
+  let mx = -9;
+  for (const m of MOODS) {
+    let z = somme(SORTIES[m] ?? {}, V);
+    const p = r.pousse[m];
+    if (p) {
+      if (p.until > maintenant) z += p.v;
+      else delete r.pousse[m];
+    }
+    r.Z[m] = z;
+    if (z > mx) mx = z;
+  }
+  const ex = {};
+  let tot = 0;
+  for (const m of MOODS) {
+    ex[m] = Math.exp(((r.Z[m] ?? 0) - mx) / T);
+    tot += ex[m] ?? 0;
+  }
+  const la = 1 - Math.exp(-dt / 2);
+  let meilleure = r.dom;
+  let bv = -1;
+  for (const m of MOODS) {
+    r.act[m] = (r.act[m] ?? 0) + ((ex[m] ?? 0) / tot - (r.act[m] ?? 0)) * la;
+    if ((r.act[m] ?? 0) > bv) {
+      bv = r.act[m] ?? 0;
+      meilleure = m;
+    }
+  }
+  if (meilleure !== r.dom && ((r.act[meilleure] ?? 0) > (r.act[r.dom] ?? 0) + 0.06 || maintenant - r.domDepuis > 8e3)) {
+    r.dom = meilleure;
+    r.domDepuis = maintenant;
+  }
+  for (const k of INTK) r.int[k] = (r.int[k] ?? 0) + (1 / (1 + Math.exp(-2.5 * somme(INTENT[k] ?? {}, V))) - (r.int[k] ?? 0)) * la;
+  r.mix = melange(r);
+  r.pas++;
+}
+var CLES_CORPS = ["bs", "ba", "blr", "ga", "en", "tint", "sag", "jit", "hopV"];
+var CLES_TICS = ["hopI", "yawnI", "shivI", "wigI"];
+function melange(r) {
+  const W = {};
+  let s = 0;
+  for (const m2 of MOODS) {
+    const w = Math.pow(r.act[m2] ?? 0, 1.4);
+    if (w > 0.01) {
+      W[m2] = w;
+      s += w;
+    }
+  }
+  const o = { bs: 0, ba: 0, blr: 0, ga: 0, en: 0, tint: 0, sag: 0, jit: 0, hopV: 0 };
+  const rythme = { hopI: 0, yawnI: 0, shivI: 0, wigI: 0 };
+  const tc = [0, 0, 0];
+  let tcw = 0;
+  for (const m2 in W) {
+    const w = (W[m2] ?? 0) / s;
+    const P = r.profils[m2];
+    if (!P) continue;
+    const p = P;
+    for (const k of CLES_CORPS) o[k] = (o[k] ?? 0) + w * (p[k] ?? 0);
+    for (const k of CLES_TICS) if (p[k]) rythme[k] = (rythme[k] ?? 0) + w / p[k];
+    const a = Math.abs(P.tint || 0);
+    if (a > 0.01) {
+      const c = P.tc ?? (P.tint > 0 ? [255, 190, 140] : [140, 170, 255]);
+      tc[0] = (tc[0] ?? 0) + w * a * (c[0] ?? 0);
+      tc[1] = (tc[1] ?? 0) + w * a * (c[1] ?? 0);
+      tc[2] = (tc[2] ?? 0) + w * a * (c[2] ?? 0);
+      tcw += w * a;
+    }
+  }
+  for (const k of CLES_TICS) {
+    const v = rythme[k] ?? 0;
+    if (v > 1 / 200) o[k] = 1 / v;
+  }
+  if (o["hopV"] === 0) delete o["hopV"];
+  const m = o;
+  if (tcw > 5e-3) m.tc = [Math.round((tc[0] ?? 0) / tcw), Math.round((tc[1] ?? 0) / tcw), Math.round((tc[2] ?? 0) / tcw)];
+  return m;
+}
+function multIntention(r, id) {
+  const v = r.int[id];
+  return v === void 0 ? 1 : Math.exp(1.2 * (v - 0.4));
+}
+function top3(r) {
+  return MOODS.map((m) => [m, r.act[m] ?? 0]).sort((a, b) => b[1] - a[1]).slice(0, 3).filter((x) => x[1] > 0.06);
+}
+function etatLent(r) {
+  return { ...r.slow };
 }
 
 // src/moteur/moteur.js
@@ -1090,11 +1564,11 @@ SC.appelle = (c, t, K) => {
   }
 };
 SC.analyse = (c, t, K, o) => {
-  const asp = o && o.asp || 0.7, x = 0.96, y = asp * 0.96, L2 = 0.2;
+  const asp = o && o.asp || 0.7, x = 0.96, y = asp * 0.96, L22 = 0.2;
   c.strokeStyle = K.A(1);
   for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-    L(c, sx * x, sy * y, sx * (x - L2), sy * y);
-    L(c, sx * x, sy * y, sx * x, sy * (y - L2 * asp * 1.2));
+    L(c, sx * x, sy * y, sx * (x - L22), sy * y);
+    L(c, sx * x, sy * y, sx * x, sy * (y - L22 * asp * 1.2));
   }
   const u = t * 0.45 % 1, by = -y + 2 * y * u;
   c.strokeStyle = K.B(1);
@@ -1123,8 +1597,13 @@ var humeur = "auto";
 function setHumeur(h) {
   humeur = HUMEURS[h] || h === "auto" ? h : "auto";
 }
+var melangeFn = null;
+function setMelange(f) {
+  melangeFn = typeof f === "function" ? f : null;
+}
 function humeurNow() {
   if (humeur !== "auto") return HUMEURS[humeur];
+  if (melangeFn) return melangeFn();
   const h = (/* @__PURE__ */ new Date()).getHours();
   return HUMEURS[h < 6 || h >= 23 ? "fatigue" : h < 10 ? "joyeux" : h < 18 ? "neutre" : "calme"];
 }
@@ -1906,6 +2385,27 @@ function ecrireCerveau(cle, c) {
   } catch {
   }
 }
+function lireLente(cle) {
+  try {
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:reseau`);
+    if (brut2 === null) return null;
+    const j = JSON.parse(brut2);
+    if (typeof j !== "object" || j === null) return null;
+    const { t, slow } = j;
+    if (!Number.isFinite(t) || typeof slow !== "object" || slow === null) return null;
+    const propre = {};
+    for (const [k, v] of Object.entries(slow)) if (estFraction(v)) propre[k] = v;
+    return { t, slow: propre };
+  } catch {
+    return null;
+  }
+}
+function ecrireLente(cle, m) {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:reseau`, JSON.stringify(m));
+  } catch {
+  }
+}
 
 // src/styles.ts
 var CSS = `
@@ -2047,8 +2547,22 @@ function mountLia(options = {}) {
   let etatForce = null;
   let t = 0;
   let dernier = performance.now();
+  Object.assign(HUMEURS, PROFILS_V9);
+  const reseauActif = !sansMouvement;
+  const lente = lireLente(cle);
+  const reseau = creerReseau(HUMEURS, lente?.slow, lente ? Date.now() - lente.t : 0);
+  let humeurNom = reseauActif ? "neutre" : "curieux";
   let humeurId = "curieux";
-  setHumeur(humeurId);
+  let forcee = null;
+  if (reseauActif) {
+    setHumeur("auto");
+    setMelange(() => reseau.mix);
+  } else setHumeur(humeurId);
+  let dernierMarc = Date.now();
+  const debutPage = dernierMarc;
+  const echanges = [];
+  let dernierPropos = 0;
+  let dernierMonde = 0;
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   let rayon = rayonBase;
   let cible = { x: 0, y: 0 };
@@ -2091,12 +2605,22 @@ function mountLia(options = {}) {
     if (e !== etat) debut[e] = sansMouvement ? -1.6 : t;
     etat = e;
   };
-  const setHumeur2 = (h) => {
-    if (h === humeurId) return;
-    humeurId = h;
-    setHumeur(h);
-    options.onHumeur?.(h);
+  const appliquerHumeur = (nom) => {
+    if (nom === humeurNom) return;
+    humeurNom = nom;
+    if (HUMEURS_LIA.includes(nom)) {
+      humeurId = nom;
+      options.onHumeur?.(humeurId);
+    }
     if (sansMouvement) dessinerUneFois();
+  };
+  const setHumeur2 = (h) => {
+    if (reseauActif) {
+      forcee = { jusqua: Date.now() + 1e5 };
+      pousserHumeur(reseau, h, Date.now(), 1.6);
+    }
+    setHumeur(h);
+    appliquerHumeur(h);
   };
   {
     const z = zoneVie();
@@ -2127,6 +2651,8 @@ function mountLia(options = {}) {
     });
   };
   const voix = (texte) => {
+    impulsion(reseau, "parle");
+    dernierPropos = Date.now();
     construire(texte);
     voixDebut = t;
     voixFin = t + totalVoix();
@@ -2303,6 +2829,9 @@ function mountLia(options = {}) {
       const ctx2 = contexteQuestion;
       contexteQuestion = null;
       if (champ) champ.placeholder = "Pose-moi une question";
+      impulsion(reseau, "reponse");
+      echanges.push({ t: Date.now(), longueur: q.length, question: q.includes("?") });
+      if (echanges.length > 20) echanges.shift();
       void poser(q, ctx2 ? composerQuestion("question", ctx2.d, q) : q);
     });
     chat.append(entete, journal, form);
@@ -2355,7 +2884,7 @@ function mountLia(options = {}) {
       const b = item(h.libelle, () => setHumeur2(h.id));
       b.classList.add("lia-ui__humeur");
       b.setAttribute("role", "menuitemradio");
-      b.setAttribute("aria-checked", String(h.id === humeurId));
+      b.setAttribute("aria-checked", String(h.id === humeurNom));
       b.style.setProperty("--lia-point", `var(--lia-h-${h.id})`);
       rangee.appendChild(b);
     }
@@ -2481,6 +3010,7 @@ function mountLia(options = {}) {
         if (champ) champ.placeholder = `Ta question sur \xAB ${nettoyer(d.texte ?? d.genre, 24)} \xBB`;
         return;
       }
+      impulsion(reseau, "demande");
       void poser(etiquetteMessage(mode, d), composerQuestion(mode, d));
     };
     if (!allerVoir(cible2, 8)) return demarrer();
@@ -2507,9 +3037,16 @@ function mountLia(options = {}) {
   };
   document.addEventListener("contextmenu", surClicDroitPage);
   const surDefilement = () => {
+    ajouterImpulsion(reseau, "scroll", 0.2);
+    dernierMarc = Date.now();
     if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
+  const surGesteMarc = () => {
+    dernierMarc = Date.now();
+  };
+  const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"];
+  for (const ev of GESTES_MARC) window.addEventListener(ev, surGesteMarc, { passive: true });
   function setVieAutonome(actifVie) {
     vie = actifVie && !sansMouvement;
     if (!vie) finAttention();
@@ -2521,6 +3058,7 @@ function mountLia(options = {}) {
   };
   hit.addEventListener("pointerdown", (e) => {
     if (e.button === 2) return;
+    ajouterImpulsion(reseau, "touche", 0.45);
     try {
       hit.setPointerCapture(e.pointerId);
     } catch {
@@ -2745,7 +3283,7 @@ function mountLia(options = {}) {
       tranquilleJusqua = t + secondes;
     };
     if (id === "jouer") {
-      const pool = SILHOUETTES_JEU[humeurId] ?? ["repos"];
+      const pool = SILHOUETTES_JEU[humeurNom] ?? SILHOUETTES_JEU["neutre"] ?? ["repos"];
       passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 3.6, 5.6));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
@@ -2780,6 +3318,7 @@ function mountLia(options = {}) {
       choisir2("repos");
     }
   };
+  const pesee = (id) => id === "causer" ? multIntention(reseau, "causer") * (1 - 0.5 * (reseau.int["setaire"] ?? 0)) : multIntention(reseau, id === "voir" ? "pointer" : id);
   const penser = () => {
     if (finEtatTemp && t > finEtatTemp) finirPassagere();
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
@@ -2794,16 +3333,42 @@ function mountLia(options = {}) {
         cibles: vues.length,
         parole: !!options.onSpontane && peutParlerSeule(),
         relance: relancesRestantes(),
-        humeur: humeurId,
+        humeur: humeurNom,
         tranquille: t < tranquilleJusqua,
         loinDeLaMaison: z.w > 0 && z.h > 0 && Math.hypot(pos.x - maison.x, pos.y - maison.y) > 0.3 * Math.hypot(z.w, z.h),
         deplacement: !doux,
         secondesDepuisParole: t - derniereParole
       }),
       Math.random,
-      comportement
+      comportement,
+      reseauActif ? pesee : void 0
     );
     lancer(id, vues);
+  };
+  const entreesHote = () => {
+    try {
+      return options.entrees?.() ?? {};
+    } catch (e) {
+      console.error("LIA : entrees a \xE9chou\xE9, elle ne compte que sur ses propres entr\xE9es", e);
+      return {};
+    }
+  };
+  let dernierPas = Date.now();
+  const penserReseau = () => {
+    const now = Date.now();
+    const dt = limiter2((now - dernierPas) / 1e3, 0.05, 1);
+    dernierPas = now;
+    const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
+    reseauPas(reseau, { ...locales, ...entreesHote() }, dt, Math.random, now);
+    if (forcee && now > forcee.jusqua) {
+      forcee = null;
+      setHumeur("auto");
+    }
+    if (!forcee) appliquerHumeur(reseau.dom);
+  };
+  const garder = () => {
+    ecrireCerveau(cle, { envies, journal: faits });
+    if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
   };
   let tics = 0;
   const minuterieEnvies = setInterval(() => {
@@ -2816,13 +3381,9 @@ function mountLia(options = {}) {
       inquietude: 0
     });
     if (dort && envies.energie >= 0.85) reveiller();
-    if (++tics % 10 === 0) ecrireCerveau(cle, { envies, journal: faits });
+    if (reseauActif) penserReseau();
+    if (++tics % 10 === 0) garder();
   }, 1e3);
-  const minuterieHumeur = setInterval(() => {
-    if (!vie || document.hidden || chatOuvert) return;
-    const h = deriveHumeur(Math.random);
-    if (h) setHumeur2(h);
-  }, PERIODE_DERIVE_HUMEUR_MS);
   const minuterieVie = setInterval(penser, 1200);
   const dessinerImage = (still, dt) => {
     if (!still) majAttention();
@@ -2934,6 +3495,11 @@ function mountLia(options = {}) {
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),
+    ressent: () => reseauActif ? top3(reseau) : [],
+    impulsion(nom, valeur = 1) {
+      impulsion(reseau, nom, valeur);
+      dernierMonde = Date.now();
+    },
     journal: () => faits.map((f) => ({ ...f })),
     envoyer: envoyerVers,
     geste,
@@ -2945,12 +3511,13 @@ function mountLia(options = {}) {
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
       clearInterval(minuterieEnvies);
-      ecrireCerveau(cle, { envies, journal: faits });
+      garder();
+      setMelange(null);
+      for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
       document.removeEventListener("contextmenu", surClicDroitPage);
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
-      clearInterval(minuterieHumeur);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);
@@ -2980,6 +3547,8 @@ export {
   composerQuestion,
   GESTES,
   HUMEURS_MENU,
+  HUMEURS_LIA,
+  LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-FZCDBRDL.mjs.map
+//# sourceMappingURL=chunk-LX6Z6POA.mjs.map

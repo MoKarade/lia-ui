@@ -106,7 +106,8 @@ interface ContexteChoix {
     parole: boolean;
     /** Le plafond de relances du jour n'est pas atteint. */
     relance: boolean;
-    humeur: HumeurLia;
+    /** Ce qu'elle ressent (l'une des 40 humeurs de son réseau). */
+    humeur: string;
     /** Elle vient de se déplacer ou de suivre Marc : elle se tient tranquille un moment. */
     tranquille: boolean;
     /** Elle est loin de sa maison. */
@@ -122,8 +123,11 @@ interface Candidat {
 }
 /** Les comportements possibles maintenant, avec leur poids (formules de `penser()` de la maquette). */
 declare function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[];
-/** Tirage pondéré (exponentielle de 2,4 × le poids) ; le comportement en cours est un peu moins probable (−0,5). */
-declare function choisirComportement(liste: readonly Candidat[], hasard: Hasard, courant?: Comportement | null): Comportement;
+/**
+ * Tirage pondéré (exponentielle de 2,4 × le poids) ; le comportement en cours est un peu moins probable (−0,5).
+ * `pesee` multiplie le poids de chacun (ses intentions : ce qu'elle a envie de faire).
+ */
+declare function choisirComportement(liste: readonly Candidat[], hasard: Hasard, courant?: Comportement | null, pesee?: (id: Comportement) => number): Comportement;
 /** Un fait gardé de ce qu'elle a fait (le texte, c'est à l'hôte de le choisir). */
 interface FaitLia {
     /** Millisecondes depuis 1970. */
@@ -266,8 +270,14 @@ interface OptionsLia {
     renderBlocks?: (blocs: readonly unknown[], dans: HTMLElement) => void;
     /** Appelé au clic sur une puce de réponse rapide. */
     onChip?: (id: string, contexte: "reponse" | "bulle") => void;
-    /** Appelé quand l'humeur change (pour un voyant côté hôte). */
+    /** Appelé quand son humeur dominante change et qu'elle est l'une des 12 humeurs de LIA (pour un voyant côté hôte). */
     onHumeur?: (humeur: HumeurLia) => void;
+    /**
+     * Ce que l'hôte sait du monde, appelé chaque seconde : des entrées du réseau interne de LIA entre 0 et 1
+     * (`alerte`, `nbAlertes`, `toutVert`, `changement`, `recurrence`, `tendBonne`, `tendMauvaise`, `g_<app>`, `v_<app>`…).
+     * Elles priment sur celles qu'elle calcule seule (heure, activité de Marc, rythme des échanges). Absent : elle vit sans monde.
+     */
+    entrees?: () => Readonly<Record<string, number>>;
     /** Zone où LIA a le droit de se déplacer ; par défaut toute la couche. */
     bounds?: () => ZoneVie;
     /** Rayon du corps en pixels CSS ; défaut 56. */
@@ -339,6 +349,10 @@ interface LiaHandle {
     geste(geste: GesteLia, secondes?: number): boolean;
     /** Ses six envies en ce moment (0 à 1) : energie, curiosite, social, inquiet, joie, ennui. Une copie : la modifier ne change rien. */
     envies(): Envies;
+    /** Ce qu'elle ressent, du plus fort au plus faible (trois humeurs au plus, de 0 à 1) : `[["inquiet", 0.55], …]`. */
+    ressent(): Array<[string, number]>;
+    /** Une nouvelle pour son réseau (`bon`, `mauvais`, `touche`, `parle`, `reponse`, `rejet`, `scroll`, `demande`) : monte à `valeur` puis retombe tout seul. */
+    impulsion(nom: "touche" | "parle" | "reponse" | "rejet" | "scroll" | "demande" | "bon" | "mauvais", valeur?: number): void;
     /** Ce qu'elle a fait ces derniers temps (20 faits au plus, gardés dans le navigateur) : à l'hôte d'en faire une phrase. */
     journal(): FaitLia[];
     /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */

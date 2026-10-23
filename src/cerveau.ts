@@ -1,5 +1,4 @@
 import type { Hasard } from "./autonomie.js";
-import type { HumeurLia } from "./types.js";
 
 /**
  * Le cerveau local de LIA, repris de la maquette (`majEnvies` et `penser`, tail.js) : six envies qui montent
@@ -82,7 +81,8 @@ export interface ContexteChoix {
   parole: boolean;
   /** Le plafond de relances du jour n'est pas atteint. */
   relance: boolean;
-  humeur: HumeurLia;
+  /** Ce qu'elle ressent (l'une des 40 humeurs de son réseau). */
+  humeur: string;
   /** Elle vient de se déplacer ou de suivre Marc : elle se tient tranquille un moment. */
   tranquille: boolean;
   /** Elle est loin de sa maison. */
@@ -116,9 +116,12 @@ export function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[] {
   return liste;
 }
 
-/** Tirage pondéré (exponentielle de 2,4 × le poids) ; le comportement en cours est un peu moins probable (−0,5). */
-export function choisirComportement(liste: readonly Candidat[], hasard: Hasard, courant: Comportement | null = null): Comportement {
-  const w = liste.map((c) => Math.exp((c.poids - (c.id === courant ? 0.5 : 0)) * 2.4));
+/**
+ * Tirage pondéré (exponentielle de 2,4 × le poids) ; le comportement en cours est un peu moins probable (−0,5).
+ * `pesee` multiplie le poids de chacun (ses intentions : ce qu'elle a envie de faire).
+ */
+export function choisirComportement(liste: readonly Candidat[], hasard: Hasard, courant: Comportement | null = null, pesee?: (id: Comportement) => number): Comportement {
+  const w = liste.map((c) => Math.exp((c.poids - (c.id === courant ? 0.5 : 0)) * 2.4) * (pesee?.(c.id) ?? 1));
   const total = w.reduce((s, x) => s + x, 0);
   let r = hasard() * total;
   for (let i = 0; i < liste.length; i++) {
