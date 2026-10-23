@@ -5,7 +5,12 @@ export interface MemoireLia {
   /** Position en fractions (0..1) de la zone de vie. */
   u: number;
   v: number;
-  vie: boolean;
+  /**
+   * Ce que la PERSONNE a choisi (« La laisser tranquille » / « La laisser vivre »), jamais ce que l'hôte ou le mode « fixe » impose.
+   * Absent : elle vit. L'ancien champ `vie` (v0.5.0 et avant) mélangeait choix et contraintes : il restait à faux dans le navigateur
+   * de Marc et coupait sa vie pour toujours ; il est ignoré.
+   */
+  choixVie?: boolean;
 }
 
 const PREFIXE = "lia-ui:";
@@ -20,9 +25,9 @@ export function lireMemoire(cle: string): MemoireLia | null {
     if (brut === null) return null;
     const j: unknown = JSON.parse(brut);
     if (typeof j !== "object" || j === null) return null;
-    const { u, v, vie } = j as Record<string, unknown>;
-    if (!estFraction(u) || !estFraction(v) || typeof vie !== "boolean") return null;
-    return { u, v, vie };
+    const { u, v, choixVie } = j as Record<string, unknown>;
+    if (!estFraction(u) || !estFraction(v)) return null;
+    return typeof choixVie === "boolean" ? { u, v, choixVie } : { u, v };
   } catch {
     return null;
   }

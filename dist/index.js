@@ -2355,9 +2355,9 @@ function lireMemoire(cle) {
     if (brut2 === null) return null;
     const j = JSON.parse(brut2);
     if (typeof j !== "object" || j === null) return null;
-    const { u, v, vie } = j;
-    if (!estFraction(u) || !estFraction(v) || typeof vie !== "boolean") return null;
-    return { u, v, vie };
+    const { u, v, choixVie } = j;
+    if (!estFraction(u) || !estFraction(v)) return null;
+    return typeof choixVie === "boolean" ? { u, v, choixVie } : { u, v };
   } catch {
     return null;
   }
@@ -2587,7 +2587,8 @@ function mountLia(options = {}) {
   let doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
   const cerveauMemoire = lireCerveau(cle);
-  let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
+  let choixVie = memoire?.choixVie;
+  let vie = (options.vieAutonome ?? true) && (choixVie ?? true) && !sansMouvement;
   const conteneur = options.container ?? null;
   const posConteneur = conteneur ? getComputedStyle(conteneur).position : "";
   if (conteneur && (posConteneur === "static" || posConteneur === "")) conteneur.style.position = "relative";
@@ -2740,7 +2741,7 @@ function mountLia(options = {}) {
     ecrireMemoire(cle, {
       u: limiter2((pos.x - z.x - marge) / lw, 0, 1),
       v: limiter2((pos.y - z.y - marge) / lh, 0, 1),
-      vie
+      ...choixVie === void 0 ? {} : { choixVie }
     });
   };
   const voix = (texte) => {
@@ -3159,6 +3160,7 @@ function mountLia(options = {}) {
   const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"];
   for (const ev of GESTES_MARC) window.addEventListener(ev, surGesteMarc, { passive: true });
   function setVieAutonome(actifVie) {
+    choixVie = actifVie;
     vie = actifVie && !sansMouvement;
     if (!vie) finAttention();
     memoriser();
