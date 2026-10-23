@@ -171,8 +171,10 @@ export interface OptionsLia {
   onSpontane?: (motif: MotifSpontane) => string | ParoleSpontanee | null | undefined;
   /**
    * Que faire quand le système demande de réduire les animations (`prefers-reduced-motion`).
-   * `"doux"` (défaut) : elle ne traverse jamais l'écran, mais respire, change de forme, fait ses gestes et parle sur place.
-   * `"fixe"` : une seule image, rien ne bouge. `"complet"` : ignore la demande du système (choix de l'hôte, par exemple pour une app personnelle).
+   * `"complet"` (défaut) : ignore la demande du système, elle vit partout comme dans la maquette (hub et apps de Marc).
+   * `"doux"` : elle ne traverse jamais l'écran, mais respire, change de forme, fait ses gestes et parle sur place.
+   * `"fixe"` : une seule image, rien ne bouge.
+   * Le menu de son corps a une ligne « Animations complètes » (hors « fixe ») : le choix de la personne est mémorisé dans ce navigateur et l'emporte sur cette option.
    */
   quandMouvementReduit?: "doux" | "fixe" | "complet";
   /** Heures locales de silence [début, fin[ : aucune parole spontanée. Défaut [22, 7]. */

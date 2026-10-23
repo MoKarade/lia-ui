@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.9.1
+npm i github:MoKarade/lia-ui#v0.10.0
 ```
 
 ## Utiliser
@@ -99,9 +99,11 @@ Les couleurs se surchargent avec les variables `--lia-bg`, `--lia-surface`, `--l
 
 Beaucoup de machines (Windows : *Effets d'animation* désactivés) annoncent `prefers-reduced-motion`. Avant, LIA se figeait en une image. Maintenant, option `quandMouvementReduit` :
 
-- `"doux"` (défaut) : elle ne traverse jamais l'écran (ni errance, ni suivi du curseur, ni glissade ; l'hôte qui l'envoie vers un élément la voit se poser d'un coup), mais elle respire, change de forme, fait ses gestes et ses petits mouvements sur place, parle seule (`onSpontane`, relances, humeur) et sa bulle s'écrit d'un coup.
+- `"complet"` (défaut depuis v0.10.0) : ignore la demande du système ; c'est la LIA de la maquette, partout pareille.
+- `"doux"` : elle ne traverse jamais l'écran (ni errance, ni suivi du curseur, ni glissade ; l'hôte qui l'envoie vers un élément la voit se poser d'un coup), mais elle respire, change de forme, fait ses gestes et ses petits mouvements sur place, parle seule (`onSpontane`, relances, humeur) et sa bulle s'écrit d'un coup.
 - `"fixe"` : une seule image, rien ne bouge (comportement d'avant).
-- `"complet"` : ignore la demande du système (pour une app personnelle dont l'hôte est le seul utilisateur).
+
+Le menu de son corps (clic droit sur elle) a, quand le système réduit les animations, une ligne **Animations complètes** à cocher : le choix est mémorisé dans le navigateur (`lia-ui:<cle>:mouvement`) et l'emporte sur l'option de l'hôte.
 
 ## Garanties
 

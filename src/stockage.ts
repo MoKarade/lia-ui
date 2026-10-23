@@ -132,3 +132,23 @@ export function ecrireLente(cle: string, m: MemoireLente): void {
     /* sans stockage, la mémoire lente repart de zéro à chaque page */
   }
 }
+
+/** Le choix de Marc quand le système réduit les animations : il l'emporte sur l'option de l'hôte. */
+export type MouvementLia = "doux" | "complet";
+
+export function lireMouvement(cle: string): MouvementLia | null {
+  try {
+    const brut = localStorage.getItem(`${PREFIXE}${cle}:mouvement`);
+    return brut === "doux" || brut === "complet" ? brut : null;
+  } catch {
+    return null;
+  }
+}
+
+export function ecrireMouvement(cle: string, m: MouvementLia): void {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:mouvement`, m);
+  } catch {
+    /* navigateur sans stockage : le choix vaut jusqu'au prochain montage */
+  }
+}

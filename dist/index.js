@@ -2432,6 +2432,20 @@ function ecrireLente(cle, m) {
   } catch {
   }
 }
+function lireMouvement(cle) {
+  try {
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:mouvement`);
+    return brut2 === "doux" || brut2 === "complet" ? brut2 : null;
+  } catch {
+    return null;
+  }
+}
+function ecrireMouvement(cle, m) {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:mouvement`, m);
+  } catch {
+  }
+}
 
 // src/styles.ts
 var CSS = `
@@ -2471,6 +2485,7 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__menu{min-width:240px;padding:.4rem;display:flex;flex-direction:column}
 .lia-ui__item{min-height:44px;display:flex;align-items:center;gap:.6rem;padding:0 .8rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;text-align:left;cursor:pointer}
 .lia-ui__item:hover{background:var(--lia-surface-2)}
+.lia-ui__item[aria-checked=true]::after{content:"";margin-left:auto;width:.55rem;height:.55rem;border-radius:50%;background:var(--lia-accent)}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
 .lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
 .lia-ui__menu:not(.lia-ui__menu--element){min-width:264px}
@@ -2567,9 +2582,9 @@ function mountLia(options = {}) {
   const cle = options.cle ?? "lia";
   const rayonBase = options.rayon ?? 56;
   const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const modeReduit = reduit ? options.quandMouvementReduit ?? "doux" : "complet";
+  const modeReduit = reduit ? lireMouvement(cle) ?? options.quandMouvementReduit ?? "complet" : "complet";
   const sansMouvement = modeReduit === "fixe";
-  const doux = modeReduit === "doux";
+  let doux = modeReduit === "doux";
   const memoire = lireMemoire(cle);
   const cerveauMemoire = lireCerveau(cle);
   let vie = (options.vieAutonome ?? true) && (memoire?.vie ?? true) && !sansMouvement;
@@ -2982,6 +2997,16 @@ function mountLia(options = {}) {
     }
     return rangee;
   };
+  const caseAnimations = () => {
+    const b = item("Animations compl\xE8tes", () => {
+      doux = !doux;
+      ecrireMouvement(cle, doux ? "doux" : "complet");
+      if (doux) finAttention();
+    });
+    b.setAttribute("role", "menuitemcheckbox");
+    b.setAttribute("aria-checked", String(!doux));
+    return b;
+  };
   const ouvrirMenu = (x, y, element) => {
     if (detruit) return;
     reveiller();
@@ -3002,6 +3027,7 @@ function mountLia(options = {}) {
       menu.appendChild(item("Lui parler", ouvrirChat));
       menu.appendChild(rangeeHumeurs());
       if (!sansMouvement) menu.appendChild(rangeeGestes());
+      if (reduit && !sansMouvement) menu.appendChild(caseAnimations());
       menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
     }
     const actions = element ? [] : options.actions ?? [];
