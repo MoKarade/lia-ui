@@ -343,7 +343,10 @@ const HUMEURS={
 let humeur='auto';
 export function setHumeur(h){humeur=HUMEURS[h]||h==='auto'?h:'auto';}
 export function lireHumeur(){return humeur;}
-function humeurNow(){if(humeur!=='auto')return HUMEURS[humeur];const h=new Date().getHours();return HUMEURS[h<6||h>=23?'fatigue':h<10?'joyeux':h<18?'neutre':'calme'];}
+/* Crochet de la maquette V9 (build.py : HUM_MIX) : en auto, le corps est le mélange des humeurs que lui rend son réseau. */
+let melangeFn=null;
+export function setMelange(f){melangeFn=typeof f==='function'?f:null;}
+function humeurNow(){if(humeur!=='auto')return HUMEURS[humeur];if(melangeFn)return melangeFn();const h=new Date().getHours();return HUMEURS[h<6||h>=23?'fatigue':h<10?'joyeux':h<18?'neutre':'calme'];}
 
 /* Voix : un coup par syllabe */
 const rnd=(s=>()=>{s=(s*16807)%2147483647;return s/2147483647});

@@ -1,12 +1,5 @@
 import { estRegarde, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./attache.js";
-import {
-  PERIODE_DERIVE_HUMEUR_MS,
-  dansZone,
-  deriveHumeur,
-  enSilence,
-  jourLocal,
-  pointDansZone,
-} from "./autonomie.js";
+import { dansZone, enSilence, jourLocal, pointDansZone } from "./autonomie.js";
 import {
   ENVIES_DEPART,
   SILHOUETTES_JEU,
@@ -20,7 +13,11 @@ import {
   type Envies,
   type FaitLia,
 } from "./cerveau.js";
+import { entreesLocales, type EchangeMarc } from "./entrees.js";
+import { PROFILS_V9, type ProfilHumeur } from "./humeurs.js";
+import { ajouterImpulsion, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
 import {
+  HUMEURS as HUMEURS_MOTEUR,
   ST,
   brut,
   construire,
@@ -29,6 +26,7 @@ import {
   poke,
   regarder,
   setHumeur as moteurHumeur,
+  setMelange,
   totalVoix,
   HZ,
   THK,
@@ -48,9 +46,10 @@ import {
   type ModeElement,
 } from "./ecran.js";
 import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
-import { ecrireCerveau, ecrireMemoire, ecrireRelances, lireCerveau, lireMemoire, lireRelances } from "./stockage.js";
+import { ecrireCerveau, ecrireLente, ecrireMemoire, ecrireRelances, lireCerveau, lireLente, lireMemoire, lireRelances } from "./stockage.js";
 import { CSS } from "./styles.js";
 import {
+  HUMEURS_LIA,
   type ActionLia,
   type EnvoiLia,
   type HumeurLia,
@@ -172,8 +171,25 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let etatForce: string | null = null;
   let t = 0;
   let dernier = performance.now();
+  /* Son réseau interne (src/reseau.ts) : ce qu'elle ressent, au-delà de ses six envies. Coupé en mode « fixe » (image unique). */
+  Object.assign(HUMEURS_MOTEUR, PROFILS_V9);
+  const reseauActif = !sansMouvement;
+  const lente = lireLente(cle);
+  const reseau = creerReseau(HUMEURS_MOTEUR as Record<string, ProfilHumeur>, lente?.slow, lente ? Date.now() - lente.t : 0);
+  /** Ce qu'elle ressent (l'une des 40 humeurs de son réseau) ; `humeurId` en est la version à 12 humeurs, pour l'hôte et le menu. */
+  let humeurNom = reseauActif ? "neutre" : "curieux";
   let humeurId: HumeurLia = "curieux";
-  moteurHumeur(humeurId);
+  /** Humeur imposée (menu, réponse, hôte) : gardée 100 s, puis son réseau reprend la main. */
+  let forcee: { jusqua: number } | null = null;
+  if (reseauActif) {
+    moteurHumeur("auto");
+    setMelange(() => reseau.mix);
+  } else moteurHumeur(humeurId);
+  let dernierMarc = Date.now();
+  const debutPage = dernierMarc;
+  const echanges: EchangeMarc[] = [];
+  let dernierPropos = 0;
+  let dernierMonde = 0;
 
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   let rayon = rayonBase;
@@ -227,12 +243,22 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     etat = e;
   };
 
-  const setHumeur = (h: HumeurLia): void => {
-    if (h === humeurId) return;
-    humeurId = h;
-    moteurHumeur(h);
-    options.onHumeur?.(h);
+  const appliquerHumeur = (nom: string): void => {
+    if (nom === humeurNom) return;
+    humeurNom = nom;
+    if ((HUMEURS_LIA as readonly string[]).includes(nom)) {
+      humeurId = nom as HumeurLia;
+      options.onHumeur?.(humeurId);
+    }
     if (sansMouvement) dessinerUneFois();
+  };
+  const setHumeur = (h: HumeurLia): void => {
+    if (reseauActif) {
+      forcee = { jusqua: Date.now() + 100_000 };
+      pousserHumeur(reseau, h, Date.now(), 1.6);
+    }
+    moteurHumeur(h);
+    appliquerHumeur(h);
   };
 
   /* ── position initiale ── */
@@ -269,6 +295,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /* ── voix : un coup par syllabe ── */
   const voix = (texte: string): void => {
+    impulsion(reseau, "parle");
+    dernierPropos = Date.now();
     construire(texte);
     voixDebut = t;
     voixFin = t + totalVoix();
@@ -457,6 +485,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const ctx = contexteQuestion;
       contexteQuestion = null;
       if (champ) champ.placeholder = "Pose-moi une question";
+      impulsion(reseau, "reponse");
+      echanges.push({ t: Date.now(), longueur: q.length, question: q.includes("?") });
+      if (echanges.length > 20) echanges.shift();
       void poser(q, ctx ? composerQuestion("question", ctx.d, q) : q);
     });
     chat.append(entete, journal, form);
@@ -514,7 +545,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const b = item(h.libelle, () => setHumeur(h.id));
       b.classList.add("lia-ui__humeur");
       b.setAttribute("role", "menuitemradio");
-      b.setAttribute("aria-checked", String(h.id === humeurId));
+      b.setAttribute("aria-checked", String(h.id === humeurNom));
       b.style.setProperty("--lia-point", `var(--lia-h-${h.id})`);
       rangee.appendChild(b);
     }
@@ -659,6 +690,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         if (champ) champ.placeholder = `Ta question sur « ${nettoyer(d.texte ?? d.genre, 24)} »`;
         return;
       }
+      impulsion(reseau, "demande");
       void poser(etiquetteMessage(mode, d), composerQuestion(mode, d));
     };
     if (!allerVoir(cible, 8)) return demarrer();
@@ -687,9 +719,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   document.addEventListener("contextmenu", surClicDroitPage);
   /** Un menu ouvert sur la page se ferme au défilement, comme un menu du navigateur. */
   const surDefilement = (): void => {
+    ajouterImpulsion(reseau, "scroll", 0.2);
+    dernierMarc = Date.now();
     if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
+  const surGesteMarc = (): void => {
+    dernierMarc = Date.now();
+  };
+  const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"] as const;
+  for (const ev of GESTES_MARC) window.addEventListener(ev, surGesteMarc, { passive: true });
 
   function setVieAutonome(actifVie: boolean): void {
     vie = actifVie && !sansMouvement;
@@ -705,6 +744,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   hit.addEventListener("pointerdown", (e) => {
     if (e.button === 2) return;
+    ajouterImpulsion(reseau, "touche", 0.45);
     try {
       hit.setPointerCapture(e.pointerId);
     } catch {
@@ -957,7 +997,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       tranquilleJusqua = t + secondes;
     };
     if (id === "jouer") {
-      const pool = SILHOUETTES_JEU[humeurId] ?? ["repos"];
+      const pool = SILHOUETTES_JEU[humeurNom] ?? SILHOUETTES_JEU["neutre"] ?? ["repos"];
       passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 3.6, 5.6));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
@@ -993,6 +1033,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
   };
 
+  /** Ses intentions pèsent sur ce qu'elle choisit (maquette : `multIntention`) ; « voir » est le « pointer » de la maquette. */
+  const pesee = (id: Comportement): number =>
+    id === "causer" ? multIntention(reseau, "causer") * (1 - 0.5 * (reseau.int["setaire"] ?? 0)) : multIntention(reseau, id === "voir" ? "pointer" : id);
   const penser = (): void => {
     if (finEtatTemp && t > finEtatTemp) finirPassagere();
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
@@ -1007,7 +1050,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         cibles: vues.length,
         parole: !!options.onSpontane && peutParlerSeule(),
         relance: relancesRestantes(),
-        humeur: humeurId,
+        humeur: humeurNom,
         tranquille: t < tranquilleJusqua,
         loinDeLaMaison: z.w > 0 && z.h > 0 && Math.hypot(pos.x - maison.x, pos.y - maison.y) > 0.3 * Math.hypot(z.w, z.h),
         deplacement: !doux,
@@ -1015,8 +1058,35 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }),
       Math.random,
       comportement,
+      reseauActif ? pesee : undefined,
     );
     lancer(id, vues);
+  };
+  /** Ce qui vient de l'hôte (alertes, apps, tendances…) : ses valeurs priment sur celles qu'elle calcule seule. */
+  const entreesHote = (): Record<string, number> => {
+    try {
+      return options.entrees?.() ?? {};
+    } catch (e) {
+      console.error("LIA : entrees a échoué, elle ne compte que sur ses propres entrées", e);
+      return {};
+    }
+  };
+  let dernierPas = Date.now();
+  const penserReseau = (): void => {
+    const now = Date.now();
+    const dt = limiter((now - dernierPas) / 1000, 0.05, 1);
+    dernierPas = now;
+    const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
+    reseauPas(reseau, { ...locales, ...entreesHote() }, dt, Math.random, now);
+    if (forcee && now > forcee.jusqua) {
+      forcee = null;
+      moteurHumeur("auto");
+    }
+    if (!forcee) appliquerHumeur(reseau.dom);
+  };
+  const garder = (): void => {
+    ecrireCerveau(cle, { envies, journal: faits });
+    if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
   };
   let tics = 0;
   const minuterieEnvies = setInterval(() => {
@@ -1029,13 +1099,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       inquietude: 0,
     });
     if (dort && envies.energie >= 0.85) reveiller();
-    if (++tics % 10 === 0) ecrireCerveau(cle, { envies, journal: faits });
+    if (reseauActif) penserReseau();
+    if (++tics % 10 === 0) garder();
   }, 1000);
-  const minuterieHumeur = setInterval(() => {
-    if (!vie || document.hidden || chatOuvert) return;
-    const h = deriveHumeur(Math.random);
-    if (h) setHumeur(h);
-  }, PERIODE_DERIVE_HUMEUR_MS);
   const minuterieVie = setInterval(penser, 1200);
 
   /* ── image par image ── */
@@ -1157,6 +1223,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),
+    ressent: () => (reseauActif ? top3(reseau) : []),
+    impulsion(nom, valeur = 1) {
+      impulsion(reseau, nom, valeur);
+      dernierMonde = Date.now();
+    },
     journal: () => faits.map((f) => ({ ...f })),
     envoyer: envoyerVers,
     geste,
@@ -1168,12 +1239,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
       clearInterval(minuterieEnvies);
-      ecrireCerveau(cle, { envies, journal: faits });
+      garder();
+      setMelange(null);
+      for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
       document.removeEventListener("contextmenu", surClicDroitPage);
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
-      clearInterval(minuterieHumeur);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);

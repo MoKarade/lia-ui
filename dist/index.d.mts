@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle } from './types-Cs7SJspD.mjs';
-export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, E as ENVIES_DEPART, c as Envies, d as EnvoiLia, F as FaitLia, G as GESTES, e as GesteLia, H as HUMEURS_LIA, f as HUMEURS_MENU, g as Hasard, h as HumeurLia, i as LIBELLE_HUMEUR, M as MotifSpontane, j as OptionsElements, P as ParoleSpontanee, k as PuceLia, R as ReponseLia, Z as ZoneVie, l as apresComportement, m as candidats, n as choisirComportement, o as dansZone, p as majEnvies, q as pointDansZone, r as prochaineDecision } from './types-Cs7SJspD.mjs';
+import { O as OptionsLia, L as LiaHandle } from './types-DGAg-8lE.mjs';
+export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, E as ENVIES_DEPART, c as Envies, d as EnvoiLia, F as FaitLia, G as GESTES, e as GesteLia, H as HUMEURS_LIA, f as HUMEURS_MENU, g as Hasard, h as HumeurLia, i as LIBELLE_HUMEUR, M as MotifSpontane, j as OptionsElements, P as ParoleSpontanee, k as PuceLia, R as ReponseLia, Z as ZoneVie, l as apresComportement, m as candidats, n as choisirComportement, o as dansZone, p as majEnvies, q as pointDansZone, r as prochaineDecision } from './types-DGAg-8lE.mjs';
 
 /**
  * Fait vivre LIA : 100 traits en canvas 2D, vie propre, discussion au clic, menu au clic droit.
