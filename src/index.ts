@@ -20,6 +20,7 @@ export type {
 export type { Decision, Hasard } from "./autonomie.js";
 export { composerQuestion, decrireParDefaut, ENTREES_MENU, SELECTEUR_ELEMENTS } from "./ecran.js";
 export { GESTES, HUMEURS_MENU } from "./gestes.js";
+export type { EtatHote, EtatLia } from "./etat.js";
 export { LIBELLES_HUMEURS, couleurHumeur, libelleHumeur } from "./humeurs.js";
 export { ENVIES_DEPART, apresComportement, candidats, choisirComportement, majEnvies } from "./cerveau.js";
 export type { Candidat, Comportement, Envies, FaitLia } from "./cerveau.js";

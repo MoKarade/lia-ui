@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.11.1
+npm i github:MoKarade/lia-ui#v0.12.0
 ```
 
 ## Utiliser
@@ -108,6 +108,10 @@ Le menu de son corps (clic droit sur elle) a, quand le système réduit les anim
 ## Son humeur, visible
 
 Depuis v0.11.0 le paquet dessine lui-même une pastille sous son corps : un point de couleur et le nom de l'humeur du moment (« Sérénité », « Joie », « Inquiétude »…), pour les 40 humeurs du réseau. Elle est donc identique dans toutes les apps, l'hôte n'a rien à dessiner. `humeurVisible: false` la retire ; `lia.humeur()` rend `{ nom, libelle, couleur }` ; `libelleHumeur(nom)` et `couleurHumeur(nom)` sont exportés. `onHumeur` ne signale toujours que les douze humeurs historiques.
+
+## Une seule LIA : son état partagé
+
+Pour que LIA soit la MÊME dans le hub, MemoryAI et les apps, l'hôte lui donne `etat` : `{ lire(), ecrire(e) }`. Elle lit l'état (envies, journal, mémoire lente, humeur, relances du jour) au montage puis chaque minute et prend le plus récent ; elle l'écrit toutes les 20 s si quelque chose a changé et à la fermeture de la page. Pour une route de même origine : `import { etatHttp } from "@mokarade/lia-ui/etat-http"` puis `<Lia etat={etatHttp("/api/lia/etat")} />`. Contrat de la route : GET → 200 + l'état en JSON, ou 204/404 s'il n'y en a aucun ; PUT → 200 + l'état gardé, ou 409 + l'état plus récent de l'hôte si la version envoyée ne dépasse pas la sienne (voir `validerEtat` pour la forme). Sans `etat`, ou si l'hôte échoue, elle garde son état local et vit quand même. Sa position à l'écran et « Animations complètes » restent propres à l'appareil.
 
 ## Garanties
 
