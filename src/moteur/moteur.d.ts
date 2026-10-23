@@ -77,7 +77,7 @@ export function lireHumeur(): string;
 /** En humeur « auto », le corps vient de cette fonction (le mélange du réseau) ; `null` rend la main à l'heure du jour. */
 export function setMelange(f: (() => unknown) | null): void;
 /** Position normalisée du regard (-1..1) dans le cadre que l'hôte choisit. */
-export function regarder(nx: number, ny: number): void;
+export function regarder(nx: number, ny: number, t?: number): void;
 export function construire(texte: string): void;
 export function brut(secondes: number): number;
 export function totalVoix(): number;

@@ -59,9 +59,12 @@ function pointPresDuCurseur(curseur, t, rayon, fenetre) {
 function pointPresDeLElement(rect, rayon, fenetre) {
   let x = rect.right + rayon * 0.85;
   if (x + rayon * 0.6 > fenetre.w) x = rect.left - rayon * 0.85;
-  if (x - rayon * 0.6 < 0) x = (rect.left + rect.right) / 2;
-  const y = limiter((rect.top + rect.bottom) / 2, rayon * 0.6, fenetre.h - rayon * 0.6);
-  return { x, y };
+  let y = (rect.top + rect.bottom) / 2;
+  if (x - rayon * 0.6 < 0) {
+    x = limiter(rect.right - rayon * 0.7, rayon * 0.6, fenetre.w - rayon * 0.6);
+    y = rect.top + rayon * 0.7;
+  }
+  return { x, y: limiter(y, rayon * 0.6, fenetre.h - rayon * 0.6) };
 }
 function estVisible(rect, fenetre) {
   if (rect.right <= rect.left || rect.bottom <= rect.top) return false;
@@ -1838,11 +1841,11 @@ function brut(sp) {
   return 0;
 }
 var ptr = { x: 0, y: 0, t: -9, sp: 0 };
-function regarder(nx, ny) {
+function regarder(nx, ny, t) {
   ptr.sp = Math.min(1, Math.hypot(nx - ptr.x, ny - ptr.y) * 6);
   ptr.x = nx;
   ptr.y = ny;
-  ptr.t = performance.now() / 1e3;
+  ptr.t = typeof t === "number" ? t : performance.now() / 1e3;
 }
 var HK = { v: 0.35 };
 var THK = { v: 8e-3 };
@@ -3268,6 +3271,7 @@ function mountLia(options = {}) {
   let entreesCourantes = {};
   let erreurMondeDite = false;
   let survol = null;
+  let dernierDefile = 0;
   const dernierAccompagne = /* @__PURE__ */ new WeakMap();
   let elementSurvole = null;
   let regarde = null;
@@ -3896,12 +3900,14 @@ function mountLia(options = {}) {
   const surDefilement = () => {
     ajouterImpulsion(reseau, "scroll", 0.2);
     dernierMarc = Date.now();
+    dernierDefile = dernierMarc;
     if (menuOuvert && menu?.classList.contains("lia-ui__menu--element")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
   const surGesteMarc = (e) => {
     dernierMarc = Date.now();
-    if (e.type !== "pointermove") return;
+    const pose = e.type === "pointerdown" && e.pointerType === "touch";
+    if (e.type !== "pointermove" && e.type !== "focusin" && !pose) return;
     let sous = null;
     try {
       sous = e.target instanceof Element && !couche.contains(e.target) ? e.target.closest(selecteurCibles) : null;
@@ -3909,7 +3915,7 @@ function mountLia(options = {}) {
     }
     if (sous !== survol?.el) survol = sous ? { el: sous, depuis: dernierMarc } : null;
   };
-  const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"];
+  const GESTES_MARC = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart", "focusin"];
   for (const ev of GESTES_MARC) window.addEventListener(ev, surGesteMarc, { passive: true });
   function setVieAutonome(actifVie) {
     choixVie = actifVie;
@@ -3995,9 +4001,17 @@ function mountLia(options = {}) {
     pointeur.ms = performance.now();
     pointeur.fin = e.pointerType !== "touch";
     const r = couche.getBoundingClientRect();
-    regarder(limiter2((e.clientX - r.left - pos.x) / 400, -1, 1), limiter2((e.clientY - r.top - pos.y) / 400, -1, 1));
+    regarder(limiter2((e.clientX - r.left - pos.x) / 400, -1, 1), limiter2((e.clientY - r.top - pos.y) / 400, -1, 1), t);
   };
   window.addEventListener("pointermove", surCurseur, { passive: true });
+  window.addEventListener("pointerdown", surCurseur, { passive: true });
+  const surFocus = (e) => {
+    if (!(e.target instanceof Element) || couche.contains(e.target)) return;
+    const r = couche.getBoundingClientRect();
+    const f = e.target.getBoundingClientRect();
+    regarder(limiter2((f.left + f.width / 2 - r.left - pos.x) / 400, -1, 1), limiter2((f.top + f.height / 2 - r.top - pos.y) / 400, -1, 1), t);
+  };
+  window.addEventListener("focusin", surFocus, { passive: true });
   const surClicHors = (e) => {
     if (menuOuvert && menu && !menu.contains(e.target)) fermerMenu();
   };
@@ -4600,6 +4614,28 @@ function mountLia(options = {}) {
     }
   };
   let erreursImage = 0;
+  const veilleEcran = setInterval(() => {
+    if (detruit || pointeur.fin || document.hidden) return;
+    const maintenant = Date.now();
+    if (maintenant - dernierDefile < 1500 || maintenant - dernierMarc > 6e4) return;
+    if (survol && !survol.centre && survol.el.isConnected) return;
+    const f = fenetre();
+    const cx = f.w / 2;
+    const cy = f.h / 2;
+    let meilleur = null;
+    let d0 = Infinity;
+    for (const x of regardables()) {
+      const b = x.getBoundingClientRect();
+      const d = Math.hypot((b.left + b.right) / 2 - cx, (b.top + b.bottom) / 2 - cy);
+      if (d < d0) {
+        d0 = d;
+        meilleur = x;
+      }
+    }
+    if (!meilleur) {
+      if (survol?.centre) survol = null;
+    } else if (survol?.el !== meilleur) survol = { el: meilleur, depuis: maintenant, centre: true };
+  }, 500);
   const veilleCouche = setInterval(() => {
     if (detruit || couche.isConnected) return;
     const hote2 = conteneur?.isConnected ? conteneur : document.body;
@@ -4671,9 +4707,12 @@ function mountLia(options = {}) {
       document.removeEventListener("pointermove", surBougePage, true);
       for (const fin of ["pointerup", "pointercancel", "scroll"]) document.removeEventListener(fin, annulerAppuiPage, true);
       window.removeEventListener("scroll", surDefilement, true);
+      window.removeEventListener("focusin", surFocus);
+      window.removeEventListener("pointerdown", surCurseur);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
       clearInterval(veilleCouche);
+      clearInterval(veilleEcran);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);

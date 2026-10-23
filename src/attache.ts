@@ -33,15 +33,19 @@ export function pointPresDuCurseur(
 }
 
 /**
- * À côté d'un élément : à sa droite, sinon à sa gauche, sinon sur lui. À hauteur de son milieu, dans la fenêtre.
+ * À côté d'un élément : à sa droite, sinon à sa gauche, sinon dans son coin haut-droit (sur un téléphone, la carte prend
+ * toute la largeur : le centre cacherait ce qu'elle dit, la maquette la range dans le coin). À hauteur de son milieu, dans la fenêtre.
  * Avec l'élément qui défile, le point suit exactement : appelée à chaque image, elle le « colle » à l'élément.
  */
 export function pointPresDeLElement(rect: Rect, rayon: number, fenetre: Fenetre): { x: number; y: number } {
   let x = rect.right + rayon * 0.85;
   if (x + rayon * 0.6 > fenetre.w) x = rect.left - rayon * 0.85;
-  if (x - rayon * 0.6 < 0) x = (rect.left + rect.right) / 2;
-  const y = limiter((rect.top + rect.bottom) / 2, rayon * 0.6, fenetre.h - rayon * 0.6);
-  return { x, y };
+  let y = (rect.top + rect.bottom) / 2;
+  if (x - rayon * 0.6 < 0) {
+    x = limiter(rect.right - rayon * 0.7, rayon * 0.6, fenetre.w - rayon * 0.6);
+    y = rect.top + rayon * 0.7;
+  }
+  return { x, y: limiter(y, rayon * 0.6, fenetre.h - rayon * 0.6) };
 }
 
 /** Un élément est visible quand une part de lui est dans la fenêtre : assez pour aller vers lui quand on le lui demande. */
