@@ -2,6 +2,7 @@ import { estRegarde, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./a
 import { dansZone, enSilence, jourLocal, pointDansZone } from "./autonomie.js";
 import {
   ENVIES_DEPART,
+  MOTIFS_MONDE,
   SILHOUETTES_JEU,
   ajouterFait,
   apresComportement,
@@ -12,6 +13,7 @@ import {
   type Comportement,
   type Envies,
   type FaitLia,
+  type MotifMonde,
 } from "./cerveau.js";
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { PROFILS_V9, type ProfilHumeur } from "./humeurs.js";
@@ -57,6 +59,7 @@ import {
   type MotifSpontane,
   type OptionsLia,
   type ParoleSpontanee,
+  type PropositionMonde,
   type PuceLia,
   type ReponseLia,
   type ZoneVie,
@@ -115,6 +118,11 @@ const limiter = (x: number, a: number, b: number): number => Math.max(a, Math.mi
  * Fait vivre LIA : 100 traits en canvas 2D, vie propre, discussion au clic, menu au clic droit.
  * Une seule LIA par page. Aucun réseau, aucun secret : tout ce qu'elle sait passe par `options.ask`.
  */
+/** Délai minimal entre deux fois (secondes), comme la maquette V9. */
+const DELAI_MONDE: Record<MotifMonde | "veiller", number> = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, veiller: 240 };
+const ETAT_MONDE: Record<MotifMonde, string> = { appeler: "alerte", resumer: "surveille", feliciter: "reussi", rappeler: "surveille", souvenir: "content" };
+const etatSur = (etat: string): string => (ST.includes(etat) ? etat : "repos");
+
 export function mountLia(options: OptionsLia = {}): LiaHandle {
   if (typeof document === "undefined") throw new Error("mountLia : à appeler dans le navigateur uniquement");
   if (actif) throw new Error("mountLia : une seule LIA par page (appeler destroy() avant d'en remonter une)");
@@ -224,6 +232,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let faits: FaitLia[] = cerveauMemoire?.journal ?? [];
   let comportement: Comportement | null = null;
   let tranquilleJusqua = 0;
+  /** Quand chaque comportement du monde a eu lieu pour la dernière fois (ms) : les délais de la maquette. */
+  const dernierMotif: Partial<Record<MotifMonde | "veiller", number>> = {};
+  let propositions: Partial<Record<MotifMonde, PropositionMonde>> = {};
+  let entreesCourantes: Record<string, number> = {};
+  let erreurMondeDite = false;
   let derniereDecision = -999;
   let derniereParole = -999;
   let dort = false;
@@ -988,6 +1001,22 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     passagere("reveille", 2.6);
   }
 
+  /** Elle va près de l'élément de l'hôte s'il est dans la bande regardée (sinon elle le dit sur place, près du curseur pour une alerte), prend sa silhouette et dit SA phrase au bout d'une seconde et demie. */
+  const direMonde = (motif: MotifMonde, p: PropositionMonde): void => {
+    const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    const el = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
+    if (el && allerVoir(el, 9)) {
+      if (!etatForce) choisir(etatSur(ETAT_MONDE[motif]));
+    } else {
+      if (motif === "appeler") venirPres();
+      passagere(etatSur(ETAT_MONDE[motif]), 5);
+    }
+    setTimeout(() => {
+      if (detruit || chatOuvert || menuOuvert || glisse || parle) return;
+      dire(texte, p.chips ? { chips: p.chips } : undefined);
+    }, 1500);
+  };
+
   const lancer = (id: Comportement, vues: Element[]): void => {
     comportement = id;
     derniereDecision = t;
@@ -1020,6 +1049,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       dort = true;
       errance = { jusqua: t + 1e9 };
       choisir("veille");
+    } else if (id === "veiller") {
+      dernierMotif["veiller"] = Date.now();
+      passagere(etatSur("surveille"), entre(Math.random, 7, 12));
+      calme(30);
+    } else if (id === "appeler" || id === "resumer" || id === "feliciter" || id === "rappeler" || id === "souvenir") {
+      const p = propositions[id];
+      dernierMotif[id] = Date.now();
+      if (p) direMonde(id, p);
+      if (id === "feliciter" && reseauActif) impulsion(reseau, "bon", 0.6);
+      calme(40);
     } else if (id === "causer" || id === "relancer") {
       derniereParole = t; // même muette (l'hôte n'avait rien de vrai à dire) : pas de nouvelle tentative avant 90 s
       const parole = id === "relancer" ? direSpontane("relance") : direSpontane(Math.random() < 0.2 ? "salut" : "rien");
@@ -1036,6 +1075,23 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** Ses intentions pèsent sur ce qu'elle choisit (maquette : `multIntention`) ; « voir » est le « pointer » de la maquette. */
   const pesee = (id: Comportement): number =>
     id === "causer" ? multIntention(reseau, "causer") * (1 - 0.5 * (reseau.int["setaire"] ?? 0)) : multIntention(reseau, id === "voir" ? "pointer" : id);
+  /** Ce que l'hôte a de vrai à dire pour chaque motif dont le délai est passé ; son échec ne l'arrête pas (dit une fois). */
+  const proposerMonde = (): MotifMonde[] => {
+    propositions = {};
+    if (!options.monde || !peutParlerSeule()) return [];
+    const maintenant = Date.now();
+    for (const m of MOTIFS_MONDE) {
+      if (maintenant - (dernierMotif[m] ?? 0) < DELAI_MONDE[m] * 1000) continue;
+      try {
+        const p = options.monde(m);
+        if (p?.text.trim()) propositions[m] = p;
+      } catch (e) {
+        if (!erreurMondeDite) console.error("LIA : monde a échoué, elle n'a rien à dire sur ce sujet", e);
+        erreurMondeDite = true;
+      }
+    }
+    return MOTIFS_MONDE.filter((m) => propositions[m]);
+  };
   const penser = (): void => {
     if (finEtatTemp && t > finEtatTemp) finirPassagere();
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
@@ -1044,6 +1100,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (dort || t < errance.jusqua || t - dernierMot < 14) return;
     const vues = regardables();
     const z = zoneVie();
+    const maintenant = Date.now();
     const id = choisirComportement(
       candidats(envies, {
         curseurRecent: curseurRecent(),
@@ -1055,6 +1112,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         loinDeLaMaison: z.w > 0 && z.h > 0 && Math.hypot(pos.x - maison.x, pos.y - maison.y) > 0.3 * Math.hypot(z.w, z.h),
         deplacement: !doux,
         secondesDepuisParole: t - derniereParole,
+        monde: proposerMonde(),
+        present: maintenant - dernierMarc < 60_000,
+        veille: maintenant - (dernierMotif["veiller"] ?? 0) > DELAI_MONDE["veiller"] * 1000 && ((entreesCourantes["nuit"] ?? 0) > 0.4 || (entreesCourantes["absent"] ?? 0) > 0.5),
+        intentions: reseauActif ? reseau.int : {},
       }),
       Math.random,
       comportement,
@@ -1077,7 +1138,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const dt = limiter((now - dernierPas) / 1000, 0.05, 1);
     dernierPas = now;
     const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
-    reseauPas(reseau, { ...locales, ...entreesHote() }, dt, Math.random, now);
+    entreesCourantes = { ...locales, ...entreesHote() };
+    reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;
       moteurHumeur("auto");
@@ -1096,7 +1158,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       occupee: t < errance.jusqua,
       auRepos: comportement === null || comportement === "repos",
       secondesDepuisDecision: t - derniereDecision,
-      inquietude: 0,
+      inquietude: entreesCourantes["alerte"] ?? 0,
     });
     if (dort && envies.energie >= 0.85) reveiller();
     if (reseauActif) penserReseau();

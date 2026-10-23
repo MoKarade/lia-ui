@@ -1,7 +1,7 @@
 "use client";
 import {
   mountLia
-} from "./chunk-LX6Z6POA.mjs";
+} from "./chunk-4UWPVTS3.mjs";
 
 // src/react.tsx
 import { useEffect, useRef } from "react";
@@ -32,6 +32,7 @@ function Lia(props) {
           } : {}
         }
       } : {},
+      ...p.monde ? { monde: (m) => derniere.current.monde?.(m) } : {},
       ...p.entrees ? { entrees: () => derniere.current.entrees?.() ?? {} } : {},
       ...p.bounds ? { bounds: () => derniere.current.bounds?.() ?? { x: 0, y: 0, w: 0, h: 0 } } : {},
       ...p.ask ? {

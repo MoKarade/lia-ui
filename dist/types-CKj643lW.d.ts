@@ -80,7 +80,9 @@ interface Envies {
 }
 declare const ENVIES_DEPART: Readonly<Envies>;
 /** Ce qu'elle choisit de faire quand rien ne se passe. `relancer` : une remarque que l'hôte voulait lui voir répéter (2 par jour au plus). */
-type Comportement = "repos" | "suivre" | "promener" | "causer" | "relancer" | "jouer" | "voir" | "rentrer" | "dormir";
+type Comportement = "repos" | "suivre" | "promener" | "causer" | "relancer" | "jouer" | "voir" | "rentrer" | "dormir" | MotifMonde | "veiller";
+/** Ce que l'hôte sait lui faire dire de vrai : `appeler` (un problème), `resumer` (une tendance), `feliciter`, `rappeler`, `souvenir`. */
+type MotifMonde = "appeler" | "resumer" | "feliciter" | "rappeler" | "souvenir";
 interface ContexteEnvies {
     /** Elle dort (veille) : l'énergie remonte. */
     dort: boolean;
@@ -116,6 +118,14 @@ interface ContexteChoix {
     deplacement: boolean;
     /** Secondes depuis qu'elle a parlé seule : pas de remarque avant 90 s. */
     secondesDepuisParole: number;
+    /** Les motifs pour lesquels l'hôte a une proposition vraie et dont le délai est passé ; absent = aucun. */
+    monde?: readonly MotifMonde[];
+    /** Marc est là (il a bougé il y a moins d'une minute). */
+    present?: boolean;
+    /** C'est la nuit ou Marc est parti depuis un moment : elle peut veiller, et le délai de 4 min est passé. */
+    veille?: boolean;
+    /** Ses intentions (0 à 1) ; absent = aucune. */
+    intentions?: Readonly<Record<string, number>>;
 }
 interface Candidat {
     id: Comportement;
@@ -222,6 +232,14 @@ interface ParoleSpontanee {
     text: string;
     chips?: readonly PuceLia[];
 }
+/** Ce que l'hôte propose qu'elle dise pour un motif. Le texte est de lui et doit être vrai ; ce paquet n'en écrit aucun. */
+interface PropositionMonde {
+    text: string;
+    /** Réponses rapides sous la bulle. */
+    chips?: readonly PuceLia[];
+    /** L'élément où elle va se poser pour le dire (la carte de l'app concernée). Sans lui : elle le dit sur place (près du curseur pour `appeler`). */
+    element?: Element | null;
+}
 /** Ce que LIA sait d'un élément de la page : de quoi parler de lui, jamais plus. */
 interface DescriptionElement {
     /** Ce que c'est, « une carte d'app », « un bouton » (dit comme dans « c'est … »). */
@@ -278,6 +296,14 @@ interface OptionsLia {
      * Elles priment sur celles qu'elle calcule seule (heure, activité de Marc, rythme des échanges). Absent : elle vit sans monde.
      */
     entrees?: () => Readonly<Record<string, number>>;
+    /**
+     * Ce que l'hôte a de vrai à lui faire dire sur le monde, un motif à la fois : `appeler` (un problème à signaler),
+     * `resumer` (une tendance), `feliciter` (une bonne nouvelle), `rappeler` (une chose à ne pas oublier), `souvenir`.
+     * Renvoie la proposition, ou `null` quand il n'y a rien de vrai : elle n'a alors aucune raison de choisir ce comportement.
+     * Elle seule décide du moment (délais de 90 s à 30 min, ses envies, ses intentions) ; elle respecte les heures de `silence`.
+     * Appelée sans effet de bord, au plus une fois par motif toutes les 1,2 s.
+     */
+    monde?: (motif: MotifMonde) => PropositionMonde | null | undefined;
     /** Zone où LIA a le droit de se déplacer ; par défaut toute la couche. */
     bounds?: () => ZoneVie;
     /** Rayon du corps en pixels CSS ; défaut 56. */
@@ -362,4 +388,4 @@ interface LiaHandle {
     destroy(): void;
 }
 
-export { type ActionLia as A, type Candidat as C, type Decision as D, ENVIES_DEPART as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type LiaHandle as L, type MotifSpontane as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, type Comportement as a, type DescriptionElement as b, type Envies as c, type EnvoiLia as d, type GesteLia as e, HUMEURS_MENU as f, type Hasard as g, type HumeurLia as h, LIBELLE_HUMEUR as i, type OptionsElements as j, type PuceLia as k, apresComportement as l, candidats as m, choisirComportement as n, dansZone as o, majEnvies as p, pointDansZone as q, prochaineDecision as r };
+export { type ActionLia as A, type Candidat as C, type Decision as D, ENVIES_DEPART as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type LiaHandle as L, type MotifMonde as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, type Comportement as a, type DescriptionElement as b, type Envies as c, type EnvoiLia as d, type GesteLia as e, HUMEURS_MENU as f, type Hasard as g, type HumeurLia as h, LIBELLE_HUMEUR as i, type MotifSpontane as j, type OptionsElements as k, type PropositionMonde as l, type PuceLia as m, apresComportement as n, candidats as o, choisirComportement as p, dansZone as q, majEnvies as r, pointDansZone as s, prochaineDecision as t };

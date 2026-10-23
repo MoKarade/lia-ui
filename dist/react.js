@@ -74,7 +74,8 @@ function dansZone(zone, x, y, marge) {
 
 // src/cerveau.ts
 var ENVIES_DEPART = { energie: 0.85, curiosite: 0.35, social: 0.45, inquiet: 0, joie: 0.3, ennui: 0.15 };
-var COMPORTEMENTS = ["voir", "suivre", "promener", "causer", "relancer", "jouer", "rentrer", "dormir", "repos"];
+var MOTIFS_MONDE = ["appeler", "resumer", "feliciter", "rappeler", "souvenir"];
+var COMPORTEMENTS = ["voir", "suivre", "promener", "causer", "relancer", "jouer", "rentrer", "dormir", "repos", ...MOTIFS_MONDE, "veiller"];
 var borne = (x) => Math.max(0, Math.min(1, x));
 function majEnvies(e, dt, c) {
   const energie = c.dort ? e.energie + 0.05 * dt : e.energie + (c.auRepos ? 14e-4 : c.occupee ? -25e-4 : 6e-4) * dt;
@@ -102,6 +103,8 @@ function apresComportement(e, id) {
       return { ...e, social: borne(e.social - 0.35) };
     case "voir":
       return { ...e, curiosite: borne(e.curiosite - 0.2) };
+    case "feliciter":
+      return { ...e, joie: borne(e.joie + 0.1) };
     default:
       return { ...e };
   }
@@ -116,6 +119,16 @@ function candidats(e, c) {
   if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) });
   if (c.parole && c.secondesDepuisParole > 90) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 });
   if (c.parole && c.relance && c.secondesDepuisParole > 90) liste.push({ id: "relancer", poids: 0.15 });
+  const monde = c.monde ?? [];
+  const veut = (id) => c.intentions?.[id] ?? 0;
+  if (monde.includes("appeler") && e.energie > 0.15 && e.inquiet > 0.35) liste.push({ id: "appeler", poids: 3.2 });
+  if (!c.tranquille && c.present) {
+    if (monde.includes("resumer")) liste.push({ id: "resumer", poids: 0.15 + veut("resumer") * 1.1 + (e.curiosite > 0.5 ? 0.15 : 0) });
+    if (monde.includes("rappeler")) liste.push({ id: "rappeler", poids: 0.2 + veut("rappeler") * 1.1 });
+    if (monde.includes("souvenir")) liste.push({ id: "souvenir", poids: 0.1 + veut("souvenir") * 1.1 });
+  }
+  if (c.present && monde.includes("feliciter")) liste.push({ id: "feliciter", poids: 0.2 + veut("feliciter") * 1.2 });
+  if (c.veille) liste.push({ id: "veiller", poids: 0.1 + veut("veiller") * 1.2 });
   liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.1 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
   if (c.deplacement && c.loinDeLaMaison && !c.tranquille) liste.push({ id: "rentrer", poids: 1.6 });
   if (e.energie < 0.3) liste.push({ id: "dormir", poids: (0.5 - e.energie) * 5 });
@@ -2464,6 +2477,9 @@ function injecterStyles() {
   document.head.appendChild(s);
 }
 var limiter2 = (x, a, b) => Math.max(a, Math.min(b, x));
+var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, veiller: 240 };
+var ETAT_MONDE = { appeler: "alerte", resumer: "surveille", feliciter: "reussi", rappeler: "surveille", souvenir: "content" };
+var etatSur = (etat) => ST.includes(etat) ? etat : "repos";
 function mountLia(options = {}) {
   if (typeof document === "undefined") throw new Error("mountLia : \xE0 appeler dans le navigateur uniquement");
   if (actif) throw new Error("mountLia : une seule LIA par page (appeler destroy() avant d'en remonter une)");
@@ -2555,6 +2571,10 @@ function mountLia(options = {}) {
   let faits = cerveauMemoire?.journal ?? [];
   let comportement = null;
   let tranquilleJusqua = 0;
+  const dernierMotif = {};
+  let propositions = {};
+  let entreesCourantes = {};
+  let erreurMondeDite = false;
   let derniereDecision = -999;
   let derniereParole = -999;
   let dort = false;
@@ -3239,6 +3259,20 @@ function mountLia(options = {}) {
     dort = false;
     passagere("reveille", 2.6);
   }
+  const direMonde = (motif, p) => {
+    const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
+    const el2 = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
+    if (el2 && allerVoir(el2, 9)) {
+      if (!etatForce) choisir(etatSur(ETAT_MONDE[motif]));
+    } else {
+      if (motif === "appeler") venirPres();
+      passagere(etatSur(ETAT_MONDE[motif]), 5);
+    }
+    setTimeout(() => {
+      if (detruit || chatOuvert || menuOuvert || glisse || parle) return;
+      dire(texte, p.chips ? { chips: p.chips } : void 0);
+    }, 1500);
+  };
   const lancer = (id, vues) => {
     comportement = id;
     derniereDecision = t;
@@ -3271,6 +3305,16 @@ function mountLia(options = {}) {
       dort = true;
       errance = { jusqua: t + 1e9 };
       choisir("veille");
+    } else if (id === "veiller") {
+      dernierMotif["veiller"] = Date.now();
+      passagere(etatSur("surveille"), entre(Math.random, 7, 12));
+      calme(30);
+    } else if (id === "appeler" || id === "resumer" || id === "feliciter" || id === "rappeler" || id === "souvenir") {
+      const p = propositions[id];
+      dernierMotif[id] = Date.now();
+      if (p) direMonde(id, p);
+      if (id === "feliciter" && reseauActif) impulsion(reseau, "bon", 0.6);
+      calme(40);
     } else if (id === "causer" || id === "relancer") {
       derniereParole = t;
       const parole = id === "relancer" ? direSpontane("relance") : direSpontane(Math.random() < 0.2 ? "salut" : "rien");
@@ -3284,6 +3328,22 @@ function mountLia(options = {}) {
     }
   };
   const pesee = (id) => id === "causer" ? multIntention(reseau, "causer") * (1 - 0.5 * (reseau.int["setaire"] ?? 0)) : multIntention(reseau, id === "voir" ? "pointer" : id);
+  const proposerMonde = () => {
+    propositions = {};
+    if (!options.monde || !peutParlerSeule()) return [];
+    const maintenant = Date.now();
+    for (const m of MOTIFS_MONDE) {
+      if (maintenant - (dernierMotif[m] ?? 0) < DELAI_MONDE[m] * 1e3) continue;
+      try {
+        const p = options.monde(m);
+        if (p?.text.trim()) propositions[m] = p;
+      } catch (e) {
+        if (!erreurMondeDite) console.error("LIA : monde a \xE9chou\xE9, elle n'a rien \xE0 dire sur ce sujet", e);
+        erreurMondeDite = true;
+      }
+    }
+    return MOTIFS_MONDE.filter((m) => propositions[m]);
+  };
   const penser = () => {
     if (finEtatTemp && t > finEtatTemp) finirPassagere();
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
@@ -3292,6 +3352,7 @@ function mountLia(options = {}) {
     if (dort || t < errance.jusqua || t - dernierMot < 14) return;
     const vues = regardables();
     const z = zoneVie();
+    const maintenant = Date.now();
     const id = choisirComportement(
       candidats(envies, {
         curseurRecent: curseurRecent(),
@@ -3302,7 +3363,11 @@ function mountLia(options = {}) {
         tranquille: t < tranquilleJusqua,
         loinDeLaMaison: z.w > 0 && z.h > 0 && Math.hypot(pos.x - maison.x, pos.y - maison.y) > 0.3 * Math.hypot(z.w, z.h),
         deplacement: !doux,
-        secondesDepuisParole: t - derniereParole
+        secondesDepuisParole: t - derniereParole,
+        monde: proposerMonde(),
+        present: maintenant - dernierMarc < 6e4,
+        veille: maintenant - (dernierMotif["veiller"] ?? 0) > DELAI_MONDE["veiller"] * 1e3 && ((entreesCourantes["nuit"] ?? 0) > 0.4 || (entreesCourantes["absent"] ?? 0) > 0.5),
+        intentions: reseauActif ? reseau.int : {}
       }),
       Math.random,
       comportement,
@@ -3324,7 +3389,8 @@ function mountLia(options = {}) {
     const dt = limiter2((now - dernierPas) / 1e3, 0.05, 1);
     dernierPas = now;
     const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
-    reseauPas(reseau, { ...locales, ...entreesHote() }, dt, Math.random, now);
+    entreesCourantes = { ...locales, ...entreesHote() };
+    reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;
       setHumeur("auto");
@@ -3343,7 +3409,7 @@ function mountLia(options = {}) {
       occupee: t < errance.jusqua,
       auRepos: comportement === null || comportement === "repos",
       secondesDepuisDecision: t - derniereDecision,
-      inquietude: 0
+      inquietude: entreesCourantes["alerte"] ?? 0
     });
     if (dort && envies.energie >= 0.85) reveiller();
     if (reseauActif) penserReseau();
@@ -3525,6 +3591,7 @@ function Lia(props) {
           } : {}
         }
       } : {},
+      ...p.monde ? { monde: (m) => derniere.current.monde?.(m) } : {},
       ...p.entrees ? { entrees: () => derniere.current.entrees?.() ?? {} } : {},
       ...p.bounds ? { bounds: () => derniere.current.bounds?.() ?? { x: 0, y: 0, w: 0, h: 0 } } : {},
       ...p.ask ? {

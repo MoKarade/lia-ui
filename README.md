@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.7.0
+npm i github:MoKarade/lia-ui#v0.8.0
 ```
 
 ## Utiliser
@@ -39,6 +39,7 @@ Sans framework : `const lia = mountLia({ ask, actions })`, puis `lia.dire("…")
 | `bounds()` | Zone où elle a le droit de se déplacer. |
 | `onChip`, `onHumeur`, `renderBlocks` | Réponses rapides, voyant d'humeur (quand sa dominante est l'une des 12 humeurs du menu), blocs composés (validés par l'hôte ; rendu prêt : `rendreBlocs` de `@mokarade/lia-ui/blocs`). |
 | `entrees()` | Ce que l'hôte sait du monde, lu chaque seconde : des nombres de 0 à 1 (`alerte`, `nbAlertes`, `toutVert`, `changement`, `recurrence`, `tendBonne`, `tendMauvaise`, `g_<app>`, `v_<app>`…) qui nourrissent son réseau ; ils priment sur ce qu'elle calcule seule. Absent ou en erreur (dite dans la console) : elle vit sans monde. |
+| `monde(motif)` | Ce que l'hôte a de **vrai** à lui faire dire sur le monde, pour `appeler` (un problème), `resumer` (une tendance), `feliciter` (une bonne nouvelle), `rappeler`, `souvenir` : `{ text, chips?, element? }`, ou `null` s'il n'y a rien. Elle choisit le moment (délais de 90 s à 30 min, envies, intentions, heures de `silence`), va près de `element` s'il est dans la zone regardée (sinon elle parle sur place), prend sa silhouette et dit le texte de l'hôte. Aucun texte n'est écrit dans ce paquet. L'hôte doit renvoyer `null` quand il en a déjà parlé : elle ne le sait pas. |
 | `cibles` | Sélecteur des éléments qu'elle peut aller voir (défaut `[data-lia-cible]`). Elle s'en approche, reste collée dessus quand la page défile, et ne fait **jamais** défiler la page. |
 | `onSpontane(motif)` | Ce qu'elle dit quand elle a envie de parler seule (`rien`, `salut`, `relance`). Renvoie le texte (ou `{ text, chips }`), ou `null` si l'hôte n'a rien de vrai à dire : elle se tait. Absent : jamais de parole spontanée. |
 | `silence`, `relancesParJour` | Heures sans parole spontanée (défaut `[22, 7]`) et plafond de relances par jour (défaut 2, mémorisé dans le navigateur). |
@@ -64,6 +65,7 @@ Son corps n'a plus une humeur au tirage : un réseau de 225 neurones (reprise du
 
 - Ses intentions pèsent sur ce qu'elle décide de faire (`causer`, `jouer`, `voir`…) ; une mémoire lente de vingt minutes lui fait garder une humeur d'une page à l'autre (`lia-ui:<cle>:reseau`).
 - `lia.ressent()` rend ses humeurs du moment, de la plus forte à la plus faible (trois au plus, `[["inquiet", 0.55], …]`). `lia.impulsion("bon" | "mauvais" | "touche" | "parle" | "reponse" | "rejet" | "scroll" | "demande", valeur?)` lui donne une nouvelle ; elle retombe d'elle-même. Elle en reçoit aussi toute seule (défilement, clic sur son corps, parole, message de Marc).
+- Avec `monde`, son inquiétude monte quand `entrees().alerte` est haute : alors `appeler` devient son choix presque certain (poids 3,2 de la maquette), elle vient près du curseur et dit la phrase de l'hôte. `resumer`, `rappeler`, `souvenir` et `feliciter` demandent que Marc ait bougé depuis moins d'une minute. Sans l'hôte, elle `veille` (silhouette « surveille » 7 à 12 s) la nuit ou quand Marc est parti. Chaque choix entre dans `lia.journal()` (`appeler`, `resumer`…).
 - `setHumeur(h)` et le menu de son corps poussent une humeur pendant cent secondes ; le réseau reprend ensuite la main.
 - `quandMouvementReduit: "fixe"` n'a aucun réseau (image unique) ; « doux » le garde, sur place.
 
