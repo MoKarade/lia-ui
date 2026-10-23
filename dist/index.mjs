@@ -23,7 +23,7 @@ import {
   mountLia,
   pointDansZone,
   prochaineDecision
-} from "./chunk-MR3WZETC.mjs";
+} from "./chunk-VHUGQURJ.mjs";
 export {
   ACTIONS_LIA,
   ENTREES_MENU,

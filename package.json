@@ -1,6 +1,6 @@
 {
   "name": "@mokarade/lia-ui",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "LIA vivante : composant partagé du hub et des apps (corps de 100 traits, discussion, menu d'actions)",
   "license": "UNLICENSED",
   "repository": {
@@ -52,7 +52,17 @@
         "default": "./dist/etat-http.js"
       }
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./boot": {
+      "import": {
+        "types": "./dist/boot.d.mts",
+        "default": "./dist/boot.mjs"
+      },
+      "require": {
+        "types": "./dist/boot.d.ts",
+        "default": "./dist/boot.js"
+      }
+    }
   },
   "files": [
     "dist"

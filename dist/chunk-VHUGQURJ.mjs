@@ -2899,6 +2899,31 @@ function ecrireMouvement(cle, m) {
   } catch {
   }
 }
+var MAX_MSGS = 20;
+function lireDiscussion(cle) {
+  try {
+    const brut2 = sessionStorage.getItem(`${PREFIXE}${cle}:discussion`);
+    if (brut2 === null) return null;
+    const j = JSON.parse(brut2);
+    if (typeof j !== "object" || j === null) return null;
+    const { ouvert, msgs } = j;
+    if (ouvert !== true || !Array.isArray(msgs)) return null;
+    const propres = msgs.filter((m) => {
+      const x = m;
+      return !!x && (x["de"] === "lia" || x["de"] === "moi") && typeof x["texte"] === "string";
+    }).slice(-MAX_MSGS).map((m) => ({ de: m.de, texte: m.texte.slice(0, 4e3) }));
+    return { ouvert: true, msgs: propres };
+  } catch {
+    return null;
+  }
+}
+function ecrireDiscussion(cle, d) {
+  try {
+    if (!d || !d.ouvert) sessionStorage.removeItem(`${PREFIXE}${cle}:discussion`);
+    else sessionStorage.setItem(`${PREFIXE}${cle}:discussion`, JSON.stringify({ ouvert: true, msgs: d.msgs.slice(-MAX_MSGS) }));
+  } catch {
+  }
+}
 
 // src/styles.ts
 var CSS = `
@@ -3285,8 +3310,13 @@ function mountLia(options = {}) {
   let points = null;
   let derniereFocus = null;
   let activiteChat = 0;
-  const ajouterMsg = (texte, de, erreur = false) => {
+  const trace = [];
+  const ajouterMsg = (texte, de, erreur = false, garder2 = !erreur) => {
     activiteChat = t;
+    if (garder2) {
+      trace.push({ de, texte });
+      ecrireDiscussion(cle, { ouvert: true, msgs: trace });
+    }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
@@ -3408,6 +3438,7 @@ function mountLia(options = {}) {
     derniereFocus = document.activeElement;
     chatOuvert = true;
     activiteChat = t;
+    ecrireDiscussion(cle, { ouvert: true, msgs: trace });
     chat = el("div", "lia-ui__chat");
     chat.setAttribute("role", "dialog");
     chat.setAttribute("aria-label", "Discussion avec LIA");
@@ -3472,6 +3503,8 @@ function mountLia(options = {}) {
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
+    trace.length = 0;
+    ecrireDiscussion(cle, null);
     contexteQuestion = null;
     cesserDeReperer();
     choisir3(etatForce ?? "repos");
@@ -4424,12 +4457,24 @@ function mountLia(options = {}) {
     if (detruit) return;
     const reel = Math.max(0, Math.min(1, (maintenant - dernier) / 1e3 || 0));
     dernier = maintenant;
-    if (!document.hidden) {
-      t += reel;
-      dessinerImage(false, Math.min(reel, 0.25));
+    try {
+      if (!document.hidden) {
+        t += reel;
+        dessinerImage(false, Math.min(reel, 0.25));
+      }
+    } catch (e) {
+      if (erreursImage++ < 3) console.error("[lia-ui] image rat\xE9e, elle continue", e);
+    } finally {
+      raf = requestAnimationFrame(boucle);
     }
-    raf = requestAnimationFrame(boucle);
   };
+  let erreursImage = 0;
+  const veilleCouche = setInterval(() => {
+    if (detruit || couche.isConnected) return;
+    const hote2 = conteneur?.isConnected ? conteneur : document.body;
+    if (hote2 !== conteneur) couche.className = "lia-ui";
+    hote2.appendChild(couche);
+  }, 500);
   const surVisibilite = () => {
     dernier = performance.now();
   };
@@ -4493,6 +4538,7 @@ function mountLia(options = {}) {
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
+      clearInterval(veilleCouche);
       clearTimeout(appui);
       enCours?.abort();
       window.removeEventListener("pointermove", surCurseur);
@@ -4504,6 +4550,11 @@ function mountLia(options = {}) {
     }
   };
   actif = poignee;
+  const avant = lireDiscussion(cle);
+  if (avant) {
+    ouvrirChat();
+    for (const m of avant.msgs) ajouterMsg(m.texte, m.de);
+  }
   return poignee;
 }
 
@@ -4533,4 +4584,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-MR3WZETC.mjs.map
+//# sourceMappingURL=chunk-VHUGQURJ.mjs.map
