@@ -146,7 +146,7 @@ describe("clic droit sur un élément de la page", () => {
   it("le clic droit sur son propre corps garde son menu à elle", () => {
     lia = mountLia({ vieAutonome: false });
     clicDroit(document.querySelector(".lia-ui__hit") as Element);
-    expect(entrees().filter(Boolean)).toEqual(["Lui parler", "Toutes ses actions", "La laisser vivre"]);
+    expect(entrees().filter(Boolean)).toEqual(["Lui parler", "Comment elle va", "Toutes ses actions", "La laisser vivre"]);
   });
 
   it("l'hôte décrit ses éléments, ou dit « pas celui-là » avec null", () => {

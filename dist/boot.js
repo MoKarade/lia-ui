@@ -494,7 +494,7 @@ function questionSurSaDouleur(q) {
   return t.length <= 80 && t.endsWith("?") && QUESTION_DOULEUR.test(t) && /(?<![\p{L}])(?:tu|toi|vous|lia|te|t')/iu.test(t);
 }
 function reponseDouleur(i) {
-  const pct = Math.round(i.douleur * 100);
+  const pct2 = Math.round(i.douleur * 100);
   const CAUSES = {
     choc: "on m'a secou\xE9e",
     brusque: "les clics \xE9taient brusques",
@@ -503,7 +503,7 @@ function reponseDouleur(i) {
     isolement: "je suis seule depuis longtemps",
     usure: "tout tourne trop lentement"
   };
-  const niveau = pct < 8 ? "Pas du tout pour l'instant." : `Un peu : ma douleur est \xE0 ${pct} %${i.cause ? `, parce que ${CAUSES[i.cause]}` : ""}.`;
+  const niveau = pct2 < 8 ? "Pas du tout pour l'instant." : `Un peu : ma douleur est \xE0 ${pct2} %${i.cause ? `, parce que ${CAUSES[i.cause]}` : ""}.`;
   return `${niveau} C'est un calcul en moi, pas un vrai ressenti : mais il change vraiment mon humeur et mon corps.`;
 }
 function garder(i, maintenant) {
@@ -518,6 +518,45 @@ function reprendre(g, maintenant) {
     confiance: 0.5 + (borne3(g.confiance) - 0.5) * Math.exp(-age / TAU.confiance)
   };
 }
+
+// src/commentva.ts
+var CAUSES_COURTES = {
+  choc: "un choc",
+  brusque: "des clics brusques",
+  ton: "des mots durs",
+  panne: "le r\xE9seau coup\xE9",
+  isolement: "la solitude",
+  usure: "la lenteur"
+};
+var pct = (x) => Number.isFinite(x) ? Math.round(Math.max(0, Math.min(1, x)) * 100) : 0;
+function jauges(e, i) {
+  const j = (id, libelle, v, penible = false, detail = "") => ({ id, libelle, pct: pct(v), detail, penible });
+  return [
+    j("energie", "\xC9nergie", e.energie),
+    j("curiosite", "Curiosit\xE9", e.curiosite),
+    j("social", "Envie de compagnie", e.social),
+    j("joie", "Joie", e.joie),
+    j("ennui", "Ennui", e.ennui, true),
+    j("inquiet", "Inqui\xE9tude", e.inquiet, true),
+    j("douleur", "Douleur", i.douleur, true, i.cause && pct(i.douleur) >= 5 ? CAUSES_COURTES[i.cause] : ""),
+    j("plaisir", "Plaisir", i.plaisir),
+    j("confiance", "Confiance en toi", i.confiance),
+    j("sensibilite", "Sensibilit\xE9", i.sensibilite, true),
+    j("usure", "Usure", i.usure, true)
+  ];
+}
+function phraseCommentVa(e, i) {
+  if (i.douleur >= 0.4) return `Elle a mal${i.cause ? ` : ${CAUSES_COURTES[i.cause]}` : ""}.`;
+  if (i.douleur >= 0.12) return `Elle a un peu mal${i.cause ? ` : ${CAUSES_COURTES[i.cause]}` : ""}.`;
+  if (e.inquiet >= 0.5) return "Elle est inqui\xE8te.";
+  if (e.energie < 0.25 || i.usure >= 0.5) return "Elle est fatigu\xE9e.";
+  if (i.plaisir >= 0.35 || e.joie >= 0.6) return "Elle est contente.";
+  if (e.ennui >= 0.6) return "Elle s'ennuie.";
+  if (e.social >= 0.7) return "Elle a envie de compagnie.";
+  if (e.curiosite >= 0.6) return "Elle est curieuse.";
+  return "Elle va bien.";
+}
+var MENTION_SIMULATION = "Simulation : des calculs en elle, pas un vrai ressenti.";
 
 // src/humeurs.ts
 var PROFILS_V9 = {
@@ -3184,6 +3223,18 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__rangee--gestes{grid-template-columns:repeat(4,1fr)}
 .lia-ui__actions{max-height:min(44vh,340px);overflow-y:auto;padding:.1rem .1rem .3rem;display:flex;flex-direction:column;gap:.2rem}
 .lia-ui__actions[hidden]{display:none}
+.lia-ui__commentva{max-height:min(48vh,380px);overflow-y:auto;overscroll-behavior:contain;padding:.2rem .6rem .5rem;display:flex;flex-direction:column;gap:.45rem}
+.lia-ui__commentva[hidden]{display:none}
+.lia-ui__cv-phrase{margin:0;font-size:.95rem;line-height:1.3;color:var(--lia-text)}
+.lia-ui__cv-liste{display:flex;flex-direction:column;gap:.4rem}
+.lia-ui__jauge{display:flex;flex-direction:column;gap:3px}
+.lia-ui__jauge-tete{display:flex;justify-content:space-between;gap:.5rem;font-size:.8rem;line-height:1.2}
+.lia-ui__jauge-nom{color:var(--lia-soft)}
+.lia-ui__jauge-valeur{color:var(--lia-text);font-variant-numeric:tabular-nums;text-align:right}
+.lia-ui__jauge-fond{height:6px;border-radius:3px;background:var(--lia-surface-2);overflow:hidden}
+.lia-ui__jauge-barre{height:100%;width:0;border-radius:3px;background:var(--lia-accent);transition:width .6s ease}
+.lia-ui__jauge--penible .lia-ui__jauge-barre{background:var(--lia-danger)}
+.lia-ui__cv-mention{margin:.2rem 0 0;font-size:.72rem;line-height:1.3;color:var(--lia-soft)}
 .lia-ui__famille-titre{margin:0;padding:.35rem .6rem .1rem;font-size:.72rem;color:var(--lia-soft)}
 .lia-ui__rangee--actions{grid-template-columns:repeat(2,1fr)}
 .lia-ui__action{padding:0 .5rem;font-size:.82rem;line-height:1.15}
@@ -3197,7 +3248,7 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__repere{position:absolute;pointer-events:none;border:2px solid var(--lia-accent);border-radius:12px;box-shadow:0 0 0 4px rgba(147,160,255,.18)}
 .lia-ui__repere[hidden]{display:none}
 @keyframes lia-ui-entre{from{opacity:0;transform:translateY(6px)}}
-@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}}
+@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__jauge-barre{transition:none}}
 `;
 
 // src/types.ts
@@ -3833,6 +3884,57 @@ function mountLia(options = {}) {
     }
     return rangee;
   };
+  let majCommentVa = null;
+  const panneauCommentVa = (replacer) => {
+    const bascule = el("button", "lia-ui__item", "Comment elle va");
+    bascule.type = "button";
+    bascule.setAttribute("role", "menuitem");
+    bascule.setAttribute("aria-expanded", "false");
+    const panneau = el("div", "lia-ui__commentva");
+    panneau.hidden = true;
+    const phrase = el("p", "lia-ui__cv-phrase");
+    phrase.setAttribute("aria-live", "polite");
+    const liste = el("div", "lia-ui__cv-liste");
+    const lignes = /* @__PURE__ */ new Map();
+    for (const j of jauges(envies, interieur)) {
+      const jauge = el("div", `lia-ui__jauge${j.penible ? " lia-ui__jauge--penible" : ""}`);
+      jauge.setAttribute("role", "meter");
+      jauge.setAttribute("aria-label", j.libelle);
+      jauge.setAttribute("aria-valuemin", "0");
+      jauge.setAttribute("aria-valuemax", "100");
+      jauge.dataset["jauge"] = j.id;
+      const tete = el("div", "lia-ui__jauge-tete");
+      const valeur = el("span", "lia-ui__jauge-valeur");
+      tete.append(el("span", "lia-ui__jauge-nom", j.libelle), valeur);
+      const fond = el("div", "lia-ui__jauge-fond");
+      const barre = el("div", "lia-ui__jauge-barre");
+      fond.appendChild(barre);
+      jauge.append(tete, fond);
+      liste.appendChild(jauge);
+      lignes.set(j.id, { jauge, valeur, barre });
+    }
+    panneau.append(phrase, liste, el("p", "lia-ui__cv-mention", MENTION_SIMULATION));
+    const maj = () => {
+      phrase.textContent = phraseCommentVa(envies, interieur);
+      for (const j of jauges(envies, interieur)) {
+        const l = lignes.get(j.id);
+        if (!l) continue;
+        const texte = `${j.pct} %${j.detail ? ` (${j.detail})` : ""}`;
+        l.jauge.setAttribute("aria-valuenow", String(j.pct));
+        l.jauge.setAttribute("aria-valuetext", texte);
+        l.valeur.textContent = texte;
+        l.barre.style.width = `${j.pct}%`;
+      }
+    };
+    bascule.addEventListener("click", () => {
+      panneau.hidden = !panneau.hidden;
+      bascule.setAttribute("aria-expanded", String(!panneau.hidden));
+      majCommentVa = panneau.hidden ? null : maj;
+      if (!panneau.hidden) maj();
+      replacer();
+    });
+    return [bascule, panneau];
+  };
   const panneauActions = (replacer) => {
     const bascule = el("button", "lia-ui__item", "Toutes ses actions");
     bascule.type = "button";
@@ -3903,6 +4005,7 @@ function mountLia(options = {}) {
       menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
       menu.appendChild(item("Lui parler", ouvrirChat));
       menu.appendChild(rangeeHumeurs());
+      menu.append(...panneauCommentVa(placerMenu));
       if (!sansMouvement) {
         menu.appendChild(rangeeGestes());
         menu.append(...panneauActions(placerMenu));
@@ -3949,6 +4052,7 @@ function mountLia(options = {}) {
     menu?.remove();
     menu = null;
     menuOuvert = false;
+    majCommentVa = null;
   }
   const repere = el("div", "lia-ui__repere");
   repere.hidden = true;
@@ -4562,6 +4666,7 @@ function mountLia(options = {}) {
     if (hd && !forcee) pousserHumeur(reseau, hd, now, 1.2);
     verifierCri();
     corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
+    majCommentVa?.();
     reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;
