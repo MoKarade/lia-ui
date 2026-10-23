@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle } from './etat-BhcLRvmY.mjs';
-export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, c as ENVIES_DEPART, d as Envies, e as EnvoiLia, E as EtatHote, f as EtatLia, F as FaitLia, G as GESTES, g as GesteLia, H as HUMEURS_LIA, h as HUMEURS_MENU, i as Hasard, j as HumeurLia, k as LIBELLE_HUMEUR, M as MotifMonde, l as MotifSpontane, m as OptionsElements, P as ParoleSpontanee, n as PropositionMonde, o as PuceLia, R as ReponseLia, Z as ZoneVie, p as apresComportement, q as candidats, r as choisirComportement, s as dansZone, t as majEnvies, u as pointDansZone, v as prochaineDecision } from './etat-BhcLRvmY.mjs';
+import { O as OptionsLia, L as LiaHandle } from './etat-D83Gg4jD.mjs';
+export { A as ActionLia, C as Candidat, a as Comportement, b as ContexteLia, D as Decision, c as DescriptionElement, d as ENVIES_DEPART, e as Envies, f as EnvoiLia, E as EtatHote, g as EtatLia, F as FaitLia, G as GESTES, h as GesteLia, H as HUMEURS_LIA, i as HUMEURS_MENU, j as Hasard, k as HumeurLia, l as LIBELLE_HUMEUR, M as MotifMonde, m as MotifSpontane, n as OptionsElements, P as ParoleSpontanee, o as PropositionMonde, p as PuceLia, R as ReponseLia, Z as ZoneVie, q as apresComportement, r as candidats, s as choisirComportement, t as dansZone, u as majEnvies, v as pointDansZone, w as prochaineDecision } from './etat-D83Gg4jD.mjs';
 
 declare function mountLia(options?: OptionsLia): LiaHandle;
 
@@ -56,7 +56,11 @@ declare const ACTIONS_LIA: readonly string[];
 
 /** Le nom de chacune des 40 humeurs (noms, pas d'accord : « Humeur : sérénité »), pour la pastille que LIA dessine. */
 declare const LIBELLES_HUMEURS: Readonly<Record<string, string>>;
+/** Les 40 humeurs, dans l'ordre : la liste fermée que l'hôte valide (`ContexteLia.humeur`). */
+declare const HUMEURS_DETAILLEES: readonly string[];
 declare const libelleHumeur: (nom: string) => string;
 declare function couleurHumeur(nom: string): string;
 
-export { ACTIONS_LIA, ENTREES_MENU, FAMILLES_ACTIONS, type FamilleActions, LIBELLES_HUMEURS, LiaHandle, type ModeElement, OptionsLia, SELECTEUR_ELEMENTS, composerQuestion, couleurHumeur, decrireParDefaut, libelleHumeur, mountLia };
+declare const ST: string[];
+
+export { ACTIONS_LIA, ENTREES_MENU, FAMILLES_ACTIONS, type FamilleActions, HUMEURS_DETAILLEES, LIBELLES_HUMEURS, LiaHandle, type ModeElement, OptionsLia, SELECTEUR_ELEMENTS, ST as SILHOUETTES_LIA, composerQuestion, couleurHumeur, decrireParDefaut, libelleHumeur, mountLia };

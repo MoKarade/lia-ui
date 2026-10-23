@@ -85,7 +85,7 @@ describe("discussion", () => {
     lia = mountLia({ ask });
     touche(hit(), "Enter");
     await soumettre("Salut");
-    expect(ask).toHaveBeenCalledWith("Salut", expect.any(AbortSignal));
+    expect(ask).toHaveBeenCalledWith("Salut", expect.any(AbortSignal), expect.objectContaining({ humeur: expect.any(String) }));
     expect(document.querySelector(".lia-ui img")).toBeNull();
     expect(messages()).toContain('<img src=x onerror="window.pwned=1"> Bonjour');
     expect((window as unknown as { pwned?: number }).pwned).toBeUndefined();

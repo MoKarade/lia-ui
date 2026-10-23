@@ -72,6 +72,9 @@ const COULEURS_12: Readonly<Record<string, string>> = {
 
 const hex2 = (n: number): string => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
 
+/** Les 40 humeurs, dans l'ordre : la liste fermée que l'hôte valide (`ContexteLia.humeur`). */
+export const HUMEURS_DETAILLEES: readonly string[] = Object.keys(LIBELLES_HUMEURS);
+
 export const libelleHumeur = (nom: string): string => LIBELLES_HUMEURS[nom] ?? nom;
 
 export function couleurHumeur(nom: string): string {

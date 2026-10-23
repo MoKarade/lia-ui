@@ -25,11 +25,13 @@ __export(index_exports, {
   ENVIES_DEPART: () => ENVIES_DEPART,
   FAMILLES_ACTIONS: () => FAMILLES_ACTIONS,
   GESTES: () => GESTES,
+  HUMEURS_DETAILLEES: () => HUMEURS_DETAILLEES,
   HUMEURS_LIA: () => HUMEURS_LIA,
   HUMEURS_MENU: () => HUMEURS_MENU,
   LIBELLES_HUMEURS: () => LIBELLES_HUMEURS,
   LIBELLE_HUMEUR: () => LIBELLE_HUMEUR,
   SELECTEUR_ELEMENTS: () => SELECTEUR_ELEMENTS,
+  SILHOUETTES_LIA: () => ST,
   apresComportement: () => apresComportement,
   candidats: () => candidats,
   choisirComportement: () => choisirComportement,
@@ -497,6 +499,7 @@ var COULEURS_12 = {
   timide: "#FDA4AF"
 };
 var hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+var HUMEURS_DETAILLEES = Object.keys(LIBELLES_HUMEURS);
 var libelleHumeur = (nom) => LIBELLES_HUMEURS[nom] ?? nom;
 function couleurHumeur(nom) {
   const d12 = COULEURS_12[nom];
@@ -2493,6 +2496,9 @@ var ENTREES_MENU = [
   { mode: "question", libelle: "Poser une question\u2026" }
 ];
 var SELECTEUR_ELEMENTS = "[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1, h2, h3, h4, button, a, label";
+var MEDIAS = "img, svg, canvas, picture, video";
+var PRIORITAIRES = "button, a, label, h1, h2, h3, h4, summary";
+var SECOURS = "p, td, th, blockquote, pre, details, summary, nav, header, footer, aside";
 var EXCLUS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], [data-lia-ignorer]";
 var MAX_GENRE = 80;
 var MAX_NOM = 60;
@@ -2523,7 +2529,23 @@ var GENRES_BALISE = {
   ARTICLE: "un bloc",
   SECTION: "une section",
   LABEL: "une \xE9tiquette",
-  FIGURE: "une figure"
+  FIGURE: "une figure",
+  P: "un paragraphe",
+  TD: "une cellule de tableau",
+  TH: "un en-t\xEAte de tableau",
+  SVG: "un graphique",
+  CANVAS: "un graphique",
+  PICTURE: "une image",
+  VIDEO: "une vid\xE9o",
+  NAV: "une barre de navigation",
+  HEADER: "un en-t\xEAte",
+  FOOTER: "un pied de page",
+  ASIDE: "un encadr\xE9",
+  BLOCKQUOTE: "une citation",
+  PRE: "un bloc de code",
+  CODE: "du code",
+  DETAILS: "un bloc repliable",
+  SUMMARY: "un titre repliable"
 };
 var GENRES_ROLE = {
   button: "un bouton",
@@ -2552,7 +2574,11 @@ function elementVise(cible, selecteur, couche, racine = document) {
   if (couche.contains(cible)) return null;
   if (cible.closest(EXCLUS)) return null;
   try {
-    return cible.closest(selecteur) ?? cible;
+    const bloc = cible.closest(selecteur);
+    if (selecteur !== SELECTEUR_ELEMENTS) return bloc ?? cible;
+    const media = cible.closest(MEDIAS);
+    if (media && (!bloc || bloc.contains(media) && !bloc.matches(PRIORITAIRES))) return media;
+    return bloc ?? cible.closest(SECOURS) ?? cible;
   } catch {
     return cible;
   }
@@ -2776,6 +2802,19 @@ var SILHOUETTE_PAROLE = {
   resume: "souvient",
   rien: "reflexion"
 };
+var sansAccent = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function questionSurSonHumeur(question) {
+  const q = sansAccent(question).replace(/\s+/g, " ").trim();
+  if (q.length === 0 || q.length > 80) return false;
+  return /\b(humeur|te sens|tu ressens|ressens[- ]tu|comment (tu )?vas|comment vas[- ]tu|tu vas (bien|mal)|ton etat|comment tu te sens)\b/.test(q) || /^(salut |hey |coucou )?(alors )?ca va( bien| toi)? ?\??$/.test(q);
+}
+function reponseHumeur(humeur2, ressent) {
+  const nom = LIBELLES_HUMEURS[humeur2] ?? humeur2;
+  const phrase = PHRASES_HUMEUR[humeur2] ?? "";
+  const derriere = ressent.filter(([h, v]) => h !== humeur2 && v > 0.25 && LIBELLES_HUMEURS[h]).slice(0, 2).map(([h]) => LIBELLES_HUMEURS[h]);
+  const suite = derriere.length ? ` Juste derri\xE8re : ${derriere.join(" et ")}.` : "";
+  return `En ce moment, mon humeur est \xAB ${nom} \xBB. ${phrase}${suite}`.replace(/\s+/g, " ").trim();
+}
 
 // src/stockage.ts
 var PREFIXE = "lia-ui:";
@@ -3316,10 +3355,22 @@ function mountLia(options = {}) {
       points = null;
     }
   };
+  const contexteLia = () => {
+    const cible2 = regarde?.getAttribute("data-lia-cible") ?? "";
+    const regard = cible2.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    return { humeur: humeurNom, silhouette: etatSur(etatForce ?? etat), regard: regard || null };
+  };
   const poser = async (question, envoi = question, base = activiteQuestion(question)) => {
     enCours?.abort();
     attendReponse = false;
     ajouterMsg(question, "moi");
+    if (envoi === question && questionSurSonHumeur(question)) {
+      const dite = reponseHumeur(humeurNom, reseauActif ? top3(reseau) : []);
+      ajouterMsg(dite, "lia");
+      impulsion(reseau, "reponse");
+      voix(dite);
+      return;
+    }
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
       choisir3("indispo");
@@ -3339,7 +3390,7 @@ function mountLia(options = {}) {
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
-      const rep = await options.ask(envoi, ctrl.signal);
+      const rep = await options.ask(envoi, ctrl.signal, contexteLia());
       if (ctrl.signal.aborted || detruit) return;
       montrerReflexion(false);
       const m = ajouterMsg(rep.text, "lia");
@@ -3375,9 +3426,24 @@ function mountLia(options = {}) {
   };
   const placerAutour = (boite) => {
     const z = zoneVie();
-    const w = boite.offsetWidth;
-    const h = boite.offsetHeight;
+    boite.style.maxHeight = "";
+    let w = boite.offsetWidth;
+    let h = boite.offsetHeight;
     const aDroite = pos.x + rayon * 0.9 + w + 8 <= z.x + z.w;
+    const aGauche = pos.x - rayon * 0.9 - w - 8 >= z.x;
+    if (!aDroite && !aGauche) {
+      const haut = Math.max(0, pos.y - rayon * 1.1 - (z.y + 8));
+      const bas = Math.max(0, z.y + z.h - 8 - (pos.y + rayon * 1.1 + 26));
+      const enBas = bas >= haut;
+      const place = Math.max(120, Math.floor(enBas ? bas : haut));
+      boite.style.maxHeight = `${place}px`;
+      h = Math.min(boite.offsetHeight || h, place);
+      w = boite.offsetWidth;
+      const y2 = enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h;
+      boite.style.left = `${limiter2(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
+      boite.style.top = `${limiter2(y2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
+      return;
+    }
     const x = aDroite ? pos.x + rayon * 0.9 : pos.x - rayon * 0.9 - w;
     const y = limiter2(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
     boite.style.left = `${Math.max(z.x + 8, x)}px`;
@@ -3673,18 +3739,46 @@ function mountLia(options = {}) {
     };
     guetter();
   }
-  const surClicDroitPage = (e) => {
-    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
-    const cible2 = elementVise(e.target, selecteurElements, couche);
-    if (!cible2) return;
+  const menuElementEn = (x, y, vise) => {
+    const cible2 = elementVise(vise, selecteurElements, couche);
+    if (!cible2) return false;
     const d = decrireElement(cible2);
-    if (!d) return;
-    e.preventDefault();
+    if (!d) return false;
     clearTimeout(appui);
     glisse = null;
-    ouvrirMenu(e.clientX, e.clientY, { cible: cible2, d });
+    ouvrirMenu(x, y, { cible: cible2, d });
+    return true;
+  };
+  const surClicDroitPage = (e) => {
+    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
+    clearTimeout(appuiPage);
+    if (menuElementEn(e.clientX, e.clientY, e.target)) e.preventDefault();
+  };
+  let appuiPage;
+  let departAppui = null;
+  const annulerAppuiPage = () => {
+    clearTimeout(appuiPage);
+    departAppui = null;
+  };
+  const surAppuiPage = (e) => {
+    annulerAppuiPage();
+    if (detruit || !optElements || e.pointerType !== "touch" || !e.isPrimary) return;
+    const vise = e.target;
+    departAppui = { x: e.clientX, y: e.clientY };
+    appuiPage = setTimeout(() => {
+      if (detruit || !departAppui) return;
+      const { x, y } = departAppui;
+      departAppui = null;
+      menuElementEn(x, y, vise);
+    }, 650);
+  };
+  const surBougePage = (e) => {
+    if (departAppui && Math.hypot(e.clientX - departAppui.x, e.clientY - departAppui.y) > 10) annulerAppuiPage();
   };
   document.addEventListener("contextmenu", surClicDroitPage);
+  document.addEventListener("pointerdown", surAppuiPage, { capture: true, passive: true });
+  document.addEventListener("pointermove", surBougePage, { capture: true, passive: true });
+  for (const fin of ["pointerup", "pointercancel", "scroll"]) document.addEventListener(fin, annulerAppuiPage, { capture: true, passive: true });
   const surDefilement = () => {
     ajouterImpulsion(reseau, "scroll", 0.2);
     dernierMarc = Date.now();
@@ -4441,6 +4535,10 @@ function mountLia(options = {}) {
       setMelange(null);
       for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
       document.removeEventListener("contextmenu", surClicDroitPage);
+      annulerAppuiPage();
+      document.removeEventListener("pointerdown", surAppuiPage, true);
+      document.removeEventListener("pointermove", surBougePage, true);
+      for (const fin of ["pointerup", "pointercancel", "scroll"]) document.removeEventListener(fin, annulerAppuiPage, true);
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
@@ -4464,11 +4562,13 @@ function mountLia(options = {}) {
   ENVIES_DEPART,
   FAMILLES_ACTIONS,
   GESTES,
+  HUMEURS_DETAILLEES,
   HUMEURS_LIA,
   HUMEURS_MENU,
   LIBELLES_HUMEURS,
   LIBELLE_HUMEUR,
   SELECTEUR_ELEMENTS,
+  SILHOUETTES_LIA,
   apresComportement,
   candidats,
   choisirComportement,

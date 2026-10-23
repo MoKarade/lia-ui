@@ -14,6 +14,7 @@ export type {
   ParoleSpontanee,
   PropositionMonde,
   PuceLia,
+  ContexteLia,
   ReponseLia,
   ZoneVie,
 } from "./types.js";
@@ -23,7 +24,8 @@ export { GESTES, HUMEURS_MENU } from "./gestes.js";
 export { ACTIONS_LIA, FAMILLES_ACTIONS } from "./activite.js";
 export type { FamilleActions } from "./activite.js";
 export type { EtatHote, EtatLia } from "./etat.js";
-export { LIBELLES_HUMEURS, couleurHumeur, libelleHumeur } from "./humeurs.js";
+export { HUMEURS_DETAILLEES, LIBELLES_HUMEURS, couleurHumeur, libelleHumeur } from "./humeurs.js";
+export { ST as SILHOUETTES_LIA } from "./moteur/moteur.js";
 export { ENVIES_DEPART, apresComportement, candidats, choisirComportement, majEnvies } from "./cerveau.js";
 export type { Candidat, Comportement, Envies, FaitLia } from "./cerveau.js";
 export type { ModeElement } from "./ecran.js";

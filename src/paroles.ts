@@ -1,4 +1,5 @@
 import type { Envies, FaitLia } from "./cerveau.js";
+import { LIBELLES_HUMEURS } from "./humeurs.js";
 
 /**
  * Ce qu'elle dit d'elle-même quand l'hôte n'a rien de vrai à dire (répertoire de la maquette v5 : `PAROLES`,
@@ -229,3 +230,34 @@ export const SILHOUETTE_PAROLE: Readonly<Record<string, string>> = {
   resume: "souvient",
   rien: "reflexion",
 };
+
+const sansAccent = (t: string): string => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/**
+ * Vrai quand la question de Marc porte sur LIA elle-même (son humeur, comment elle va, ce qu'elle ressent) : c'est à
+ * elle d'y répondre, elle est la seule à le savoir. Courte et sans détour (80 lettres au plus) : « ça va marcher ? »
+ * n'en est pas une.
+ */
+export function questionSurSonHumeur(question: string): boolean {
+  const q = sansAccent(question).replace(/\s+/g, " ").trim();
+  if (q.length === 0 || q.length > 80) return false;
+  return (
+    /\b(humeur|te sens|tu ressens|ressens[- ]tu|comment (tu )?vas|comment vas[- ]tu|tu vas (bien|mal)|ton etat|comment tu te sens)\b/.test(q) ||
+    /^(salut |hey |coucou )?(alors )?ca va( bien| toi)? ?\??$/.test(q)
+  );
+}
+
+/**
+ * Sa réponse quand on lui demande son humeur : la sienne (une phrase de la maquette), le nom de l'humeur, et ce qui vient
+ * juste derrière. Vrai par construction : rien que son propre état, aucun fait sur Marc.
+ */
+export function reponseHumeur(humeur: string, ressent: ReadonlyArray<readonly [string, number]>): string {
+  const nom = LIBELLES_HUMEURS[humeur] ?? humeur;
+  const phrase = PHRASES_HUMEUR[humeur] ?? "";
+  const derriere = ressent
+    .filter(([h, v]) => h !== humeur && v > 0.25 && LIBELLES_HUMEURS[h])
+    .slice(0, 2)
+    .map(([h]) => LIBELLES_HUMEURS[h]);
+  const suite = derriere.length ? ` Juste derrière : ${derriere.join(" et ")}.` : "";
+  return `En ce moment, mon humeur est « ${nom} ». ${phrase}${suite}`.replace(/\s+/g, " ").trim();
+}

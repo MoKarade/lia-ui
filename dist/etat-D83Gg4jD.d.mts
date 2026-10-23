@@ -62,6 +62,17 @@ interface PuceLia {
     label: string;
 }
 /**
+ * Ce que LIA dit d'elle-même à l'hôte avec chaque question (3e argument de `ask`), pour qu'il ne la prenne pas pour un
+ * modèle sans humeur. Listes fermées, sans texte libre : `humeur` est l'une des clés de `LIBELLES_HUMEURS` (40),
+ * `silhouette` l'une de `SILHOUETTES_LIA`, `regard` un identifiant court `[a-z0-9-]` (la valeur de `data-lia-cible` de
+ * l'élément qu'elle regarde) ou `null`. À l'hôte de l'annoncer au modèle comme une DONNÉE sur LIA.
+ */
+interface ContexteLia {
+    humeur: string;
+    silhouette: string;
+    regard: string | null;
+}
+/**
  * Ce que l'hôte renvoie à une question. `text` est toujours montré ; `mood` colore LIA.
  * Les blocs composés (cartes, courbes…) arrivent avec l'API MemoryAI : ils passent par
  * `blocks` et par `renderBlocks`, fourni par l'hôte ; ce paquet ne les interprète jamais.
@@ -110,7 +121,7 @@ interface DescriptionElement {
 interface OptionsElements {
     /**
      * Éléments visés en premier : le plus proche ancêtre (ou l'élément lui-même) qui correspond. Défaut :
-     * `[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1…h4, button, a, label`.
+     * `[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1…h4, button, a, label` ; à défaut un média (`img`, `svg`, `canvas`) ou un paragraphe, une cellule, une citation…
      */
     selecteur?: string;
     /**
@@ -135,7 +146,7 @@ interface OptionsLia {
     /**
      * Pose une question. Absent ou en échec : LIA dit qu'elle est indisponible. Jamais de réponse inventée.
      */
-    ask?: (question: string, signal: AbortSignal) => Promise<ReponseLia>;
+    ask?: (question: string, signal: AbortSignal, contexte?: ContexteLia) => Promise<ReponseLia>;
     /** Actions du menu (clic droit, appui long, touche Menu), ajoutées aux actions de LIA. */
     actions?: readonly ActionLia[];
     /**
@@ -464,4 +475,4 @@ interface EtatHote {
     ecrire(etat: EtatLia): Promise<unknown>;
 }
 
-export { type ActionLia as A, type Candidat as C, type Decision as D, type EtatHote as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type LiaHandle as L, type MotifMonde as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, type Comportement as a, type DescriptionElement as b, ENVIES_DEPART as c, type Envies as d, type EnvoiLia as e, type EtatLia as f, type GesteLia as g, HUMEURS_MENU as h, type Hasard as i, type HumeurLia as j, LIBELLE_HUMEUR as k, type MotifSpontane as l, type OptionsElements as m, type PropositionMonde as n, type PuceLia as o, apresComportement as p, candidats as q, choisirComportement as r, dansZone as s, majEnvies as t, pointDansZone as u, prochaineDecision as v };
+export { type ActionLia as A, type Candidat as C, type Decision as D, type EtatHote as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type LiaHandle as L, type MotifMonde as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, type Comportement as a, type ContexteLia as b, type DescriptionElement as c, ENVIES_DEPART as d, type Envies as e, type EnvoiLia as f, type EtatLia as g, type GesteLia as h, HUMEURS_MENU as i, type Hasard as j, type HumeurLia as k, LIBELLE_HUMEUR as l, type MotifSpontane as m, type OptionsElements as n, type PropositionMonde as o, type PuceLia as p, apresComportement as q, candidats as r, choisirComportement as s, dansZone as t, majEnvies as u, pointDansZone as v, prochaineDecision as w };

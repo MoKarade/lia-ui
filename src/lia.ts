@@ -49,7 +49,7 @@ import {
   type ModeElement,
 } from "./ecran.js";
 import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
-import { SILHOUETTE_PAROLE, choisirParole, estPuceLia, suiteParole, type ContexteParole } from "./paroles.js";
+import { SILHOUETTE_PAROLE, choisirParole, estPuceLia, questionSurSonHumeur, reponseHumeur, suiteParole, type ContexteParole } from "./paroles.js";
 import { FAMILLES_ACTIONS, activiteElement, activiteQuestion, estAction, suiteReflexion } from "./activite.js";
 import {
   ecrireCerveau,
@@ -68,6 +68,7 @@ import {
   HUMEURS_LIA,
   type ActionLia,
   type EnvoiLia,
+  type ContexteLia,
   type HumeurLia,
   type LiaHandle,
   type MotifSpontane,
@@ -491,11 +492,26 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
   };
 
+  /** Ce qu'elle dit d'elle-même à l'hôte avec chaque question : listes fermées, jamais de texte libre. */
+  const contexteLia = (): ContexteLia => {
+    const cible = regarde?.getAttribute("data-lia-cible") ?? "";
+    const regard = cible.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    return { humeur: humeurNom, silhouette: etatSur(etatForce ?? etat), regard: regard || null };
+  };
+
   /** `question` est ce que Marc lit dans la discussion ; `envoi` est ce que reçoit `ask` (par défaut la même chose). */
   const poser = async (question: string, envoi: string = question, base: string = activiteQuestion(question)): Promise<void> => {
     enCours?.abort();
     attendReponse = false;
     ajouterMsg(question, "moi");
+    // Sa propre humeur, elle la dit elle-même : c'est son état, pas une question pour le modèle de l'hôte.
+    if (envoi === question && questionSurSonHumeur(question)) {
+      const dite = reponseHumeur(humeurNom, reseauActif ? top3(reseau) : []);
+      ajouterMsg(dite, "lia");
+      impulsion(reseau, "reponse");
+      voix(dite);
+      return;
+    }
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
       choisir("indispo");
@@ -517,7 +533,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
-      const rep: ReponseLia = await options.ask(envoi, ctrl.signal);
+      const rep: ReponseLia = await options.ask(envoi, ctrl.signal, contexteLia());
       if (ctrl.signal.aborted || detruit) return;
       montrerReflexion(false);
       const m = ajouterMsg(rep.text, "lia");
@@ -555,9 +571,25 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   const placerAutour = (boite: HTMLElement): void => {
     const z = zoneVie();
-    const w = boite.offsetWidth;
-    const h = boite.offsetHeight;
+    boite.style.maxHeight = "";
+    let w = boite.offsetWidth;
+    let h = boite.offsetHeight;
     const aDroite = pos.x + rayon * 0.9 + w + 8 <= z.x + z.w;
+    const aGauche = pos.x - rayon * 0.9 - w - 8 >= z.x;
+    if (!aDroite && !aGauche) {
+      // Écran étroit (téléphone) : rien à côté d'elle, alors au-dessus ou en dessous, jamais sur son corps ni sa pastille d'humeur.
+      const haut = Math.max(0, pos.y - rayon * 1.1 - (z.y + 8));
+      const bas = Math.max(0, z.y + z.h - 8 - (pos.y + rayon * 1.1 + 26));
+      const enBas = bas >= haut;
+      const place = Math.max(120, Math.floor(enBas ? bas : haut));
+      boite.style.maxHeight = `${place}px`;
+      h = Math.min(boite.offsetHeight || h, place);
+      w = boite.offsetWidth;
+      const y = enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h;
+      boite.style.left = `${limiter(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
+      boite.style.top = `${limiter(y, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
+      return;
+    }
     const x = aDroite ? pos.x + rayon * 0.9 : pos.x - rayon * 0.9 - w;
     const y = limiter(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
     boite.style.left = `${Math.max(z.x + 8, x)}px`;
@@ -884,18 +916,48 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     guetter();
   }
 
-  const surClicDroitPage = (e: MouseEvent): void => {
-    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
-    const cible = elementVise(e.target, selecteurElements, couche);
-    if (!cible) return;
+  /** Ouvre le menu de l'élément visé en (x, y) ; faux quand LIA doit laisser faire le navigateur. */
+  const menuElementEn = (x: number, y: number, vise: EventTarget | null): boolean => {
+    const cible = elementVise(vise, selecteurElements, couche);
+    if (!cible) return false;
     const d = decrireElement(cible);
-    if (!d) return;
-    e.preventDefault();
+    if (!d) return false;
     clearTimeout(appui);
     glisse = null;
-    ouvrirMenu(e.clientX, e.clientY, { cible, d });
+    ouvrirMenu(x, y, { cible, d });
+    return true;
+  };
+  const surClicDroitPage = (e: MouseEvent): void => {
+    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
+    clearTimeout(appuiPage);
+    if (menuElementEn(e.clientX, e.clientY, e.target)) e.preventDefault();
+  };
+  /* Au tactile, iOS n'envoie pas de clic droit : un appui long (0,65 s, sans bouger) sur n'importe quel élément fait la même chose. */
+  let appuiPage: ReturnType<typeof setTimeout> | undefined;
+  let departAppui: { x: number; y: number } | null = null;
+  const annulerAppuiPage = (): void => {
+    clearTimeout(appuiPage);
+    departAppui = null;
+  };
+  const surAppuiPage = (e: PointerEvent): void => {
+    annulerAppuiPage();
+    if (detruit || !optElements || e.pointerType !== "touch" || !e.isPrimary) return;
+    const vise = e.target;
+    departAppui = { x: e.clientX, y: e.clientY };
+    appuiPage = setTimeout(() => {
+      if (detruit || !departAppui) return;
+      const { x, y } = departAppui;
+      departAppui = null;
+      menuElementEn(x, y, vise);
+    }, 650);
+  };
+  const surBougePage = (e: PointerEvent): void => {
+    if (departAppui && Math.hypot(e.clientX - departAppui.x, e.clientY - departAppui.y) > 10) annulerAppuiPage();
   };
   document.addEventListener("contextmenu", surClicDroitPage);
+  document.addEventListener("pointerdown", surAppuiPage, { capture: true, passive: true });
+  document.addEventListener("pointermove", surBougePage, { capture: true, passive: true });
+  for (const fin of ["pointerup", "pointercancel", "scroll"]) document.addEventListener(fin, annulerAppuiPage, { capture: true, passive: true });
   /** Un menu ouvert sur la page se ferme au défilement, comme un menu du navigateur. */
   const surDefilement = (): void => {
     ajouterImpulsion(reseau, "scroll", 0.2);
@@ -1732,6 +1794,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       setMelange(null);
       for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
       document.removeEventListener("contextmenu", surClicDroitPage);
+      annulerAppuiPage();
+      document.removeEventListener("pointerdown", surAppuiPage, true);
+      document.removeEventListener("pointermove", surBougePage, true);
+      for (const fin of ["pointerup", "pointercancel", "scroll"]) document.removeEventListener(fin, annulerAppuiPage, true);
       window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
