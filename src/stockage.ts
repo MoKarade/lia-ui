@@ -101,3 +101,34 @@ export function ecrireCerveau(cle: string, c: CerveauLia): void {
     /* sans stockage, elle repart de ses envies de départ à chaque page */
   }
 }
+
+/** La mémoire lente du réseau interne : à garder d'une visite à l'autre, elle s'estompe avec le temps écoulé. */
+export interface MemoireLente {
+  /** Millisecondes depuis 1970. */
+  t: number;
+  slow: Record<string, number>;
+}
+
+export function lireLente(cle: string): MemoireLente | null {
+  try {
+    const brut = localStorage.getItem(`${PREFIXE}${cle}:reseau`);
+    if (brut === null) return null;
+    const j: unknown = JSON.parse(brut);
+    if (typeof j !== "object" || j === null) return null;
+    const { t, slow } = j as Record<string, unknown>;
+    if (!Number.isFinite(t) || typeof slow !== "object" || slow === null) return null;
+    const propre: Record<string, number> = {};
+    for (const [k, v] of Object.entries(slow)) if (estFraction(v)) propre[k] = v;
+    return { t: t as number, slow: propre };
+  } catch {
+    return null;
+  }
+}
+
+export function ecrireLente(cle: string, m: MemoireLente): void {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:reseau`, JSON.stringify(m));
+  } catch {
+    /* sans stockage, la mémoire lente repart de zéro à chaque page */
+  }
+}
