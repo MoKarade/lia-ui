@@ -180,34 +180,3 @@ describe("clic droit sur un élément de la page", () => {
     expect(menu()).toBeNull();
   });
 });
-
-describe("ce que Marc a sous les yeux", () => {
-  it("décrit l'élément survolé et celui du centre de l'écran", () => {
-    lia = mountLia({ vieAutonome: false });
-    const e = new Event("pointermove") as Event & { clientX: number; clientY: number; pointerType: string };
-    e.clientX = 200;
-    e.clientY = 400;
-    e.pointerType = "mouse";
-    Object.defineProperty(e, "target", { value: document.getElementById("dedans") });
-    window.dispatchEvent(e);
-    const vue = lia.ecran();
-    expect(vue.survol).toEqual({ genre: "une carte d'app", nom: "DriveAI", texte: "Hors ligne depuis 2 h" });
-    expect(vue.centre?.nom).toBe("DriveAI");
-  });
-
-  it("au doigt, rien n'est survolé", () => {
-    lia = mountLia({ vieAutonome: false });
-    const e = new Event("pointermove") as Event & { clientX: number; clientY: number; pointerType: string };
-    e.clientX = 200;
-    e.clientY = 400;
-    e.pointerType = "touch";
-    Object.defineProperty(e, "target", { value: carte });
-    window.dispatchEvent(e);
-    expect(lia.ecran().survol).toBeNull();
-  });
-
-  it("elements: false : rien à décrire", () => {
-    lia = mountLia({ vieAutonome: false, elements: false });
-    expect(lia.ecran()).toEqual({ survol: null, centre: null });
-  });
-});

@@ -12,7 +12,6 @@ export type {
   ParoleSpontanee,
   PuceLia,
   ReponseLia,
-  VueEcran,
   ZoneVie,
 } from "./types.js";
 export type { Decision, Hasard } from "./autonomie.js";

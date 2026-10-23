@@ -90,14 +90,6 @@ export interface OptionsElements {
   decrire?: (element: Element) => DescriptionElement | null;
 }
 
-/** Ce que Marc a sous les yeux, pour que l'hôte en tienne compte. */
-export interface VueEcran {
-  /** L'élément que le pointeur survole (souris ou stylet), ou `null`. */
-  survol: DescriptionElement | null;
-  /** L'élément visible le plus proche du centre de la fenêtre, parmi ceux que décrit l'hôte, ou `null`. */
-  centre: DescriptionElement | null;
-}
-
 export interface ZoneVie {
   /** Coordonnées dans la couche de LIA, en pixels CSS. */
   x: number;
@@ -177,7 +169,5 @@ export interface LiaHandle {
   venirPres(): boolean;
   /** Arrête de suivre ou de regarder : elle reste où elle est. */
   rester(): void;
-  /** Ce que Marc survole et ce qui est au centre de l'écran, décrit comme pour le clic droit. */
-  ecran(): VueEcran;
   destroy(): void;
 }

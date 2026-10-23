@@ -1905,7 +1905,6 @@ function mountLia(options = {}) {
   const selecteurCibles = options.cibles ?? "[data-lia-cible]";
   const optElements = options.elements === false ? null : options.elements ?? {};
   const selecteurElements = optElements?.selecteur ?? SELECTEUR_ELEMENTS;
-  let survolEl = null;
   let contexteQuestion = null;
   let reperee = null;
   let attenteElement;
@@ -2315,28 +2314,6 @@ function mountLia(options = {}) {
     if (menuOuvert && menu?.firstElementChild?.classList.contains("lia-ui__menu-titre")) fermerMenu();
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
-  const ecran = () => {
-    if (!optElements) return { survol: null, centre: null };
-    const vise = (cible2) => {
-      const e = cible2 ? elementVise(cible2, selecteurElements, couche) : null;
-      return e ? decrireElement(e) : null;
-    };
-    const survol = survolEl?.isConnected ? vise(survolEl) : null;
-    const f = fenetre();
-    let candidats = [];
-    try {
-      candidats = [...document.querySelectorAll(selecteurElements)].slice(0, 400);
-    } catch {
-    }
-    let meilleur = null;
-    for (const c of candidats) {
-      if (couche.contains(c) || !estRegarde(c.getBoundingClientRect(), f)) continue;
-      const r = c.getBoundingClientRect();
-      const dist = Math.hypot((r.left + r.right) / 2 - f.w / 2, (r.top + r.bottom) / 2 - f.h / 2);
-      if (!meilleur || dist < meilleur.dist) meilleur = { e: c, dist };
-    }
-    return { survol, centre: vise(meilleur?.e ?? null) };
-  };
   function setVieAutonome(actifVie) {
     vie = actifVie && !sansMouvement;
     if (!vie) finAttention();
@@ -2417,7 +2394,6 @@ function mountLia(options = {}) {
     pointeur.y = e.clientY;
     pointeur.ms = performance.now();
     pointeur.fin = e.pointerType !== "touch";
-    survolEl = pointeur.fin && e.target instanceof Element ? e.target : null;
     const r = couche.getBoundingClientRect();
     regarder(limiter2((e.clientX - r.left - pos.x) / 400, -1, 1), limiter2((e.clientY - r.top - pos.y) / 400, -1, 1));
   };
@@ -2673,7 +2649,6 @@ function mountLia(options = {}) {
     allerVoir,
     venirPres,
     rester: finAttention,
-    ecran,
     destroy() {
       if (detruit) return;
       detruit = true;
@@ -2707,4 +2682,4 @@ export {
   composerQuestion,
   mountLia
 };
-//# sourceMappingURL=chunk-4XF3XXEM.mjs.map
+//# sourceMappingURL=chunk-UOPPKP27.mjs.map

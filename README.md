@@ -66,8 +66,6 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 />
 ```
 
-`lia.ecran()` rend `{ survol, centre }` : l'élément que le pointeur survole et celui qui est au centre de la fenêtre, décrits de la même façon, pour que l'hôte en tienne compte dans ses propres questions.
-
 Les couleurs se surchargent avec les variables `--lia-bg`, `--lia-surface`, `--lia-text`, `--lia-accent`… sur `.lia-ui`.
 
 ## Garanties

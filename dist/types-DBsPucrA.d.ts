@@ -54,13 +54,6 @@ interface OptionsElements {
      */
     decrire?: (element: Element) => DescriptionElement | null;
 }
-/** Ce que Marc a sous les yeux, pour que l'hôte en tienne compte. */
-interface VueEcran {
-    /** L'élément que le pointeur survole (souris ou stylet), ou `null`. */
-    survol: DescriptionElement | null;
-    /** L'élément visible le plus proche du centre de la fenêtre, parmi ceux que décrit l'hôte, ou `null`. */
-    centre: DescriptionElement | null;
-}
 interface ZoneVie {
     /** Coordonnées dans la couche de LIA, en pixels CSS. */
     x: number;
@@ -140,9 +133,7 @@ interface LiaHandle {
     venirPres(): boolean;
     /** Arrête de suivre ou de regarder : elle reste où elle est. */
     rester(): void;
-    /** Ce que Marc survole et ce qui est au centre de l'écran, décrit comme pour le clic droit. */
-    ecran(): VueEcran;
     destroy(): void;
 }
 
-export { type ActionLia as A, type DescriptionElement as D, type HumeurLia as H, type LiaHandle as L, type MotifSpontane as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type VueEcran as V, type ZoneVie as Z, HUMEURS_LIA as a, LIBELLE_HUMEUR as b, type OptionsElements as c, type PuceLia as d };
+export { type ActionLia as A, type DescriptionElement as D, type HumeurLia as H, type LiaHandle as L, type MotifSpontane as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, HUMEURS_LIA as a, LIBELLE_HUMEUR as b, type OptionsElements as c, type PuceLia as d };

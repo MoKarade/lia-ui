@@ -46,7 +46,6 @@ import {
   type ParoleSpontanee,
   type PuceLia,
   type ReponseLia,
-  type VueEcran,
   type ZoneVie,
 } from "./types.js";
 
@@ -169,7 +168,6 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /* Clic droit sur n'importe quel élément (maquette V9) : `false` le coupe, sinon l'hôte peut le régler. */
   const optElements = options.elements === false ? null : (options.elements ?? {});
   const selecteurElements = optElements?.selecteur ?? SELECTEUR_ELEMENTS;
-  let survolEl: Element | null = null;
   let contexteQuestion: { d: ElementDecrit } | null = null;
   let reperee: Element | null = null;
   let attenteElement: ReturnType<typeof setTimeout> | undefined;
@@ -621,31 +619,6 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
 
-  /** Ce que Marc survole et ce qui est au centre de la fenêtre, décrit comme pour le clic droit. */
-  const ecran = (): VueEcran => {
-    if (!optElements) return { survol: null, centre: null };
-    const vise = (cible: Element | null): ElementDecrit | null => {
-      const e = cible ? elementVise(cible, selecteurElements, couche) : null;
-      return e ? decrireElement(e) : null;
-    };
-    const survol = survolEl?.isConnected ? vise(survolEl) : null;
-    const f = fenetre();
-    let candidats: Element[] = [];
-    try {
-      candidats = [...document.querySelectorAll(selecteurElements)].slice(0, 400);
-    } catch {
-      // Sélecteur invalide fourni par l'hôte : rien n'est au centre.
-    }
-    let meilleur: { e: Element; dist: number } | null = null;
-    for (const c of candidats) {
-      if (couche.contains(c) || !estRegarde(c.getBoundingClientRect(), f)) continue;
-      const r = c.getBoundingClientRect();
-      const dist = Math.hypot((r.left + r.right) / 2 - f.w / 2, (r.top + r.bottom) / 2 - f.h / 2);
-      if (!meilleur || dist < meilleur.dist) meilleur = { e: c, dist };
-    }
-    return { survol, centre: vise(meilleur?.e ?? null) };
-  };
-
   function setVieAutonome(actifVie: boolean): void {
     vie = actifVie && !sansMouvement;
     if (!vie) finAttention();
@@ -731,7 +704,6 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     pointeur.y = e.clientY;
     pointeur.ms = performance.now();
     pointeur.fin = e.pointerType !== "touch";
-    survolEl = pointeur.fin && e.target instanceof Element ? e.target : null;
     const r = couche.getBoundingClientRect();
     regarder(limiter((e.clientX - r.left - pos.x) / 400, -1, 1), limiter((e.clientY - r.top - pos.y) / 400, -1, 1));
   };
@@ -1015,7 +987,6 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     allerVoir,
     venirPres,
     rester: finAttention,
-    ecran,
     destroy() {
       if (detruit) return;
       detruit = true;
