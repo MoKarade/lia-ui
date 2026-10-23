@@ -3111,6 +3111,7 @@ function mountLia(options = {}) {
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
   let rayon = rayonBase;
+  let rayonCible = rayonBase;
   let cible = { x: 0, y: 0 };
   let dernierDeplacement = 0;
   let ancreDeplacement = { x: 0, y: 0 };
@@ -4329,6 +4330,7 @@ function mountLia(options = {}) {
   }, 1e3);
   const minuterieVie = setInterval(penser, 1200);
   const dessinerImage = (still, dt) => {
+    if (rayon !== rayonCible) rayon = still || Math.abs(rayonCible - rayon) < 0.5 ? rayonCible : rayon + (rayonCible - rayon) * (1 - Math.exp(-dt * 5));
     if (!still) majAttention();
     const z = zoneVie();
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
@@ -4498,6 +4500,10 @@ function mountLia(options = {}) {
       choisir3(e ?? "repos");
     },
     setVieAutonome,
+    setRayon(px) {
+      if (Number.isFinite(px)) rayonCible = limiter2(px, 24, 400);
+      if (sansMouvement) dessinerUneFois();
+    },
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),
@@ -4584,4 +4590,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-VHUGQURJ.mjs.map
+//# sourceMappingURL=chunk-4GMZ7LSJ.mjs.map

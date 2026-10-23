@@ -240,6 +240,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** Physique du corps : accélération filtrée (les traits la subissent), inclinaison sur ressort, flottement. */
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
   let rayon = rayonBase;
+  /** Le rayon qu'elle rejoint en douceur (`setRayon`) : plus grande au centre d'un accueil, plus petite ailleurs. */
+  let rayonCible = rayonBase;
   let cible = { x: 0, y: 0 };
   let dernierDeplacement = 0;
   let ancreDeplacement = { x: 0, y: 0 };
@@ -1596,6 +1598,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /* ── image par image ── */
   const dessinerImage = (still: boolean, dt: number): void => {
+    if (rayon !== rayonCible) rayon = still || Math.abs(rayonCible - rayon) < 0.5 ? rayonCible : rayon + (rayonCible - rayon) * (1 - Math.exp(-dt * 5));
     if (!still) majAttention();
     const z = zoneVie();
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
@@ -1786,6 +1789,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       choisir(e ?? "repos");
     },
     setVieAutonome,
+    setRayon(px) {
+      if (Number.isFinite(px)) rayonCible = limiter(px, 24, 400);
+      if (sansMouvement) dessinerUneFois();
+    },
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),

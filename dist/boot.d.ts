@@ -1,4 +1,4 @@
-import { L as LiaHandle, O as OptionsLia } from './types-Cf_Dky-H.js';
+import { L as LiaHandle, O as OptionsLia } from './types-fTssmHz1.js';
 
 /**
  * Monter LIA HORS du rendu de l'app (Marc, 23/10/2026 : « présente tout le temps, même si quelque chose charge, même si une

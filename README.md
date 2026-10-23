@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.16.0
+npm i github:MoKarade/lia-ui#v0.17.0
 ```
 
 ## Utiliser
@@ -45,7 +45,7 @@ Sans framework : `const lia = mountLia({ ask, actions })`, puis `lia.dire("…")
 | `parolePropre` | `true` par défaut : quand l'hôte n'a rien à dire, elle parle d'elle-même (son humeur, ses envies, son journal, l'heure, une blague, une question sans importance avec réponses rapides). Voir « Ce qu'elle dit d'elle-même ». `false` : elle ne dit que ce que l'hôte fournit. |
 | `silence`, `relancesParJour` | Heures sans parole spontanée (défaut `[22, 7]`) et plafond de relances par jour (défaut 2, mémorisé dans le navigateur). |
 | `elements` | Clic droit sur n'importe quel élément de la page (voir plus bas). `{ selecteur?, decrire? }`, ou `false` pour ne garder que le clic droit sur son corps. |
-| `rayon`, `cle`, `vieAutonome`, `salut` | Taille, clé de mémorisation locale, vie autonome, message d'arrivée. |
+| `rayon`, `cle`, `vieAutonome`, `salut` | Taille, clé de mémorisation locale, vie autonome, message d'arrivée. Le rayon se change ensuite avec `poignee.setRayon(px)` (24 à 400 px, glissement d'une demi-seconde, immédiat en mode « fixe ») : pour une LIA grande sur un accueil et petite ailleurs, sans la remonter (v0.17.0). |
 
 ## Elle te suit, elle vit seule
 
