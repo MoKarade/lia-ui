@@ -2697,6 +2697,7 @@ function injecterStyles() {
   document.head.appendChild(s);
 }
 var limiter2 = (x, a, b) => Math.max(a, Math.min(b, x));
+var DELAI_CHAT_OUBLIE = 120;
 var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
 var SURVOL_MS = 4e3;
 var DELAI_ACCOMPAGNER_MS = 18e4;
@@ -2957,7 +2958,9 @@ function mountLia(options = {}) {
   let enCours = null;
   let points = null;
   let derniereFocus = null;
+  let activiteChat = 0;
   const ajouterMsg = (texte, de, erreur = false) => {
+    activiteChat = t;
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
@@ -3035,6 +3038,7 @@ function mountLia(options = {}) {
     tais();
     derniereFocus = document.activeElement;
     chatOuvert = true;
+    activiteChat = t;
     chat = el("div", "lia-ui__chat");
     chat.setAttribute("role", "dialog");
     chat.setAttribute("aria-label", "Discussion avec LIA");
@@ -3076,6 +3080,7 @@ function mountLia(options = {}) {
       void poser(q, ctx2 ? composerQuestion("question", ctx2.d, q) : q);
     });
     chat.append(entete, journal, form);
+    for (const evenement of ["keydown", "input", "pointerdown", "focusin"]) chat.addEventListener(evenement, () => activiteChat = t);
     chat.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -3630,6 +3635,7 @@ function mountLia(options = {}) {
   };
   const penser = () => {
     if (finEtatTemp && t > finEtatTemp) finirPassagere();
+    if (chatOuvert && !enCours && !champ?.value && t - activiteChat > DELAI_CHAT_OUBLIE) fermerChat();
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
@@ -3669,12 +3675,24 @@ function mountLia(options = {}) {
     }
   };
   let dernierPas = Date.now();
+  let habitudeAlerte = 0;
+  let signatureAlerte = "";
+  const habituer = (e, dt) => {
+    const signature = `${Math.round((e["alerte"] ?? 0) * 10)}/${Math.round((e["nbAlertes"] ?? 0) * 10)}`;
+    if (signature !== signatureAlerte) {
+      signatureAlerte = signature;
+      habitudeAlerte *= 0.25;
+    } else habitudeAlerte = Math.min(0.85, habitudeAlerte + dt / 240);
+    if (habitudeAlerte === 0) return e;
+    const reste = 1 - habitudeAlerte;
+    return { ...e, alerte: (e["alerte"] ?? 0) * reste, nbAlertes: (e["nbAlertes"] ?? 0) * reste };
+  };
   const penserReseau = () => {
     const now = Date.now();
     const dt = limiter2((now - dernierPas) / 1e3, 0.05, 1);
     dernierPas = now;
     const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
-    entreesCourantes = { ...locales, ...entreesHote() };
+    entreesCourantes = { ...locales, ...habituer(entreesHote(), dt) };
     reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;

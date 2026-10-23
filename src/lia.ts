@@ -131,6 +131,8 @@ const limiter = (x: number, a: number, b: number): number => Math.max(a, Math.mi
  * Une seule LIA par page. Aucun réseau, aucun secret : tout ce qu'elle sait passe par `options.ask`.
  */
 /** Délai minimal entre deux fois (secondes), comme la maquette V9. */
+/** Secondes sans rien dans une discussion ouverte (vide, sans réponse attendue) avant qu'elle la referme. */
+const DELAI_CHAT_OUBLIE = 120;
 const DELAI_MONDE: Record<MotifMonde | "veiller", number> = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
 /** Marc regarde un élément depuis ce temps (ms) : elle vient regarder avec lui, au plus une fois par élément toutes les 3 minutes. */
 const SURVOL_MS = 4000;
@@ -434,7 +436,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let points: HTMLElement | null = null;
   let derniereFocus: Element | null = null;
 
+  /** Dernier signe de vie dans la discussion (message, frappe, clic), en secondes de son horloge. */
+  let activiteChat = 0;
   const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false): HTMLElement => {
+    activiteChat = t;
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
@@ -517,6 +522,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     tais();
     derniereFocus = document.activeElement;
     chatOuvert = true;
+    activiteChat = t;
     chat = el("div", "lia-ui__chat");
     chat.setAttribute("role", "dialog");
     chat.setAttribute("aria-label", "Discussion avec LIA");
@@ -558,6 +564,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       void poser(q, ctx ? composerQuestion("question", ctx.d, q) : q);
     });
     chat.append(entete, journal, form);
+    for (const evenement of ["keydown", "input", "pointerdown", "focusin"]) chat.addEventListener(evenement, () => (activiteChat = t));
     chat.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -1180,6 +1187,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   const penser = (): void => {
     if (finEtatTemp && t > finEtatTemp) finirPassagere();
+    // Une discussion laissée vide et sans réponse en attente ne la fige pas : après 2 min sans geste, elle la referme et reprend sa vie.
+    if (chatOuvert && !enCours && !champ?.value && t - activiteChat > DELAI_CHAT_OUBLIE) fermerChat();
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
@@ -1220,12 +1229,25 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
   };
   let dernierPas = Date.now();
+  /** Une alerte qui reste affichée sans changer devient un bruit de fond : elle s'y habitue (jusqu'à −85 % en 4 min) et son humeur reprend sa vie ; tout changement des alertes la ramène près du départ. */
+  let habitudeAlerte = 0;
+  let signatureAlerte = "";
+  const habituer = (e: Record<string, number>, dt: number): Record<string, number> => {
+    const signature = `${Math.round((e["alerte"] ?? 0) * 10)}/${Math.round((e["nbAlertes"] ?? 0) * 10)}`;
+    if (signature !== signatureAlerte) {
+      signatureAlerte = signature;
+      habitudeAlerte *= 0.25;
+    } else habitudeAlerte = Math.min(0.85, habitudeAlerte + dt / 240);
+    if (habitudeAlerte === 0) return e;
+    const reste = 1 - habitudeAlerte;
+    return { ...e, alerte: (e["alerte"] ?? 0) * reste, nbAlertes: (e["nbAlertes"] ?? 0) * reste };
+  };
   const penserReseau = (): void => {
     const now = Date.now();
     const dt = limiter((now - dernierPas) / 1000, 0.05, 1);
     dernierPas = now;
     const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
-    entreesCourantes = { ...locales, ...entreesHote() };
+    entreesCourantes = { ...locales, ...habituer(entreesHote(), dt) };
     reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;
