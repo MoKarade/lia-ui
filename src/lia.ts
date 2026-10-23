@@ -49,7 +49,7 @@ import {
   type ModeElement,
 } from "./ecran.js";
 import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
-import { choisirParole, estPuceLia, suiteParole, type ContexteParole } from "./paroles.js";
+import { SILHOUETTE_PAROLE, choisirParole, estPuceLia, suiteParole, type ContexteParole } from "./paroles.js";
 import { FAMILLES_ACTIONS, activiteElement, activiteQuestion, estAction, suiteReflexion } from "./activite.js";
 import {
   ecrireCerveau,
@@ -291,6 +291,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   let derniereDecision = -999;
   let derniereParole = -999;
+  /** Bulles de l'hôte (projets, alertes) dites depuis sa dernière parole à elle : au-delà d'une, elle s'efface pour dire quelque chose d'elle. */
+  let hoteDeSuite = 0;
   let dort = false;
   /** Quand une silhouette passagère (jeu, réveil) se termine ; 0 = aucune. */
   let finEtatTemp = 0;
@@ -382,12 +384,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   /** Sa dernière réponse attend un mot de Marc (une question, des puces) : elle le montre jusqu'à ce qu'il réponde. */
   let attendReponse = false;
+  /** Ce qu'elle montre une fois sa phrase propre dite (src/paroles.ts, SILHOUETTE_PAROLE) ; consommé par `finVoix`. */
+  let apresVoix: string | null = null;
   const finVoix = (): void => {
     parle = false;
     if (chatOuvert) choisir(etatForce ?? (attendReponse ? "demande" : "ecoute"));
     else if (bulleChips && !bulle.hidden) choisir(etatForce ?? "demande");
     else if (attention?.type === "element" && attention.colle) choisir(etatForce ?? attention.etatArrivee);
+    else if (apresVoix && !etatForce && !attention) passagere(etatSur(apresVoix), 4);
     else choisir(etatForce ?? "repos");
+    apresVoix = null;
   };
 
   /* ── bulle ── */
@@ -1125,7 +1131,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const parole: ParoleSpontanee | null = typeof rep === "string" ? { text: rep } : (rep ?? null);
     const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (!parole || !texte) return false;
-    return dire(texte, parole.chips ? { chips: parole.chips } : undefined);
+    const dite = dire(texte, parole.chips ? { chips: parole.chips } : undefined);
+    if (dite) hoteDeSuite++;
+    return dite;
   };
 
   /** Ce qu'elle dit d'elle-même (src/paroles.ts) : vrai par construction, jamais rien sur Marc ni sur ses apps. */
@@ -1134,7 +1142,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const direPersonnel = (): boolean => {
     const p = choisirParole(contexteParole(), Math.random);
     recentesParoles = [...recentesParoles, p.id].slice(-6);
-    return dire(p.text, p.chips ? { chips: p.chips } : undefined);
+    const dite = dire(p.text, p.chips ? { chips: p.chips } : undefined);
+    if (dite) {
+      hoteDeSuite = 0;
+      apresVoix = SILHOUETTE_PAROLE[p.id] ?? null;
+    }
+    return dite;
   };
 
   /** Comme dans la maquette : elle arrive, puis dit sa phrase au bout d'une seconde et demie si elle y est encore. */
@@ -1205,6 +1218,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /** Elle va près de l'élément de l'hôte s'il est dans la bande regardée (sinon elle le dit sur place, près du curseur pour une alerte), prend sa silhouette et dit SA phrase au bout d'une seconde et demie. */
   const direMonde = (motif: MotifMonde, p: PropositionMonde): void => {
+    if (motif !== "accompagner") hoteDeSuite++; // accompagner répond à Marc qui regarde un élément : il ne compte pas
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
     const etat = etatSur(p.etat && estAction(p.etat) ? p.etat : ETAT_MONDE[motif]);
@@ -1281,7 +1295,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(new Date()), n: lireRelances(cle, jourLocal(new Date())) + 1 });
       } else {
         // Le bavardage libre alterne : l'hôte a ses sujets (projets, alertes), elle a les siens ; sans rien de l'hôte, elle parle d'elle.
-        const perso = parolePropre && Math.random() < 0.6;
+        const perso = parolePropre && (hoteDeSuite >= 1 || Math.random() < 0.6);
         const dit = !perso && direSpontane(Math.random() < 0.2 ? "salut" : "rien");
         if (!dit && parolePropre) direPersonnel();
       }
@@ -1296,12 +1310,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const pesee = (id: Comportement): number =>
     id === "causer" ? multIntention(reseau, "causer") * (1 - 0.5 * (reseau.int["setaire"] ?? 0)) : multIntention(reseau, id === "voir" ? "pointer" : id);
   /** Ce que l'hôte a de vrai à dire pour chaque motif dont le délai est passé ; son échec ne l'arrête pas (dit une fois). */
-  const proposerMonde = (): MotifMonde[] => {
+  const proposerMonde = (sansProjets = false): MotifMonde[] => {
     propositions = {};
     if (!options.monde || !peutParlerSeule()) return [];
     const maintenant = Date.now();
     elementSurvole = null;
     for (const m of MOTIFS_MONDE) {
+      if (sansProjets && m !== "accompagner") continue;
       if (maintenant - (dernierMotif[m] ?? 0) < DELAI_MONDE[m] * 1000) continue;
       if (m === "accompagner") {
         const s = survol;
@@ -1329,19 +1344,22 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const vues = regardables();
     const z = zoneVie();
     const maintenant = Date.now();
+    // L'hôte vient de parler (projet, alerte) : c'est son tour à elle ; seul « accompagner » (Marc regarde un élément) passe devant.
+    const sonTour = parolePropre && hoteDeSuite >= 1;
     const id = choisirComportement(
       candidats(envies, {
         curseurRecent: curseurRecent(),
         cibles: vues.length,
         parole: (!!options.onSpontane || parolePropre) && peutParlerSeule(),
-        delaiParole: parolePropre ? DELAI_PAROLE_PROPRE : 90,
-        relance: relancesRestantes(),
+        delaiParole: parolePropre ? (sonTour ? 14 : DELAI_PAROLE_PROPRE) : 90,
+        parolePrioritaire: sonTour,
+        relance: relancesRestantes() && !sonTour,
         humeur: humeurNom,
         tranquille: t < tranquilleJusqua,
         loinDeLaMaison: z.w > 0 && z.h > 0 && Math.hypot(pos.x - maison.x, pos.y - maison.y) > 0.3 * Math.hypot(z.w, z.h),
         deplacement: !doux,
         secondesDepuisParole: t - derniereParole,
-        monde: proposerMonde(),
+        monde: proposerMonde(sonTour),
         present: maintenant - dernierMarc < 60_000,
         veille: maintenant - (dernierMotif["veiller"] ?? 0) > DELAI_MONDE["veiller"] * 1000 && ((entreesCourantes["nuit"] ?? 0) > 0.4 || (entreesCourantes["absent"] ?? 0) > 0.5),
         intentions: reseauActif ? reseau.int : {},

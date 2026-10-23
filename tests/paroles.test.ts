@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENVIES_DEPART } from "../src/cerveau.js";
 import { LIBELLES_HUMEURS } from "../src/humeurs.js";
-import { BLAGUES, PHRASES_HUMEUR, SUITES, choisirParole, estPuceLia, resumeJournal, suiteParole, type ContexteParole } from "../src/paroles.js";
+import { ACTIONS_LIA } from "../src/activite.js";
+import { BLAGUES, PHRASES_HUMEUR, SILHOUETTE_PAROLE, SUITES, choisirParole, estPuceLia, resumeJournal, suiteParole, type ContexteParole } from "../src/paroles.js";
 import { mountLia } from "../src/lia.js";
 import type { LiaHandle } from "../src/types.js";
 import { installerEnvironnement } from "./setup.js";
@@ -58,6 +59,10 @@ describe("ce qu'elle dit d'elle-même", () => {
     const toutes = [...Object.values(PHRASES_HUMEUR), ...BLAGUES, ...Object.values(SUITES).filter((x): x is string => !!x)];
     for (let i = 0; i < 400; i++) toutes.push(choisirParole(ctx({ envies: { ...ENVIES_DEPART, ennui: 0.9, social: 0.1, energie: 0.2, joie: 0.9, curiosite: 0.9, inquiet: 0.9 }, faits: [{ t: 1, quoi: "voir" }, { t: 2, quoi: "jouer" }, { t: 3, quoi: "voir" }] }), () => i / 400).text);
     for (const t of toutes) expect(t, t).not.toMatch(interdits);
+  });
+
+  it("chaque silhouette qu'elle prend après une phrase existe dans son moteur", () => {
+    for (const [id, silhouette] of Object.entries(SILHOUETTE_PAROLE)) expect(ACTIONS_LIA, id).toContain(silhouette);
   });
 
   it("les réponses rapides sont à elle (lia:…), et ses suites répondent", () => {
@@ -126,7 +131,10 @@ describe("elle parle seule, même quand l'hôte n'a rien à dire", () => {
     for (let i = 0; i < secondes * 2; i++) {
       vi.advanceTimersByTime(500);
       const b = bulle();
-      if (b && !vus.includes(b) && !vus.some((v) => v.startsWith(b.slice(0, 8)))) vus.push(b);
+      const derniere = vus[vus.length - 1];
+      // La bulle s'écrit lettre par lettre : un texte qui prolonge le précédent est la même bulle.
+      if (b && derniere !== undefined && b.startsWith(derniere)) vus[vus.length - 1] = b;
+      else if (b && (derniere === undefined || !derniere.startsWith(b))) vus.push(b);
     }
     return vus;
   };
@@ -146,6 +154,21 @@ describe("elle parle seule, même quand l'hôte n'a rien à dire", () => {
     expect(projets).toHaveBeenCalled();
     expect(siens.length, vus.join(" | ")).toBeGreaterThanOrEqual(3);
     expect(vus.some((v) => v.includes("DriveAI"))).toBe(true);
+  });
+
+  it("sur un vrai hub (alertes, motifs du monde, relances) : jamais deux bulles de projet de suite, la moitié est à elle", () => {
+    let n = 0;
+    const lettre = (): string => String.fromCharCode(65 + (n++ % 26));
+    monter({
+      entrees: () => ({ alerte: 0.9, nbAlertes: 1 }),
+      monde: (motif) => (motif === "accompagner" ? null : { text: `${lettre()}DriveAI : le quota approche.` }),
+      onSpontane: () => `${lettre()}CarAI : une relance.`,
+    });
+    const vus = dits(900);
+    const projet = vus.map((v) => /DriveAI|CarAI/.test(v));
+    expect(vus.length, vus.join(" | ")).toBeGreaterThanOrEqual(10);
+    for (let i = 1; i < projet.length; i++) expect(projet[i - 1] && projet[i], `deux projets de suite : ${vus[i - 1]} | ${vus[i]}`).toBe(false);
+    expect(projet.filter((x) => !x).length, vus.join(" | ")).toBeGreaterThanOrEqual(Math.floor(vus.length / 2) - 1);
   });
 
   it("parolePropre: false : elle se tait quand l'hôte n'a rien (comme avant)", () => {

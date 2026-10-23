@@ -339,7 +339,7 @@ function candidats(e, c) {
     liste.push({ id: "suivre", poids: e.social * 0.9 + (c.humeur === "espiegle" ? 0.3 : 0) - 0.2 });
   }
   if (bouge) liste.push({ id: "promener", poids: e.ennui * 0.7 + 0.05 + (c.humeur === "excite" ? 0.3 : 0) + envieDeBouger(c.secondesImmobile) });
-  if (c.parole && c.secondesDepuisParole > (c.delaiParole ?? 90)) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 + ((c.delaiParole ?? 90) < 90 ? 0.5 : 0) });
+  if (c.parole && c.secondesDepuisParole > (c.delaiParole ?? 90)) liste.push({ id: "causer", poids: e.social * 1.5 + 0.35 + ((c.delaiParole ?? 90) < 90 ? 0.5 : 0) + (c.parolePrioritaire ? 1.2 : 0) });
   if (c.parole && c.relance && c.secondesDepuisParole > 90) liste.push({ id: "relancer", poids: 0.15 });
   const monde = c.monde ?? [];
   const veut = (id) => c.intentions?.[id] ?? 0;
@@ -2762,6 +2762,20 @@ function suiteParole(label, c, hasard) {
   const t = SUITES[label];
   return t ? { id: "suite", text: t } : null;
 }
+var SILHOUETTE_PAROLE = {
+  ennui: "attend",
+  solitude: "triste",
+  curiosite: "cherche",
+  fatigue: "attend",
+  joie: "content",
+  souci: "surveille",
+  poulpe: "surpris",
+  cent: "content",
+  respire: "reflexion",
+  blague: "musique",
+  resume: "souvient",
+  rien: "reflexion"
+};
 
 // src/stockage.ts
 var PREFIXE = "lia-ui:";
@@ -3128,6 +3142,7 @@ function mountLia(options = {}) {
   };
   let derniereDecision = -999;
   let derniereParole = -999;
+  let hoteDeSuite = 0;
   let dort = false;
   let finEtatTemp = 0;
   let raf = 0;
@@ -3206,12 +3221,15 @@ function mountLia(options = {}) {
     choisir3("reponse");
   };
   let attendReponse = false;
+  let apresVoix = null;
   const finVoix = () => {
     parle = false;
     if (chatOuvert) choisir3(etatForce ?? (attendReponse ? "demande" : "ecoute"));
     else if (bulleChips && !bulle.hidden) choisir3(etatForce ?? "demande");
     else if (attention?.type === "element" && attention.colle) choisir3(etatForce ?? attention.etatArrivee);
+    else if (apresVoix && !etatForce && !attention) passagere(etatSur(apresVoix), 4);
     else choisir3(etatForce ?? "repos");
+    apresVoix = null;
   };
   let bulleChips = null;
   const tais = () => {
@@ -3876,14 +3894,21 @@ function mountLia(options = {}) {
     const parole = typeof rep === "string" ? { text: rep } : rep ?? null;
     const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (!parole || !texte) return false;
-    return dire(texte, parole.chips ? { chips: parole.chips } : void 0);
+    const dite = dire(texte, parole.chips ? { chips: parole.chips } : void 0);
+    if (dite) hoteDeSuite++;
+    return dite;
   };
   let recentesParoles = [];
   const contexteParole = () => ({ heure: (/* @__PURE__ */ new Date()).getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles });
   const direPersonnel = () => {
     const p = choisirParole(contexteParole(), Math.random);
     recentesParoles = [...recentesParoles, p.id].slice(-6);
-    return dire(p.text, p.chips ? { chips: p.chips } : void 0);
+    const dite = dire(p.text, p.chips ? { chips: p.chips } : void 0);
+    if (dite) {
+      hoteDeSuite = 0;
+      apresVoix = SILHOUETTE_PAROLE[p.id] ?? null;
+    }
+    return dite;
   };
   const direLa = (el2, texte, respecterSilence) => {
     setTimeout(() => {
@@ -3940,6 +3965,7 @@ function mountLia(options = {}) {
     passagere("reveille", 2.6);
   }
   const direMonde = (motif, p) => {
+    if (motif !== "accompagner") hoteDeSuite++;
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el2 = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
     const etat2 = etatSur(p.etat && estAction(p.etat) ? p.etat : ETAT_MONDE[motif]);
@@ -4012,7 +4038,7 @@ function mountLia(options = {}) {
       if (id === "relancer") {
         if (direSpontane("relance")) ecrireRelances(cle, { jour: jourLocal(/* @__PURE__ */ new Date()), n: lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) + 1 });
       } else {
-        const perso = parolePropre && Math.random() < 0.6;
+        const perso = parolePropre && (hoteDeSuite >= 1 || Math.random() < 0.6);
         const dit = !perso && direSpontane(Math.random() < 0.2 ? "salut" : "rien");
         if (!dit && parolePropre) direPersonnel();
       }
@@ -4023,12 +4049,13 @@ function mountLia(options = {}) {
     }
   };
   const pesee = (id) => id === "causer" ? multIntention(reseau, "causer") * (1 - 0.5 * (reseau.int["setaire"] ?? 0)) : multIntention(reseau, id === "voir" ? "pointer" : id);
-  const proposerMonde = () => {
+  const proposerMonde = (sansProjets = false) => {
     propositions = {};
     if (!options.monde || !peutParlerSeule()) return [];
     const maintenant = Date.now();
     elementSurvole = null;
     for (const m of MOTIFS_MONDE) {
+      if (sansProjets && m !== "accompagner") continue;
       if (maintenant - (dernierMotif[m] ?? 0) < DELAI_MONDE[m] * 1e3) continue;
       if (m === "accompagner") {
         const s = survol;
@@ -4055,19 +4082,21 @@ function mountLia(options = {}) {
     const vues = regardables();
     const z = zoneVie();
     const maintenant = Date.now();
+    const sonTour = parolePropre && hoteDeSuite >= 1;
     const id = choisirComportement(
       candidats(envies, {
         curseurRecent: curseurRecent(),
         cibles: vues.length,
         parole: (!!options.onSpontane || parolePropre) && peutParlerSeule(),
-        delaiParole: parolePropre ? DELAI_PAROLE_PROPRE : 90,
-        relance: relancesRestantes(),
+        delaiParole: parolePropre ? sonTour ? 14 : DELAI_PAROLE_PROPRE : 90,
+        parolePrioritaire: sonTour,
+        relance: relancesRestantes() && !sonTour,
         humeur: humeurNom,
         tranquille: t < tranquilleJusqua,
         loinDeLaMaison: z.w > 0 && z.h > 0 && Math.hypot(pos.x - maison.x, pos.y - maison.y) > 0.3 * Math.hypot(z.w, z.h),
         deplacement: !doux,
         secondesDepuisParole: t - derniereParole,
-        monde: proposerMonde(),
+        monde: proposerMonde(sonTour),
         present: maintenant - dernierMarc < 6e4,
         veille: maintenant - (dernierMotif["veiller"] ?? 0) > DELAI_MONDE["veiller"] * 1e3 && ((entreesCourantes["nuit"] ?? 0) > 0.4 || (entreesCourantes["absent"] ?? 0) > 0.5),
         intentions: reseauActif ? reseau.int : {},

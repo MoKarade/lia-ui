@@ -213,3 +213,19 @@ export function suiteParole(label: string, c: ContexteParole, hasard: Hasard): P
   const t = SUITES[label];
   return t ? { id: "suite", text: t } : null;
 }
+
+/** Ce qu'elle montre une fois sa phrase dite (une silhouette de son moteur, tenue 4 s) : une remarque sans silhouette retombe au repos. */
+export const SILHOUETTE_PAROLE: Readonly<Record<string, string>> = {
+  ennui: "attend",
+  solitude: "triste",
+  curiosite: "cherche",
+  fatigue: "attend",
+  joie: "content",
+  souci: "surveille",
+  poulpe: "surpris",
+  cent: "content",
+  respire: "reflexion",
+  blague: "musique",
+  resume: "souvient",
+  rien: "reflexion",
+};
