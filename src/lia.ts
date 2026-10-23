@@ -17,6 +17,7 @@ import {
 } from "./cerveau.js";
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, garder as garderInterieur, type Stimulus } from "./interieur.js";
+import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
@@ -802,6 +803,59 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return rangee;
   };
 
+  /** « Comment elle va » : ses envies et son monde intérieur en jauges, relus chaque seconde tant que le panneau est ouvert. */
+  let majCommentVa: (() => void) | null = null;
+  const panneauCommentVa = (replacer: () => void): HTMLElement[] => {
+    const bascule = el("button", "lia-ui__item", "Comment elle va");
+    bascule.type = "button";
+    bascule.setAttribute("role", "menuitem");
+    bascule.setAttribute("aria-expanded", "false");
+    const panneau = el("div", "lia-ui__commentva");
+    panneau.hidden = true;
+    const phrase = el("p", "lia-ui__cv-phrase");
+    phrase.setAttribute("aria-live", "polite");
+    const liste = el("div", "lia-ui__cv-liste");
+    const lignes = new Map<string, { jauge: HTMLElement; valeur: HTMLElement; barre: HTMLElement }>();
+    for (const j of jauges(envies, interieur)) {
+      const jauge = el("div", `lia-ui__jauge${j.penible ? " lia-ui__jauge--penible" : ""}`);
+      jauge.setAttribute("role", "meter");
+      jauge.setAttribute("aria-label", j.libelle);
+      jauge.setAttribute("aria-valuemin", "0");
+      jauge.setAttribute("aria-valuemax", "100");
+      jauge.dataset["jauge"] = j.id;
+      const tete = el("div", "lia-ui__jauge-tete");
+      const valeur = el("span", "lia-ui__jauge-valeur");
+      tete.append(el("span", "lia-ui__jauge-nom", j.libelle), valeur);
+      const fond = el("div", "lia-ui__jauge-fond");
+      const barre = el("div", "lia-ui__jauge-barre");
+      fond.appendChild(barre);
+      jauge.append(tete, fond);
+      liste.appendChild(jauge);
+      lignes.set(j.id, { jauge, valeur, barre });
+    }
+    panneau.append(phrase, liste, el("p", "lia-ui__cv-mention", MENTION_SIMULATION));
+    const maj = (): void => {
+      phrase.textContent = phraseCommentVa(envies, interieur);
+      for (const j of jauges(envies, interieur)) {
+        const l = lignes.get(j.id);
+        if (!l) continue;
+        const texte = `${j.pct} %${j.detail ? ` (${j.detail})` : ""}`;
+        l.jauge.setAttribute("aria-valuenow", String(j.pct));
+        l.jauge.setAttribute("aria-valuetext", texte);
+        l.valeur.textContent = texte;
+        l.barre.style.width = `${j.pct}%`;
+      }
+    };
+    bascule.addEventListener("click", () => {
+      panneau.hidden = !panneau.hidden;
+      bascule.setAttribute("aria-expanded", String(!panneau.hidden));
+      majCommentVa = panneau.hidden ? null : maj;
+      if (!panneau.hidden) maj();
+      replacer();
+    });
+    return [bascule, panneau];
+  };
+
   /** Toutes ses actions (analyse, lit, écrit, calcule…) rangées par famille : un clic la fait jouer 5 secondes. Le panneau se déplie sans fermer le menu. */
   const panneauActions = (replacer: () => void): HTMLElement[] => {
     const bascule = el("button", "lia-ui__item", "Toutes ses actions");
@@ -877,6 +931,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
       menu.appendChild(item("Lui parler", ouvrirChat));
       menu.appendChild(rangeeHumeurs());
+      menu.append(...panneauCommentVa(placerMenu));
       if (!sansMouvement) {
         menu.appendChild(rangeeGestes());
         menu.append(...panneauActions(placerMenu));
@@ -926,6 +981,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     menu?.remove();
     menu = null;
     menuOuvert = false;
+    majCommentVa = null;
   }
 
   /* ── clic droit sur un élément de la page ── */
@@ -1623,6 +1679,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (hd && !forcee) pousserHumeur(reseau, hd, now, 1.2);
     verifierCri();
     corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
+    majCommentVa?.();
     reseauPas(reseau, entreesCourantes, dt, Math.random, now);
     if (forcee && now > forcee.jusqua) {
       forcee = null;

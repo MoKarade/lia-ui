@@ -68,6 +68,18 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__rangee--gestes{grid-template-columns:repeat(4,1fr)}
 .lia-ui__actions{max-height:min(44vh,340px);overflow-y:auto;padding:.1rem .1rem .3rem;display:flex;flex-direction:column;gap:.2rem}
 .lia-ui__actions[hidden]{display:none}
+.lia-ui__commentva{max-height:min(48vh,380px);overflow-y:auto;overscroll-behavior:contain;padding:.2rem .6rem .5rem;display:flex;flex-direction:column;gap:.45rem}
+.lia-ui__commentva[hidden]{display:none}
+.lia-ui__cv-phrase{margin:0;font-size:.95rem;line-height:1.3;color:var(--lia-text)}
+.lia-ui__cv-liste{display:flex;flex-direction:column;gap:.4rem}
+.lia-ui__jauge{display:flex;flex-direction:column;gap:3px}
+.lia-ui__jauge-tete{display:flex;justify-content:space-between;gap:.5rem;font-size:.8rem;line-height:1.2}
+.lia-ui__jauge-nom{color:var(--lia-soft)}
+.lia-ui__jauge-valeur{color:var(--lia-text);font-variant-numeric:tabular-nums;text-align:right}
+.lia-ui__jauge-fond{height:6px;border-radius:3px;background:var(--lia-surface-2);overflow:hidden}
+.lia-ui__jauge-barre{height:100%;width:0;border-radius:3px;background:var(--lia-accent);transition:width .6s ease}
+.lia-ui__jauge--penible .lia-ui__jauge-barre{background:var(--lia-danger)}
+.lia-ui__cv-mention{margin:.2rem 0 0;font-size:.72rem;line-height:1.3;color:var(--lia-soft)}
 .lia-ui__famille-titre{margin:0;padding:.35rem .6rem .1rem;font-size:.72rem;color:var(--lia-soft)}
 .lia-ui__rangee--actions{grid-template-columns:repeat(2,1fr)}
 .lia-ui__action{padding:0 .5rem;font-size:.82rem;line-height:1.15}
@@ -81,5 +93,5 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__repere{position:absolute;pointer-events:none;border:2px solid var(--lia-accent);border-radius:12px;box-shadow:0 0 0 4px rgba(147,160,255,.18)}
 .lia-ui__repere[hidden]{display:none}
 @keyframes lia-ui-entre{from{opacity:0;transform:translateY(6px)}}
-@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}}
+@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__jauge-barre{transition:none}}
 `;
