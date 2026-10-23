@@ -152,6 +152,28 @@ interface FaitLia {
 }
 
 /**
+ * Le monde intérieur de LIA : de la douleur, du plaisir, de la confiance et de l'usure SIMULÉS, qui s'ajoutent aux
+ * envies et au réseau de la maquette (`reseau.ts`) et en prolongent les entrées. C'est un calcul : aucune de ces
+ * valeurs n'est un ressenti réel, et elle le dit si on le lui demande. Pur : aucun réseau, aucun coût, aucun texte
+ * de Marc gardé ; l'horloge et le hasard sont injectés.
+ *
+ * - `douleur` : vive, retombe en ~90 s ; elle a une cause (le dernier coup qui compte).
+ * - `sensibilite` : lente (~30 min) ; des douleurs répétées la rendent plus sensible, puis elle se calme.
+ * - `plaisir` : retombe en ~60 s ; la gentillesse apaise aussi la douleur.
+ * - `confiance` : envers Marc, sur des jours ; se gagne par la gentillesse, se perd par la brusquerie.
+ * - `usure` : fatigue accumulée (images qui ramment, longue solitude) ; retombe en ~10 min.
+ */
+type Cause = "choc" | "brusque" | "ton" | "panne" | "isolement" | "usure";
+interface Interieur {
+    douleur: number;
+    cause: Cause | null;
+    sensibilite: number;
+    plaisir: number;
+    confiance: number;
+    usure: number;
+}
+
+/**
  * L'état partagé de LIA : ce qui fait qu'elle est UNE seule, quel que soit l'hôte (hub, MemoryAI, apps).
  * Fonctions pures : le paquet ne touche jamais le réseau ici, c'est l'hôte qui fournit `etat.lire` / `etat.ecrire`.
  * Ce qui arrive de l'hôte est une DONNÉE : on le valide, on borne les nombres et on ne garde que des verbes de LIA.
@@ -175,6 +197,8 @@ interface EtatLia {
     /** Son humeur dominante (l'une des 40). */
     humeur: string;
     relances: RelancesPartagees;
+    /** Son monde intérieur SIMULÉ (v0.20.0, optionnel : un hôte plus ancien ne l'a pas). Adopté vieilli de l'âge de l'état. */
+    interieur?: Interieur;
 }
 /** Ce que l'hôte fournit. `ecrire` peut rendre l'état que l'hôte garde (plus récent que le nôtre), `lire` rend `null` s'il n'en a aucun. */
 interface EtatHote {

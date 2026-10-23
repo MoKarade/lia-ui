@@ -16,6 +16,9 @@ import type { Melange } from "./reseau.js";
 
 export type Cause = "choc" | "brusque" | "ton" | "panne" | "isolement" | "usure";
 
+/** Les six causes, dans l'ordre : la liste fermée qu'un état partagé doit respecter. */
+export const CAUSES: readonly Cause[] = ["choc", "brusque", "ton", "panne", "isolement", "usure"];
+
 export interface Interieur {
   douleur: number;
   cause: Cause | null;
@@ -96,6 +99,24 @@ export function evoluer(i: Readonly<Interieur>, dt: number, m: MilieuInterieur):
     plaisir: retombe(i.plaisir, TAU.plaisir),
     confiance: 0.5 + (i.confiance - 0.5) * Math.exp(-d / TAU.confiance),
     usure,
+  };
+}
+
+/**
+ * Son monde intérieur tel qu'il est `ageSec` secondes plus tard, sans rien de nouveau : tout retombe à son rythme, aucun
+ * plancher (une panne ou une solitude se constatent sur place, jamais par procuration). Pour un état venu d'une autre page.
+ */
+export function vieillir(i: Readonly<Interieur>, ageSec: number): Interieur {
+  const a = Number.isFinite(ageSec) ? Math.max(0, ageSec) : 0;
+  const k = (tau: number): number => Math.exp(-a / tau);
+  const douleur = borne(i.douleur) * k(TAU.douleur);
+  return {
+    douleur,
+    cause: douleur >= 0.02 ? i.cause : null,
+    sensibilite: SENSIBILITE_BASE + (borne(i.sensibilite) - SENSIBILITE_BASE) * k(TAU.sensibilite),
+    plaisir: borne(i.plaisir) * k(TAU.plaisir),
+    confiance: 0.5 + (borne(i.confiance) - 0.5) * k(TAU.confiance),
+    usure: borne(i.usure) * k(TAU.usure),
   };
 }
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENVIES_DEPART } from "../src/cerveau.js";
 import { adopter, empreinte, validerEtat, type EtatHote, type EtatLia } from "../src/etat.js";
+import { INTERIEUR_DEPART } from "../src/interieur.js";
 import { mountLia } from "../src/lia.js";
 import type { LiaHandle } from "../src/types.js";
 import { installerEnvironnement } from "./setup.js";
@@ -35,6 +36,34 @@ describe("validerEtat : ce que l'hôte rend est une donnée", () => {
     const e = validerEtat(etat({ lente: { calme: 0.5, mauvais: 7, "a b": 0.2, "<x>": 0.3 }, journal: [{ t: 1, quoi: "jouer" }, { t: 2, quoi: "inconnu" as never }, { t: Number.NaN, quoi: "repos" }] }));
     expect(e?.lente).toEqual({ calme: 0.5 });
     expect(e?.journal).toEqual([{ t: 1, quoi: "jouer" }]);
+  });
+});
+
+describe("son monde intérieur dans l'état partagé", () => {
+  const dedans = { douleur: 0.5, cause: "brusque" as const, sensibilite: 0.3, plaisir: 0.1, confiance: 0.6, usure: 0 };
+  it("garde un intérieur conforme", () => {
+    expect(validerEtat(etat({ interieur: dedans }))?.interieur).toEqual(dedans);
+    expect(validerEtat(etat({ interieur: { ...dedans, cause: null } }))?.interieur?.cause).toBeNull();
+  });
+
+  it("retire un intérieur douteux sans faire tomber l'état, et tolère son absence", () => {
+    for (const x of [{ ...dedans, douleur: 3 }, { ...dedans, cause: "<script>" }, { ...dedans, confiance: Number.NaN }, "mal", null]) {
+      const e = validerEtat({ ...etat(), interieur: x });
+      expect(e).not.toBeNull();
+      expect(e).not.toHaveProperty("interieur");
+    }
+    expect(validerEtat(etat())).not.toHaveProperty("interieur");
+    expect(validerEtat({ ...etat(), interieur: { ...dedans, note: "x" } })?.interieur).not.toHaveProperty("note");
+  });
+
+  it("l'empreinte change quand la douleur change, pas pour un millième", () => {
+    const a = etat({ interieur: dedans });
+    expect(empreinte({ ...a, interieur: { ...dedans, douleur: 0.501 } })).toBe(empreinte(a));
+    expect(empreinte({ ...a, interieur: { ...dedans, douleur: 0.2 } })).not.toBe(empreinte(a));
+    expect(empreinte({ ...a, interieur: { ...dedans, cause: "ton" } })).not.toBe(empreinte(a));
+    const { interieur: _sans, ...sansInterieur } = a;
+    expect(empreinte(sansInterieur)).not.toBe(empreinte(a));
+    expect(empreinte({ ...a, interieur: { ...INTERIEUR_DEPART } })).not.toBe(empreinte(a));
   });
 });
 
@@ -115,7 +144,7 @@ describe("LIA avec un état partagé", () => {
     const e = ecrire.mock.calls[0]?.[0] as EtatLia;
     expect(e.version).toBe(1);
     expect(e.humeur).toBe("fier");
-    expect(Object.keys(e).sort()).toEqual(["envies", "humeur", "journal", "lente", "maj", "relances", "version"]);
+    expect(Object.keys(e).sort()).toEqual(["envies", "humeur", "interieur", "journal", "lente", "maj", "relances", "version"]);
     expect(l.partage().version).toBeGreaterThanOrEqual(1);
   });
 
@@ -135,6 +164,38 @@ describe("LIA avec un état partagé", () => {
     distant = etat({ humeur: "fier" });
     await vi.advanceTimersByTimeAsync(61_000);
     expect(l.humeur().nom).toBe("fier");
+  });
+
+  it("UNE seule LIA : la douleur prise dans une page arrive dans l'autre, retombée du temps écoulé, sans cri", async () => {
+    let garde: unknown = null;
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), e) };
+    const hit = (): HTMLElement => document.querySelector<HTMLElement>(".lia-ui__hit") as HTMLElement;
+    const a = monter(hote);
+    await vi.advanceTimersByTimeAsync(2000);
+    for (let k = 0; k < 4; k++) {
+      hit().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 100, clientY: 100 }));
+      hit().dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0, clientX: 100, clientY: 100 }));
+      await vi.advanceTimersByTimeAsync(200);
+    }
+    const mal = a.interieur().douleur;
+    expect(mal).toBeGreaterThan(0.3);
+    await vi.advanceTimersByTimeAsync(21_000);
+    expect((garde as EtatLia | null)?.interieur?.cause).toBe("brusque");
+    const ecrite = (garde as EtatLia).interieur?.douleur ?? 0;
+    a.destroy();
+    lia = null;
+    document.body.innerHTML = "";
+    // La deuxième page s'ouvre 30 s plus tard.
+    await vi.advanceTimersByTimeAsync(30_000);
+    const b = monter(hote);
+    await vi.advanceTimersByTimeAsync(20);
+    const i = b.interieur();
+    expect(i.cause).toBe("brusque");
+    expect(i.douleur).toBeGreaterThan(0.1);
+    expect(i.douleur).toBeLessThan(ecrite);
+    expect(i.sensibilite).toBeGreaterThan(0.2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(document.querySelector(".lia-ui__bulle")?.textContent ?? "").not.toMatch(/Aïe|Un à la fois|Ça pique/);
   });
 
   it("sans `etat`, rien ne part et elle vit comme avant", async () => {
