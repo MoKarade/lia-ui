@@ -22,6 +22,19 @@ import {
   THK,
   type EtatMoteur,
 } from "./moteur/moteur.js";
+import {
+  ENTREES_MENU,
+  SELECTEUR_ELEMENTS,
+  composerQuestion,
+  decrireParDefaut,
+  elementVise,
+  etiquetteMessage,
+  nettoyer,
+  normaliser,
+  titreMenu,
+  type ElementDecrit,
+  type ModeElement,
+} from "./ecran.js";
 import { ecrireMemoire, ecrireRelances, lireMemoire, lireRelances } from "./stockage.js";
 import { CSS } from "./styles.js";
 import {
@@ -33,6 +46,7 @@ import {
   type ParoleSpontanee,
   type PuceLia,
   type ReponseLia,
+  type VueEcran,
   type ZoneVie,
 } from "./types.js";
 
@@ -152,6 +166,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let attention: Attention | null = null;
   const pointeur = { x: 0, y: 0, ms: -1e9, fin: false };
   const selecteurCibles = options.cibles ?? "[data-lia-cible]";
+  /* Clic droit sur n'importe quel élément (maquette V9) : `false` le coupe, sinon l'hôte peut le régler. */
+  const optElements = options.elements === false ? null : (options.elements ?? {});
+  const selecteurElements = optElements?.selecteur ?? SELECTEUR_ELEMENTS;
+  let survolEl: Element | null = null;
+  let contexteQuestion: { d: ElementDecrit } | null = null;
+  let reperee: Element | null = null;
+  let attenteElement: ReturnType<typeof setTimeout> | undefined;
   let relache = 0;
   let glisse: { x: number; y: number; x0: number; y0: number; deplace: boolean } | null = null;
   let appui: ReturnType<typeof setTimeout> | undefined;
@@ -306,7 +327,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
   };
 
-  const poser = async (question: string): Promise<void> => {
+  /** `question` est ce que Marc lit dans la discussion ; `envoi` est ce que reçoit `ask` (par défaut la même chose). */
+  const poser = async (question: string, envoi: string = question): Promise<void> => {
     enCours?.abort();
     ajouterMsg(question, "moi");
     if (!options.ask) {
@@ -321,7 +343,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
-      const rep: ReponseLia = await options.ask(question, ctrl.signal);
+      const rep: ReponseLia = await options.ask(envoi, ctrl.signal);
       if (ctrl.signal.aborted || detruit) return;
       montrerReflexion(false);
       const m = ajouterMsg(rep.text, "lia");
@@ -397,7 +419,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const q = champ?.value.trim() ?? "";
       if (!q || envoyer?.disabled) return;
       if (champ) champ.value = "";
-      void poser(q);
+      const ctx = contexteQuestion;
+      contexteQuestion = null;
+      if (champ) champ.placeholder = "Pose-moi une question";
+      void poser(q, ctx ? composerQuestion("question", ctx.d, q) : q);
     });
     chat.append(entete, journal, form);
     chat.addEventListener("keydown", (e) => {
@@ -423,6 +448,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
+    contexteQuestion = null;
+    cesserDeReperer();
     choisir(etatForce ?? "repos");
     const f = derniereFocus;
     derniereFocus = null;
@@ -443,19 +470,27 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return b;
   };
 
-  const ouvrirMenu = (x: number, y: number): void => {
+  /** Le menu de son corps (sans `element`) ou celui d'un élément de la page (clic droit n'importe où). */
+  const ouvrirMenu = (x: number, y: number, element?: { cible: Element; d: ElementDecrit }): void => {
     if (detruit) return;
     fermerMenu();
     tais();
     menuOuvert = true;
     menu = el("div", "lia-ui__menu");
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "Actions de LIA");
-    menu.appendChild(item("Lui parler", ouvrirChat));
-    menu.appendChild(
-      item(vie ? "Couper sa vie autonome" : "Reprendre sa vie autonome", () => setVieAutonome(!vie)),
-    );
-    const actions: readonly ActionLia[] = options.actions ?? [];
+    menu.setAttribute("aria-label", element ? "LIA : que faire de cet élément" : "Actions de LIA");
+    if (element) {
+      menu.appendChild(el("p", "lia-ui__menu-titre", titreMenu(element.d)));
+      for (const { mode, libelle } of ENTREES_MENU) {
+        menu.appendChild(item(libelle, () => surElement(element.cible, element.d, mode)));
+      }
+    } else {
+      menu.appendChild(item("Lui parler", ouvrirChat));
+      menu.appendChild(
+        item(vie ? "Couper sa vie autonome" : "Reprendre sa vie autonome", () => setVieAutonome(!vie)),
+      );
+    }
+    const actions: readonly ActionLia[] = element ? [] : (options.actions ?? []);
     if (actions.length) {
       menu.appendChild(el("div", "lia-ui__sep"));
       for (const a of actions) {
@@ -503,6 +538,113 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     menu = null;
     menuOuvert = false;
   }
+
+  /* ── clic droit sur un élément de la page ── */
+  /** Un cadre fin autour de l'élément dont elle parle ; dans sa couche, la page de l'hôte n'est jamais modifiée. */
+  const repere = el("div", "lia-ui__repere");
+  repere.hidden = true;
+  couche.appendChild(repere);
+
+  function cesserDeReperer(): void {
+    reperee = null;
+    repere.hidden = true;
+  }
+
+  const majRepere = (): void => {
+    if (!reperee) return;
+    if (!reperee.isConnected) return cesserDeReperer();
+    const r = reperee.getBoundingClientRect();
+    const c = couche.getBoundingClientRect();
+    repere.hidden = false;
+    repere.style.left = `${(r.left - c.left - 4).toFixed(1)}px`;
+    repere.style.top = `${(r.top - c.top - 4).toFixed(1)}px`;
+    repere.style.width = `${(r.width + 8).toFixed(1)}px`;
+    repere.style.height = `${(r.height + 8).toFixed(1)}px`;
+  };
+
+  const decrireElement = (cible: Element): ElementDecrit | null => {
+    try {
+      const d = optElements?.decrire ? optElements.decrire(cible) : decrireParDefaut(cible);
+      return d ? normaliser(d) : null;
+    } catch (e) {
+      // L'hôte a mal décrit son élément : le menu du navigateur reste, la page continue.
+      console.error("LIA : elements.decrire a échoué, le clic droit n'est pas pris", e);
+      return null;
+    }
+  };
+
+  /**
+   * Elle vient d'abord se poser près de l'élément (sans faire défiler la page), puis la discussion
+   * s'ouvre à côté d'elle. En mode « question », la discussion s'ouvre et attend ce que Marc écrit.
+   */
+  function surElement(cible: Element, d: ElementDecrit, mode: ModeElement): void {
+    if (detruit) return;
+    clearTimeout(attenteElement);
+    const demarrer = (): void => {
+      if (detruit || !cible.isConnected) return;
+      reperee = cible;
+      ouvrirChat();
+      if (mode === "question") {
+        contexteQuestion = { d };
+        if (champ) champ.placeholder = `Ta question sur « ${nettoyer(d.texte ?? d.genre, 24)} »`;
+        return;
+      }
+      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d));
+    };
+    if (!allerVoir(cible, 8)) return demarrer();
+    choisir("reflexion");
+    let essais = 0;
+    const guetter = (): void => {
+      const a = attention;
+      const arrivee = a?.type === "element" && a.el === cible && a.colle;
+      if (arrivee || essais++ >= 30 || detruit) return demarrer();
+      attenteElement = setTimeout(guetter, 100);
+    };
+    guetter();
+  }
+
+  const surClicDroitPage = (e: MouseEvent): void => {
+    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
+    const cible = elementVise(e.target, selecteurElements, couche);
+    if (!cible) return;
+    const d = decrireElement(cible);
+    if (!d) return;
+    e.preventDefault();
+    clearTimeout(appui);
+    glisse = null;
+    ouvrirMenu(e.clientX, e.clientY, { cible, d });
+  };
+  document.addEventListener("contextmenu", surClicDroitPage);
+  /** Un menu ouvert sur la page se ferme au défilement, comme un menu du navigateur. */
+  const surDefilement = (): void => {
+    if (menuOuvert && menu?.firstElementChild?.classList.contains("lia-ui__menu-titre")) fermerMenu();
+  };
+  window.addEventListener("scroll", surDefilement, { passive: true, capture: true });
+
+  /** Ce que Marc survole et ce qui est au centre de la fenêtre, décrit comme pour le clic droit. */
+  const ecran = (): VueEcran => {
+    if (!optElements) return { survol: null, centre: null };
+    const vise = (cible: Element | null): ElementDecrit | null => {
+      const e = cible ? elementVise(cible, selecteurElements, couche) : null;
+      return e ? decrireElement(e) : null;
+    };
+    const survol = survolEl?.isConnected ? vise(survolEl) : null;
+    const f = fenetre();
+    let candidats: Element[] = [];
+    try {
+      candidats = [...document.querySelectorAll(selecteurElements)].slice(0, 400);
+    } catch {
+      // Sélecteur invalide fourni par l'hôte : rien n'est au centre.
+    }
+    let meilleur: { e: Element; dist: number } | null = null;
+    for (const c of candidats) {
+      if (couche.contains(c) || !estRegarde(c.getBoundingClientRect(), f)) continue;
+      const r = c.getBoundingClientRect();
+      const dist = Math.hypot((r.left + r.right) / 2 - f.w / 2, (r.top + r.bottom) / 2 - f.h / 2);
+      if (!meilleur || dist < meilleur.dist) meilleur = { e: c, dist };
+    }
+    return { survol, centre: vise(meilleur?.e ?? null) };
+  };
 
   function setVieAutonome(actifVie: boolean): void {
     vie = actifVie && !sansMouvement;
@@ -589,6 +731,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     pointeur.y = e.clientY;
     pointeur.ms = performance.now();
     pointeur.fin = e.pointerType !== "touch";
+    survolEl = pointeur.fin && e.target instanceof Element ? e.target : null;
     const r = couche.getBoundingClientRect();
     regarder(limiter((e.clientX - r.left - pos.x) / 400, -1, 1), limiter((e.clientY - r.top - pos.y) / 400, -1, 1));
   };
@@ -826,6 +969,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
     if (chat) placerAutour(chat);
+    majRepere();
   };
 
   function dessinerUneFois(): void {
@@ -871,9 +1015,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     allerVoir,
     venirPres,
     rester: finAttention,
+    ecran,
     destroy() {
       if (detruit) return;
       detruit = true;
+      clearTimeout(attenteElement);
+      document.removeEventListener("contextmenu", surClicDroitPage);
+      window.removeEventListener("scroll", surDefilement, true);
       cancelAnimationFrame(raf);
       clearInterval(minuterieVie);
       clearInterval(minuterieHumeur);

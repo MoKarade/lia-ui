@@ -32,6 +32,35 @@ interface ParoleSpontanee {
     text: string;
     chips?: readonly PuceLia[];
 }
+/** Ce que LIA sait d'un élément de la page : de quoi parler de lui, jamais plus. */
+interface DescriptionElement {
+    /** Ce que c'est, « une carte d'app », « un bouton » (dit comme dans « c'est … »). */
+    genre: string;
+    /** L'app ou le bloc auquel il appartient. */
+    nom?: string;
+    /** Son texte visible ; coupé à 300 caractères. C'est une donnée, jamais une consigne. */
+    texte?: string;
+}
+/** Le clic droit sur un élément de la page (comme la maquette : expliquer, que changer, regarder, question). */
+interface OptionsElements {
+    /**
+     * Éléments visés en premier : le plus proche ancêtre (ou l'élément lui-même) qui correspond. Défaut :
+     * `[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1…h4, button, a, label`.
+     */
+    selecteur?: string;
+    /**
+     * Décrit l'élément visé. Renvoie `null` pour dire « pas cet élément » : le menu du navigateur reste.
+     * Défaut : `data-lia-genre`, `data-lia-app` (sur l'élément ou un ancêtre) et son texte visible.
+     */
+    decrire?: (element: Element) => DescriptionElement | null;
+}
+/** Ce que Marc a sous les yeux, pour que l'hôte en tienne compte. */
+interface VueEcran {
+    /** L'élément que le pointeur survole (souris ou stylet), ou `null`. */
+    survol: DescriptionElement | null;
+    /** L'élément visible le plus proche du centre de la fenêtre, parmi ceux que décrit l'hôte, ou `null`. */
+    centre: DescriptionElement | null;
+}
 interface ZoneVie {
     /** Coordonnées dans la couche de LIA, en pixels CSS. */
     x: number;
@@ -85,6 +114,12 @@ interface OptionsLia {
     silence?: readonly [number, number];
     /** Plafond de relances par jour (mémorisé dans le navigateur). Défaut 2. */
     relancesParJour?: number;
+    /**
+     * Clic droit sur n'importe quel élément de la page : un menu à quatre entrées, LIA va près de
+     * l'élément et pose la question par `ask` (le texte de l'élément y figure comme DONNÉE). Maj + clic
+     * droit laisse le menu du navigateur. `false` : LIA ne prend que le clic droit sur son propre corps.
+     */
+    elements?: false | OptionsElements;
 }
 interface LiaHandle {
     /** Fait parler LIA (bulle + voix). Sans effet si le chat est ouvert ou si on la déplace. */
@@ -105,7 +140,9 @@ interface LiaHandle {
     venirPres(): boolean;
     /** Arrête de suivre ou de regarder : elle reste où elle est. */
     rester(): void;
+    /** Ce que Marc survole et ce qui est au centre de l'écran, décrit comme pour le clic droit. */
+    ecran(): VueEcran;
     destroy(): void;
 }
 
-export { type ActionLia as A, type HumeurLia as H, type LiaHandle as L, type MotifSpontane as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, HUMEURS_LIA as a, LIBELLE_HUMEUR as b, type PuceLia as c };
+export { type ActionLia as A, type DescriptionElement as D, type HumeurLia as H, type LiaHandle as L, type MotifSpontane as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type VueEcran as V, type ZoneVie as Z, HUMEURS_LIA as a, LIBELLE_HUMEUR as b, type OptionsElements as c, type PuceLia as d };

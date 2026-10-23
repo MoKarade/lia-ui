@@ -1,9 +1,13 @@
 import {
+  ENTREES_MENU,
+  SELECTEUR_ELEMENTS,
+  composerQuestion,
   dansZone,
+  decrireParDefaut,
   mountLia,
   pointDansZone,
   prochaineDecision
-} from "./chunk-XANJEZS2.mjs";
+} from "./chunk-4XF3XXEM.mjs";
 
 // src/types.ts
 var HUMEURS_LIA = [
@@ -35,9 +39,13 @@ var LIBELLE_HUMEUR = {
   timide: "timidit\xE9"
 };
 export {
+  ENTREES_MENU,
   HUMEURS_LIA,
   LIBELLE_HUMEUR,
+  SELECTEUR_ELEMENTS,
+  composerQuestion,
   dansZone,
+  decrireParDefaut,
   mountLia,
   pointDansZone,
   prochaineDecision

@@ -1,0 +1,213 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mountLia } from "../src/lia.js";
+import type { DescriptionElement, LiaHandle, ReponseLia } from "../src/types.js";
+import { installerEnvironnement } from "./setup.js";
+
+let lia: LiaHandle | null = null;
+let carte: HTMLElement;
+
+const rectDe = (r: { left: number; top: number; right: number; bottom: number }): DOMRect =>
+  ({ ...r, x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top, toJSON: () => r }) as DOMRect;
+
+const clicDroit = (cible: Element, init: MouseEventInit = {}): MouseEvent => {
+  const e = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 500, clientY: 300, ...init });
+  cible.dispatchEvent(e);
+  return e;
+};
+const menu = (): HTMLElement | null => document.querySelector<HTMLElement>(".lia-ui__menu");
+const entrees = (): string[] =>
+  [...document.querySelectorAll<HTMLElement>(".lia-ui__menu [role=menuitem]")].map((b) => b.textContent ?? "");
+const choisir = (libelle: string): void => {
+  const b = [...document.querySelectorAll<HTMLButtonElement>(".lia-ui__menu [role=menuitem]")].find(
+    (x) => x.textContent === libelle,
+  );
+  if (!b) throw new Error(`entrée absente : ${libelle}`);
+  b.click();
+};
+
+beforeEach(() => {
+  installerEnvironnement();
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains("lia-ui")) return rectDe({ left: 0, top: 0, right: 1000, bottom: 800 });
+    if (this === carte) return rectDe({ left: 100, top: 300, right: 400, bottom: 500 });
+    return rectDe({ left: 0, top: 0, right: 0, bottom: 0 });
+  });
+  document.body.innerHTML = `
+    <section id="carte" data-lia-genre="une carte d'app" data-lia-app="DriveAI"><span id="dedans">Hors ligne depuis 2 h</span></section>
+    <input id="champ"><p id="para">Un paragraphe</p>`;
+  carte = document.getElementById("carte") as HTMLElement;
+});
+afterEach(() => {
+  lia?.destroy();
+  lia = null;
+});
+
+describe("clic droit sur un élément de la page", () => {
+  it("ouvre le menu à quatre entrées avec ce que LIA a compris, et garde le clic droit", () => {
+    lia = mountLia({ vieAutonome: false });
+    const e = clicDroit(document.getElementById("dedans") as Element);
+    expect(e.defaultPrevented).toBe(true);
+    expect(entrees()).toEqual(["Explique-moi ça", "Que peut-on changer ici ?", "Regarde ça avec moi", "Poser une question…"]);
+    expect(menu()?.querySelector(".lia-ui__menu-titre")?.textContent).toBe(
+      "Une carte d'app · DriveAI : « Hors ligne depuis 2 h »",
+    );
+  });
+
+  it("« Explique-moi ça » ouvre la discussion et envoie à ask l'élément comme donnée", async () => {
+    const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockResolvedValue({ text: "C'est la carte de DriveAI." });
+    lia = mountLia({ vieAutonome: false, ask });
+    clicDroit(document.getElementById("dedans") as Element);
+    choisir("Explique-moi ça");
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    const envoye = ask.mock.calls[0]?.[0] ?? "";
+    expect(envoye).toContain("Explique-moi cet élément de la page");
+    expect(envoye).toContain("genre : une carte d'app ; app : DriveAI ; texte : « Hors ligne depuis 2 h »");
+    // La discussion montre l'entrée choisie, pas le texte technique envoyé.
+    await vi.waitFor(() => {
+      const msgs = [...document.querySelectorAll(".lia-ui__msg")].map((m) => m.textContent);
+      expect(msgs).toContain("Explique-moi ça : « Hors ligne depuis 2 h »");
+      expect(msgs).toContain("C'est la carte de DriveAI.");
+    });
+  });
+
+  it("encadre l'élément dont elle parle, sans toucher à la page", async () => {
+    const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockResolvedValue({ text: "Voilà." });
+    lia = mountLia({ vieAutonome: false, ask });
+    clicDroit(carte);
+    choisir("Regarde ça avec moi");
+    await vi.waitFor(() => expect(ask).toHaveBeenCalled());
+    const repere = document.querySelector<HTMLElement>(".lia-ui__repere");
+    await vi.waitFor(() => expect(repere?.hidden).toBe(false));
+    expect(carte.getAttributeNames().sort()).toEqual(["data-lia-app", "data-lia-genre", "id"]);
+    lia.fermerChat();
+    expect(repere?.hidden).toBe(true);
+  });
+
+  it("« Poser une question… » attend la question de Marc, puis l'envoie avec l'élément", async () => {
+    const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockResolvedValue({ text: "Parce que…" });
+    lia = mountLia({ vieAutonome: false, ask });
+    clicDroit(carte);
+    choisir("Poser une question…");
+    await vi.waitFor(() => expect(document.querySelector(".lia-ui__chat")).not.toBeNull());
+    expect(ask).not.toHaveBeenCalled();
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
+    expect(champ.placeholder).toContain("Ta question sur « Hors ligne depuis 2 h »");
+    champ.value = "Pourquoi hors ligne ?";
+    (document.querySelector(".lia-ui__form") as HTMLFormElement).dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    const envoye = ask.mock.calls[0]?.[0] ?? "";
+    expect(envoye.startsWith("Pourquoi hors ligne ?\n")).toBe(true);
+    expect(envoye).toContain("app : DriveAI");
+    // La question suivante part seule : l'élément n'est joint qu'une fois.
+    await vi.waitFor(() => expect(champ.disabled).toBe(false));
+    champ.value = "Et demain ?";
+    (document.querySelector(".lia-ui__form") as HTMLFormElement).dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+    expect(ask.mock.calls[1]?.[0]).toBe("Et demain ?");
+  });
+
+  it("sans ask : elle dit qu'elle est indisponible, n'invente rien", async () => {
+    lia = mountLia({ vieAutonome: false });
+    clicDroit(carte);
+    choisir("Explique-moi ça");
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain("Je ne suis pas disponible pour le moment.");
+    });
+  });
+
+  it("laisse le menu du navigateur sur un champ, avec Maj, ou si la page l'a déjà pris", () => {
+    lia = mountLia({ vieAutonome: false });
+    expect(clicDroit(document.getElementById("champ") as Element).defaultPrevented).toBe(false);
+    expect(clicDroit(carte, { shiftKey: true }).defaultPrevented).toBe(false);
+    const dejaPris = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    document.getElementById("para")?.addEventListener("contextmenu", (e) => e.preventDefault(), { once: true });
+    document.getElementById("para")?.dispatchEvent(dejaPris);
+    expect(menu()).toBeNull();
+  });
+
+  it("le clic droit sur son propre corps garde son menu à elle", () => {
+    lia = mountLia({ vieAutonome: false });
+    clicDroit(document.querySelector(".lia-ui__hit") as Element);
+    expect(entrees().slice(0, 2)).toEqual(["Lui parler", "Reprendre sa vie autonome"]);
+  });
+
+  it("l'hôte décrit ses éléments, ou dit « pas celui-là » avec null", () => {
+    const decrire = vi.fn((e: Element): DescriptionElement | null =>
+      e.id === "carte" ? { genre: "la carte de l'app", nom: "Drive", texte: "<b>hors ligne</b>" } : null,
+    );
+    lia = mountLia({ vieAutonome: false, elements: { decrire } });
+    clicDroit(carte);
+    expect(menu()?.querySelector(".lia-ui__menu-titre")?.textContent).toBe("La carte de l'app · Drive : « b hors ligne /b »");
+    lia.fermerChat();
+    document.querySelector(".lia-ui__menu")?.remove();
+    expect(clicDroit(document.getElementById("para") as Element).defaultPrevented).toBe(false);
+  });
+
+  it("une description de l'hôte qui plante : le menu du navigateur reste et la page continue", () => {
+    const erreur = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    lia = mountLia({
+      vieAutonome: false,
+      elements: {
+        decrire: () => {
+          throw new Error("boum");
+        },
+      },
+    });
+    expect(clicDroit(carte).defaultPrevented).toBe(false);
+    expect(erreur).toHaveBeenCalled();
+  });
+
+  it("elements: false coupe tout, destroy retire l'écoute", () => {
+    lia = mountLia({ vieAutonome: false, elements: false });
+    expect(clicDroit(carte).defaultPrevented).toBe(false);
+    lia.destroy();
+    lia = mountLia({ vieAutonome: false });
+    lia.destroy();
+    expect(clicDroit(carte).defaultPrevented).toBe(false);
+    lia = null;
+  });
+
+  it("Échap ferme le menu, le défilement aussi", () => {
+    lia = mountLia({ vieAutonome: false });
+    clicDroit(carte);
+    menu()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(menu()).toBeNull();
+    clicDroit(carte);
+    expect(menu()).not.toBeNull();
+    window.dispatchEvent(new Event("scroll"));
+    expect(menu()).toBeNull();
+  });
+});
+
+describe("ce que Marc a sous les yeux", () => {
+  it("décrit l'élément survolé et celui du centre de l'écran", () => {
+    lia = mountLia({ vieAutonome: false });
+    const e = new Event("pointermove") as Event & { clientX: number; clientY: number; pointerType: string };
+    e.clientX = 200;
+    e.clientY = 400;
+    e.pointerType = "mouse";
+    Object.defineProperty(e, "target", { value: document.getElementById("dedans") });
+    window.dispatchEvent(e);
+    const vue = lia.ecran();
+    expect(vue.survol).toEqual({ genre: "une carte d'app", nom: "DriveAI", texte: "Hors ligne depuis 2 h" });
+    expect(vue.centre?.nom).toBe("DriveAI");
+  });
+
+  it("au doigt, rien n'est survolé", () => {
+    lia = mountLia({ vieAutonome: false });
+    const e = new Event("pointermove") as Event & { clientX: number; clientY: number; pointerType: string };
+    e.clientX = 200;
+    e.clientY = 400;
+    e.pointerType = "touch";
+    Object.defineProperty(e, "target", { value: carte });
+    window.dispatchEvent(e);
+    expect(lia.ecran().survol).toBeNull();
+  });
+
+  it("elements: false : rien à décrire", () => {
+    lia = mountLia({ vieAutonome: false, elements: false });
+    expect(lia.ecran()).toEqual({ survol: null, centre: null });
+  });
+});
