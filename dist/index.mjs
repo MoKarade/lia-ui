@@ -1,6 +1,8 @@
 import {
+  ACTIONS_LIA,
   ENTREES_MENU,
   ENVIES_DEPART,
+  FAMILLES_ACTIONS,
   GESTES,
   HUMEURS_LIA,
   HUMEURS_MENU,
@@ -19,10 +21,12 @@ import {
   mountLia,
   pointDansZone,
   prochaineDecision
-} from "./chunk-ROTPK5GH.mjs";
+} from "./chunk-HALJDZJ7.mjs";
 export {
+  ACTIONS_LIA,
   ENTREES_MENU,
   ENVIES_DEPART,
+  FAMILLES_ACTIONS,
   GESTES,
   HUMEURS_LIA,
   HUMEURS_MENU,

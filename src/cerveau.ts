@@ -1,3 +1,4 @@
+import { ACTIVITES_JEU } from "./activite.js";
 import type { Hasard } from "./autonomie.js";
 
 /**
@@ -139,10 +140,10 @@ export function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[] {
   if (!c.tranquille && monde.includes("accompagner")) liste.push({ id: "accompagner", poids: 2.1 + e.curiosite * 0.6 });
   if (c.present && monde.includes("feliciter")) liste.push({ id: "feliciter", poids: 0.2 + veut("feliciter") * 1.2 });
   if (c.veille) liste.push({ id: "veiller", poids: 0.1 + veut("veiller") * 1.2 });
-  liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.1 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
+  liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.5 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
   if (c.deplacement && c.loinDeLaMaison && !c.tranquille) liste.push({ id: "rentrer", poids: 1.6 });
   if (e.energie < 0.3) liste.push({ id: "dormir", poids: (0.5 - e.energie) * 5 });
-  liste.push({ id: "repos", poids: 0.9 });
+  liste.push({ id: "repos", poids: 0.7 });
   return liste;
 }
 
@@ -163,20 +164,7 @@ export function choisirComportement(liste: readonly Candidat[], hasard: Hasard, 
 }
 
 /** Les silhouettes qu'elle prend pour jouer, selon l'humeur (POOL de la maquette). */
-export const SILHOUETTES_JEU: Readonly<Record<string, readonly string[]>> = {
-  joyeux: ["musique", "content", "salue"],
-  excite: ["content", "musique", "surpris"],
-  espiegle: ["musique", "salue", "cherche"],
-  curieux: ["cherche", "surveille", "lit", "apprend"],
-  calme: ["reflexion", "souvient", "musique", "attend"],
-  neutre: ["reflexion", "attend", "surveille"],
-  fatigue: ["attend", "reflexion"],
-  inquiet: ["surveille", "attend", "securise"],
-  triste: ["triste", "souvient", "attend"],
-  concentre: ["concentre", "code", "calcule"],
-  fier: ["content", "reussi"],
-  timide: ["reflexion", "attend"],
-};
+export const SILHOUETTES_JEU: Readonly<Record<string, readonly string[]>> = ACTIVITES_JEU;
 
 /** Une durée entre `a` et `b` secondes (maquette : `rr`). */
 export const entre = (hasard: Hasard, a: number, b: number): number => a + hasard() * (b - a);

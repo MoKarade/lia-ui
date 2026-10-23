@@ -49,6 +49,7 @@ import {
   type ModeElement,
 } from "./ecran.js";
 import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
+import { FAMILLES_ACTIONS, activiteElement, activiteQuestion, estAction, suiteReflexion } from "./activite.js";
 import {
   ecrireCerveau,
   ecrireLente,
@@ -137,7 +138,7 @@ const DELAI_MONDE: Record<MotifMonde | "veiller", number> = { appeler: 90, resum
 /** Marc regarde un élément depuis ce temps (ms) : elle vient regarder avec lui, au plus une fois par élément toutes les 3 minutes. */
 const SURVOL_MS = 4000;
 const DELAI_ACCOMPAGNER_MS = 180_000;
-const ETAT_MONDE: Record<MotifMonde, string> = { appeler: "alerte", resumer: "surveille", feliciter: "reussi", rappeler: "surveille", souvenir: "content", accompagner: "surveille" };
+const ETAT_MONDE: Record<MotifMonde, string> = { appeler: "alerte", resumer: "analyse", feliciter: "reussi", rappeler: "planifie", souvenir: "souvient", accompagner: "lit" };
 const etatSur = (etat: string): string => (ST.includes(etat) ? etat : "repos");
 
 export function mountLia(options: OptionsLia = {}): LiaHandle {
@@ -238,7 +239,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** Ce qu'elle suit ou regarde en ce moment (rien = elle fait sa vie). Jamais de défilement de la page. */
   type Attention =
     | { type: "curseur"; jusqua: number }
-    | { type: "element"; el: Element; jusqua: number; colle: boolean };
+    | { type: "element"; el: Element; jusqua: number; colle: boolean; etatArrivee: string };
   let attention: Attention | null = null;
   const pointeur = { x: 0, y: 0, ms: -1e9, fin: false };
   const selecteurCibles = options.cibles ?? "[data-lia-cible]";
@@ -300,6 +301,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const e = ST.includes(id) ? id : "repos";
     if (e !== etat) debut[e] = sansMouvement ? -1.6 : t;
     etat = e;
+    // Lisible de l'extérieur (tests, preuves sur l'écran) : ce qu'elle fait en ce moment.
+    corpsEl.dataset["etat"] = e;
   };
 
   const afficherHumeur = (nom: string): void => {
@@ -372,9 +375,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     parle = true;
     choisir("reponse");
   };
+  /** Sa dernière réponse attend un mot de Marc (une question, des puces) : elle le montre jusqu'à ce qu'il réponde. */
+  let attendReponse = false;
   const finVoix = (): void => {
     parle = false;
-    if (!chatOuvert) choisir(etatForce ?? "repos");
+    if (chatOuvert) choisir(etatForce ?? (attendReponse ? "demande" : "ecoute"));
+    else if (bulleChips && !bulle.hidden) choisir(etatForce ?? "demande");
+    else if (attention?.type === "element" && attention.colle) choisir(etatForce ?? attention.etatArrivee);
+    else choisir(etatForce ?? "repos");
   };
 
   /* ── bulle ── */
@@ -462,8 +470,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
 
   /** `question` est ce que Marc lit dans la discussion ; `envoi` est ce que reçoit `ask` (par défaut la même chose). */
-  const poser = async (question: string, envoi: string = question): Promise<void> => {
+  const poser = async (question: string, envoi: string = question, base: string = activiteQuestion(question)): Promise<void> => {
     enCours?.abort();
+    attendReponse = false;
     ajouterMsg(question, "moi");
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
@@ -473,7 +482,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const ctrl = new AbortController();
     enCours = ctrl;
     const minuterie = setTimeout(() => ctrl.abort(), DELAI_QUESTION);
-    choisir("reflexion");
+    // Elle montre ce qu'elle fait de la question (souvenir, calcul, rédaction…), puis se concentre et attend si ça tarde.
+    const debutAttente = t;
+    let silhouette = "";
+    const suivreAttente = (): void => {
+      if (enCours !== ctrl || detruit || etatForce) return;
+      const e = suiteReflexion(base, t - debutAttente);
+      if (e !== silhouette) choisir((silhouette = e));
+    };
+    suivreAttente();
+    const veilleAttente = setInterval(suivreAttente, 500);
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
@@ -488,7 +506,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }
       if (rep.blocks?.length && options.renderBlocks) options.renderBlocks(rep.blocks, m);
       if (rep.mood) setHumeur(rep.mood);
+      attendReponse = !!rep.chips?.length || /\?\s*[»"]?$/.test(rep.text.trim());
       voix(rep.text);
+      // L'hôte a dit ce qu'elle a fait pour répondre : elle le montre un instant avant de parler.
+      if (rep.etat && estAction(rep.etat) && !etatForce) {
+        choisir(rep.etat);
+        setTimeout(() => {
+          if (!detruit && parle && !etatForce) choisir("reponse");
+        }, 1600);
+      }
     } catch (e) {
       if (detruit) return;
       montrerReflexion(false);
@@ -498,6 +524,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       choisir("indispo");
     } finally {
       clearTimeout(minuterie);
+      clearInterval(veilleAttente);
       if (enCours === ctrl) enCours = null;
       if (envoyer) envoyer.disabled = false;
       champ?.focus();
@@ -642,6 +669,42 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return rangee;
   };
 
+  /** Toutes ses actions (analyse, lit, écrit, calcule…) rangées par famille : un clic la fait jouer 5 secondes. Le panneau se déplie sans fermer le menu. */
+  const panneauActions = (replacer: () => void): HTMLElement[] => {
+    const bascule = el("button", "lia-ui__item", "Toutes ses actions");
+    bascule.type = "button";
+    bascule.setAttribute("role", "menuitem");
+    bascule.setAttribute("aria-expanded", "false");
+    const panneau = el("div", "lia-ui__actions");
+    panneau.hidden = true;
+    const remplir = (): void => {
+      for (const f of FAMILLES_ACTIONS) {
+        const groupe = el("div", "lia-ui__famille");
+        groupe.setAttribute("role", "group");
+        groupe.setAttribute("aria-label", f.famille);
+        groupe.appendChild(el("p", "lia-ui__famille-titre", f.famille));
+        const grille = el("div", "lia-ui__rangee lia-ui__rangee--actions");
+        for (const a of f.actions) {
+          const b = item(a.libelle, () => {
+            activite(a.id, 5);
+          });
+          b.classList.add("lia-ui__action");
+          b.dataset["action"] = a.id;
+          grille.appendChild(b);
+        }
+        groupe.appendChild(grille);
+        panneau.appendChild(groupe);
+      }
+    };
+    bascule.addEventListener("click", () => {
+      if (!panneau.firstChild) remplir();
+      panneau.hidden = !panneau.hidden;
+      bascule.setAttribute("aria-expanded", String(!panneau.hidden));
+      replacer();
+    });
+    return [bascule, panneau];
+  };
+
   /** Le système réduit les animations : Marc peut les rendre complètes (ou les calmer), le choix reste dans ce navigateur. */
   const caseAnimations = (): HTMLButtonElement => {
     const b = item("Animations complètes", () => {
@@ -661,6 +724,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     fermerMenu();
     tais();
     menuOuvert = true;
+    const placerMenu = (): void => {
+      if (!menu) return;
+      const z = zoneVie();
+      const r = couche.getBoundingClientRect();
+      menu.style.left = `${limiter(x - r.left, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
+      menu.style.top = `${limiter(y - r.top, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
+    };
     menu = el("div", "lia-ui__menu");
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", element ? "LIA : que faire de cet élément" : "Actions de LIA");
@@ -674,7 +744,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
       menu.appendChild(item("Lui parler", ouvrirChat));
       menu.appendChild(rangeeHumeurs());
-      if (!sansMouvement) menu.appendChild(rangeeGestes());
+      if (!sansMouvement) {
+        menu.appendChild(rangeeGestes());
+        menu.append(...panneauActions(placerMenu));
+      }
       if (reduit && !sansMouvement) menu.appendChild(caseAnimations());
       menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
     }
@@ -694,7 +767,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }
     }
     menu.addEventListener("keydown", (e) => {
-      const items = [...(menu?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
+      const items = [...(menu?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])].filter((x) => !x.closest("[hidden]"));
       const i = items.indexOf(document.activeElement as HTMLElement);
       if (e.key === "Escape") {
         e.preventDefault();
@@ -711,12 +784,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }
     });
     couche.appendChild(menu);
-    const z = zoneVie();
-    const r = couche.getBoundingClientRect();
-    const lx = x - r.left;
-    const ly = y - r.top;
-    menu.style.left = `${limiter(lx, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
-    menu.style.top = `${limiter(ly, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
+    placerMenu();
     menu.querySelector<HTMLElement>("[role=menuitem]")?.focus();
   };
 
@@ -768,6 +836,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   function surElement(cible: Element, d: ElementDecrit, mode: ModeElement): void {
     if (detruit) return;
     clearTimeout(attenteElement);
+    // Ce qu'elle fait de la demande : expliquer et regarder avec lui = analyser et lire ; que changer = planifier.
+    const baseMode = { expliquer: "analyse", changer: "planifie", regarder: "lit", question: "reflexion" }[mode];
     const demarrer = (): void => {
       if (detruit || !cible.isConnected) return;
       reperee = cible;
@@ -778,10 +848,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         return;
       }
       impulsion(reseau, "demande");
-      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d));
+      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d), baseMode);
     };
-    if (!allerVoir(cible, 8)) return demarrer();
-    choisir("reflexion");
+    if (!allerVoir(cible, 8, baseMode)) return demarrer();
     let essais = 0;
     const guetter = (): void => {
       const a = attention;
@@ -963,11 +1032,19 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return true;
   }
 
-  function allerVoir(element: Element, secondes = 10): boolean {
+  /** `etatArrivee` : ce qu'elle fait une fois posée (par défaut, d'après l'élément : analyse, lit, calcule, surveille…) ; en route elle cherche. */
+  function allerVoir(element: Element, secondes = 10, etatArrivee?: string): boolean {
     if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
-    attention = { type: "element", el: element, jusqua: t + secondes, colle: false };
+    const r = element.getBoundingClientRect();
+    attention = {
+      type: "element",
+      el: element,
+      jusqua: t + secondes,
+      colle: false,
+      etatArrivee: etatArrivee && estAction(etatArrivee) ? etatArrivee : activiteElement(element, { largeur: r.width, hauteur: r.height }),
+    };
     errance = { jusqua: t + secondes };
-    choisir(etatForce ?? "surveille");
+    choisir(etatForce ?? "cherche");
     marquerRegard(element);
     return true;
   }
@@ -1003,7 +1080,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (!rect || !estVisible(rect, f)) return finAttention();
     const p = pointPresDeLElement(rect, rayon, f);
     cible = { x: p.x - r.left, y: p.y - r.top };
-    if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
+    if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) {
+      a.colle = true;
+      if (!etatForce && !parle) choisir(a.etatArrivee);
+    }
   }
 
   /* ── vie propre ── */
@@ -1046,7 +1126,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /** L'hôte l'envoie vers un élément. Ce qu'elle dit vient de lui (pas d'heure de silence : c'est lui qui décide). */
   function envoyerVers(element: Element, opts: EnvoiLia = {}): boolean {
-    if (!allerVoir(element, opts.secondes ?? 10)) return false;
+    if (!allerVoir(element, opts.secondes ?? 10, opts.etat)) return false;
     if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir(opts.etat);
     const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (dit) direLa(element, dit, false);
@@ -1054,20 +1134,28 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   }
 
   let finGeste: ReturnType<typeof setTimeout> | undefined;
-  /** Prend la silhouette d'un geste un moment, puis reprend sa vie. Sans effet si elle ne peut pas bouger. */
-  function geste(id: GesteLia, secondes?: number): boolean {
-    const g = trouverGeste(id);
-    if (!g || !peutBouger()) return false;
+  /** Prend une silhouette de son moteur un moment, puis reprend sa vie. Sans effet si elle ne peut pas bouger. */
+  function tenir(etat: string, secondes?: number): boolean {
+    if (!ST.includes(etat) || !peutBouger()) return false;
     clearTimeout(finGeste);
     finAttention();
-    etatForce = g.etat;
-    choisir(g.etat);
+    etatForce = etat;
+    choisir(etat);
     finGeste = setTimeout(() => {
-      if (detruit || etatForce !== g.etat) return;
+      if (detruit || etatForce !== etat) return;
       etatForce = null;
       choisir("repos");
     }, dureeGeste(secondes) * 1000);
     return true;
+  }
+  /** Un des gestes du menu du corps. */
+  function geste(id: GesteLia, secondes?: number): boolean {
+    const g = trouverGeste(id);
+    return !!g && tenir(g.etat, secondes);
+  }
+  /** Une des 39 actions (« analyse », « lit », « ecrit »…) : l'hôte la montre quand elle fait vraiment ce travail. */
+  function activite(etat: string, secondes?: number): boolean {
+    return estAction(etat) && tenir(etat, secondes);
   }
 
   /* ── son cerveau : elle choisit selon ses envies (src/cerveau.ts), puis le fait ── */
@@ -1091,11 +1179,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const direMonde = (motif: MotifMonde, p: PropositionMonde): void => {
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
-    if (el && allerVoir(el, 9)) {
-      if (!etatForce) choisir(etatSur(ETAT_MONDE[motif]));
+    const etat = etatSur(p.etat && estAction(p.etat) ? p.etat : ETAT_MONDE[motif]);
+    if (el && allerVoir(el, 9, etat)) {
+      if (!etatForce) choisir(etat);
     } else {
       if (motif === "appeler") venirPres();
-      passagere(etatSur(ETAT_MONDE[motif]), 5);
+      passagere(etat, 5);
     }
     setTimeout(() => {
       if (detruit || chatOuvert || menuOuvert || glisse || parle) return;
@@ -1113,7 +1202,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     };
     if (id === "jouer") {
       const pool = SILHOUETTES_JEU[humeurNom] ?? SILHOUETTES_JEU["neutre"] ?? ["repos"];
-      passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 3.6, 5.6));
+      passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 5, 8));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
       errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
@@ -1154,7 +1243,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }
       errance = { jusqua: t + 4 };
     } else {
-      errance = { jusqua: t + entre(Math.random, 8, 16) };
+      errance = { jusqua: t + entre(Math.random, 6, 12) };
       choisir("repos");
     }
   };
@@ -1510,6 +1599,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     partage: () => ({ actif: !!hote, lu: lectureFaite, version: versionVue, maj: majVue }),
     envoyer: envoyerVers,
     geste,
+    activite,
     venirPres,
     rester: () => {
       finAttention();

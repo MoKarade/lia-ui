@@ -48,6 +48,13 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__rangee{display:grid;gap:4px;padding:.2rem .1rem}
 .lia-ui__rangee--humeurs{grid-template-columns:repeat(3,1fr)}
 .lia-ui__rangee--gestes{grid-template-columns:repeat(4,1fr)}
+.lia-ui__actions{max-height:min(44vh,340px);overflow-y:auto;padding:.1rem .1rem .3rem;display:flex;flex-direction:column;gap:.2rem}
+.lia-ui__actions[hidden]{display:none}
+.lia-ui__famille-titre{margin:0;padding:.35rem .6rem .1rem;font-size:.72rem;color:var(--lia-soft)}
+.lia-ui__rangee--actions{grid-template-columns:repeat(2,1fr)}
+.lia-ui__action{padding:0 .5rem;font-size:.82rem;line-height:1.15}
+.lia-ui__item[aria-expanded]::after{content:"";margin-left:auto;width:.45rem;height:.45rem;border-right:2px solid var(--lia-soft);border-bottom:2px solid var(--lia-soft);transform:rotate(45deg) translateY(-2px)}
+.lia-ui__item[aria-expanded=true]::after{transform:rotate(-135deg)}
 .lia-ui__humeur{justify-content:flex-start;gap:.4rem;padding:0 .5rem;font-size:.82rem;border:1px solid transparent}
 .lia-ui__humeur::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--lia-point,var(--lia-soft))}
 .lia-ui__humeur[aria-checked=true]{border-color:var(--lia-point,var(--lia-accent));background:var(--lia-surface-2)}

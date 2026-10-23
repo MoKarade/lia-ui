@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle } from './etat-ubyKQIJo.mjs';
-export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, c as ENVIES_DEPART, d as Envies, e as EnvoiLia, E as EtatHote, f as EtatLia, F as FaitLia, G as GESTES, g as GesteLia, H as HUMEURS_LIA, h as HUMEURS_MENU, i as Hasard, j as HumeurLia, k as LIBELLE_HUMEUR, M as MotifMonde, l as MotifSpontane, m as OptionsElements, P as ParoleSpontanee, n as PropositionMonde, o as PuceLia, R as ReponseLia, Z as ZoneVie, p as apresComportement, q as candidats, r as choisirComportement, s as dansZone, t as majEnvies, u as pointDansZone, v as prochaineDecision } from './etat-ubyKQIJo.mjs';
+import { O as OptionsLia, L as LiaHandle } from './etat-CWkvIV18.mjs';
+export { A as ActionLia, C as Candidat, a as Comportement, D as Decision, b as DescriptionElement, c as ENVIES_DEPART, d as Envies, e as EnvoiLia, E as EtatHote, f as EtatLia, F as FaitLia, G as GESTES, g as GesteLia, H as HUMEURS_LIA, h as HUMEURS_MENU, i as Hasard, j as HumeurLia, k as LIBELLE_HUMEUR, M as MotifMonde, l as MotifSpontane, m as OptionsElements, P as ParoleSpontanee, n as PropositionMonde, o as PuceLia, R as ReponseLia, Z as ZoneVie, p as apresComportement, q as candidats, r as choisirComportement, s as dansZone, t as majEnvies, u as pointDansZone, v as prochaineDecision } from './etat-CWkvIV18.mjs';
 
 declare function mountLia(options?: OptionsLia): LiaHandle;
 
@@ -36,9 +36,27 @@ declare function decrireParDefaut(cible: Element): ElementDecrit;
  */
 declare function composerQuestion(mode: ModeElement, d: ElementDecrit, question?: string): string;
 
+/**
+ * Ce qu'elle est en train de FAIRE, dit par une silhouette de son moteur (maquette v5 : 39 actions en 8 familles).
+ * Fonctions pures : elles choisissent la silhouette, jamais une phrase. Les 39 sont toutes atteignables :
+ * d'après la question de Marc, l'élément qu'elle regarde, ce que l'hôte annonce ou son humeur.
+ */
+interface ActionMoteur {
+    id: string;
+    /** Au féminin, comme elle (« Elle lit »). */
+    libelle: string;
+}
+interface FamilleActions {
+    famille: string;
+    actions: readonly ActionMoteur[];
+}
+/** Les 39 silhouettes du moteur, rangées comme dans la maquette (même ordre, mêmes familles). */
+declare const FAMILLES_ACTIONS: readonly FamilleActions[];
+declare const ACTIONS_LIA: readonly string[];
+
 /** Le nom de chacune des 40 humeurs (noms, pas d'accord : « Humeur : sérénité »), pour la pastille que LIA dessine. */
 declare const LIBELLES_HUMEURS: Readonly<Record<string, string>>;
 declare const libelleHumeur: (nom: string) => string;
 declare function couleurHumeur(nom: string): string;
 
-export { ENTREES_MENU, LIBELLES_HUMEURS, LiaHandle, type ModeElement, OptionsLia, SELECTEUR_ELEMENTS, composerQuestion, couleurHumeur, decrireParDefaut, libelleHumeur, mountLia };
+export { ACTIONS_LIA, ENTREES_MENU, FAMILLES_ACTIONS, type FamilleActions, LIBELLES_HUMEURS, LiaHandle, type ModeElement, OptionsLia, SELECTEUR_ELEMENTS, composerQuestion, couleurHumeur, decrireParDefaut, libelleHumeur, mountLia };

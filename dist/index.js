@@ -20,8 +20,10 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  ACTIONS_LIA: () => ACTIONS_LIA,
   ENTREES_MENU: () => ENTREES_MENU,
   ENVIES_DEPART: () => ENVIES_DEPART,
+  FAMILLES_ACTIONS: () => FAMILLES_ACTIONS,
   GESTES: () => GESTES,
   HUMEURS_LIA: () => HUMEURS_LIA,
   HUMEURS_MENU: () => HUMEURS_MENU,
@@ -142,6 +144,155 @@ function dansZone(zone, x, y, marge) {
   return { x: Math.min(maxX, Math.max(minX, x)), y: Math.min(maxY, Math.max(minY, y)) };
 }
 
+// src/activite.ts
+var FAMILLES_ACTIONS = [
+  {
+    famille: "Pr\xE9sence",
+    actions: [
+      { id: "repos", libelle: "Au repos" },
+      { id: "ecoute", libelle: "Elle \xE9coute" },
+      { id: "reponse", libelle: "Elle r\xE9pond" },
+      { id: "demande", libelle: "Elle demande" },
+      { id: "confus", libelle: "Elle ne comprend pas" },
+      { id: "indispo", libelle: "Indisponible" },
+      { id: "reveille", libelle: "Elle se r\xE9veille" }
+    ]
+  },
+  {
+    famille: "Pens\xE9e",
+    actions: [
+      { id: "reflexion", libelle: "Elle r\xE9fl\xE9chit" },
+      { id: "apprend", libelle: "Elle apprend" },
+      { id: "souvient", libelle: "Elle se souvient" }
+    ]
+  },
+  {
+    famille: "Recherche",
+    actions: [
+      { id: "consulte", libelle: "Elle consulte tes apps" },
+      { id: "cherche", libelle: "Elle cherche" },
+      { id: "lit", libelle: "Elle lit" },
+      { id: "surveille", libelle: "Elle surveille" }
+    ]
+  },
+  {
+    famille: "Cr\xE9ation",
+    actions: [
+      { id: "ecrit", libelle: "Elle \xE9crit" },
+      { id: "code", libelle: "Elle programme" },
+      { id: "image", libelle: "Elle dessine" },
+      { id: "traduit", libelle: "Elle traduit" }
+    ]
+  },
+  {
+    famille: "Calcul",
+    actions: [
+      { id: "calcule", libelle: "Elle calcule" },
+      { id: "planifie", libelle: "Elle planifie" },
+      { id: "organise", libelle: "Elle range" },
+      { id: "synchronise", libelle: "Elle synchronise" },
+      { id: "envoie", libelle: "Elle envoie" }
+    ]
+  },
+  {
+    famille: "Alerte",
+    actions: [
+      { id: "securise", libelle: "Elle s\xE9curise" },
+      { id: "alerte", libelle: "Elle pr\xE9vient" },
+      { id: "reussi", libelle: "C'est fait" },
+      { id: "veille", libelle: "Elle dort" }
+    ]
+  },
+  {
+    famille: "\xC9motion",
+    actions: [
+      { id: "salue", libelle: "Elle salue" },
+      { id: "content", libelle: "Elle est contente" },
+      { id: "triste", libelle: "Elle est triste" },
+      { id: "surpris", libelle: "Elle est surprise" },
+      { id: "remercie", libelle: "Elle te remercie" },
+      { id: "musique", libelle: "Elle fredonne" }
+    ]
+  },
+  {
+    famille: "Travail",
+    actions: [
+      { id: "concentre", libelle: "Elle se concentre" },
+      { id: "attend", libelle: "Elle attend" },
+      { id: "telecharge", libelle: "Elle t\xE9l\xE9charge" },
+      { id: "verifie", libelle: "Elle v\xE9rifie" },
+      { id: "appelle", libelle: "Elle t'appelle" },
+      { id: "analyse", libelle: "Elle analyse" }
+    ]
+  }
+];
+var ACTIONS_LIA = FAMILLES_ACTIONS.flatMap((f) => f.actions.map((a) => a.id));
+var estAction = (id) => !!id && ACTIONS_LIA.includes(id);
+var floue = (q) => (q.match(/\p{L}/gu) ?? []).length < 3;
+var SUJETS = [
+  ["traduit", /traduis|traduction|en (anglais|fran[cç]ais|espagnol|allemand)/i],
+  ["image", /dessine|illustration|\blogo\b|sch[ée]ma|photo|\bimage\b/i],
+  ["code", /\bcode\b|script|fonction|\bbug\b|programmer|programme-moi|requ[êe]te|\bsql\b|regex|d[ée]ploie/i],
+  ["ecrit", /[ée]cris|[ée]crire|r[ée]dige|lettre|courriel|\bmail\b|brouillon|\bcv\b|message pour/i],
+  ["souvient", /souvien|m[ée]moire|rappelle-toi|tu te rappelles|d[ée]j[àa] dit|derni[èe]re fois|qu'est-ce que (je|tu) /i],
+  ["planifie", /planifi|agenda|calendrier|rendez-vous|t[âa]ches?\b|[àa] faire|demain|semaine prochaine/i],
+  ["organise", /\brange|\btrie|classe|dossiers?|fichiers?|doublons|renomme/i],
+  ["synchronise", /synchro|mets? [àa] jour|actualise|rafra[îi]chi/i],
+  ["envoie", /\benvoie|envoyer|transmets|partage/i],
+  ["telecharge", /t[ée]l[ée]charge|r[ée]cup[èe]re|importe|exporte/i],
+  ["securise", /s[ée]curit|mot de passe|\bjeton|\bsecret|prot[èe]ge|piratage/i],
+  ["verifie", /v[ée]rifie|contr[ôo]le|assure-toi|tout va bien|tout est (ok|bon)|sant[ée]\b/i],
+  ["appelle", /appelle[- ]moi|contacte|t[ée]l[ée]phone/i],
+  ["analyse", /analyse|compare|tendance|diagnostic|bilan|pourquoi|explique|que penses|qu'en penses/i],
+  ["calcule", /combien|calcul|total|moyenne|co[ûu]t|budget|pourcent|%|projection|\d{2,}/i],
+  ["consulte", /\bapps?\b|alertes?|[ée]tat|statut|jobai|carai|financeai|driveai|batchchef|memoryai|hub\b/i],
+  ["cherche", /cherche|trouve|recherche|\bo[ùu] (est|sont|se)\b|y a-t-il|existe/i],
+  ["lit", /\blis\b|\blire\b|lecture|document|article|r[ée]sume|texte/i]
+];
+function activiteQuestion(question) {
+  const q = question.trim();
+  if (floue(q)) return "confus";
+  for (const [id, re] of SUJETS) if (re.test(q)) return id;
+  return "reflexion";
+}
+function suiteReflexion(base, secondes) {
+  if (secondes < 6) return base;
+  if (secondes < 15) return "concentre";
+  return "attend";
+}
+function activiteElement(el2, geo) {
+  const dicte = el2.getAttribute("data-lia-activite")?.trim();
+  if (estAction(dicte)) return dicte;
+  const tag = el2.tagName.toLowerCase();
+  const role = el2.getAttribute("role") ?? "";
+  const classes = `${el2.className && typeof el2.className === "string" ? el2.className : ""} ${el2.id}`;
+  if (tag === "textarea" || tag === "input" || el2.hasAttribute("contenteditable") || role === "textbox") return "ecrit";
+  if (tag === "pre" || tag === "code" || /\b(code|snippet|terminal)\b/i.test(classes)) return "code";
+  if (tag === "meter" || tag === "progress" || /^(meter|progressbar)$/.test(role) || /jauge|barre|gauge|progress/i.test(classes)) return "calcule";
+  if (role === "alert" || role === "status" || /alert|alerte|warning|erreur|incident/i.test(classes)) return "surveille";
+  if (tag === "canvas" || tag === "svg" || role === "img" || /graph|courbe|chart|sparkline/i.test(classes)) return "calcule";
+  if (tag === "img" || tag === "picture" || tag === "video") return "lit";
+  if (tag === "table" || role === "table" || role === "grid") return "analyse";
+  if (/cl[ée]|metric|mesure|kpi|chiffre/i.test(classes)) return "consulte";
+  const gros = geo ? geo.largeur > 420 || geo.hauteur > 240 : false;
+  if (gros || tag === "section" || tag === "article" || /carte|card|bloc/i.test(classes)) return "analyse";
+  return "lit";
+}
+var ACTIVITES_JEU = {
+  joyeux: ["musique", "content", "salue", "image", "remercie"],
+  excite: ["content", "musique", "surpris", "synchronise", "telecharge"],
+  espiegle: ["musique", "salue", "cherche", "image", "surpris"],
+  curieux: ["cherche", "surveille", "lit", "apprend", "analyse", "consulte"],
+  calme: ["reflexion", "souvient", "musique", "attend", "planifie", "organise"],
+  neutre: ["reflexion", "attend", "surveille", "verifie", "lit"],
+  fatigue: ["attend", "reflexion", "souvient"],
+  inquiet: ["surveille", "attend", "securise", "verifie", "consulte"],
+  triste: ["triste", "souvient", "attend"],
+  concentre: ["concentre", "code", "calcule", "analyse", "verifie", "ecrit", "traduit"],
+  fier: ["content", "reussi", "envoie", "remercie"],
+  timide: ["reflexion", "attend", "lit", "apprend"]
+};
+
 // src/cerveau.ts
 var ENVIES_DEPART = { energie: 0.85, curiosite: 0.35, social: 0.45, inquiet: 0, joie: 0.3, ennui: 0.15 };
 var MOTIFS_MONDE = ["appeler", "resumer", "feliciter", "rappeler", "souvenir", "accompagner"];
@@ -201,10 +352,10 @@ function candidats(e, c) {
   if (!c.tranquille && monde.includes("accompagner")) liste.push({ id: "accompagner", poids: 2.1 + e.curiosite * 0.6 });
   if (c.present && monde.includes("feliciter")) liste.push({ id: "feliciter", poids: 0.2 + veut("feliciter") * 1.2 });
   if (c.veille) liste.push({ id: "veiller", poids: 0.1 + veut("veiller") * 1.2 });
-  liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.1 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
+  liste.push({ id: "jouer", poids: e.joie * 0.8 + 0.5 + (c.humeur === "joyeux" || c.humeur === "espiegle" ? 0.2 : 0) });
   if (c.deplacement && c.loinDeLaMaison && !c.tranquille) liste.push({ id: "rentrer", poids: 1.6 });
   if (e.energie < 0.3) liste.push({ id: "dormir", poids: (0.5 - e.energie) * 5 });
-  liste.push({ id: "repos", poids: 0.9 });
+  liste.push({ id: "repos", poids: 0.7 });
   return liste;
 }
 function choisirComportement(liste, hasard, courant = null, pesee) {
@@ -218,20 +369,7 @@ function choisirComportement(liste, hasard, courant = null, pesee) {
   }
   return liste[liste.length - 1]?.id ?? "repos";
 }
-var SILHOUETTES_JEU = {
-  joyeux: ["musique", "content", "salue"],
-  excite: ["content", "musique", "surpris"],
-  espiegle: ["musique", "salue", "cherche"],
-  curieux: ["cherche", "surveille", "lit", "apprend"],
-  calme: ["reflexion", "souvient", "musique", "attend"],
-  neutre: ["reflexion", "attend", "surveille"],
-  fatigue: ["attend", "reflexion"],
-  inquiet: ["surveille", "attend", "securise"],
-  triste: ["triste", "souvient", "attend"],
-  concentre: ["concentre", "code", "calcule"],
-  fier: ["content", "reussi"],
-  timide: ["reflexion", "attend"]
-};
+var SILHOUETTES_JEU = ACTIVITES_JEU;
 var entre = (hasard, a, b) => a + hasard() * (b - a);
 var JOURNAL_MAX = 20;
 function ajouterFait(journal, fait) {
@@ -2619,6 +2757,13 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__rangee{display:grid;gap:4px;padding:.2rem .1rem}
 .lia-ui__rangee--humeurs{grid-template-columns:repeat(3,1fr)}
 .lia-ui__rangee--gestes{grid-template-columns:repeat(4,1fr)}
+.lia-ui__actions{max-height:min(44vh,340px);overflow-y:auto;padding:.1rem .1rem .3rem;display:flex;flex-direction:column;gap:.2rem}
+.lia-ui__actions[hidden]{display:none}
+.lia-ui__famille-titre{margin:0;padding:.35rem .6rem .1rem;font-size:.72rem;color:var(--lia-soft)}
+.lia-ui__rangee--actions{grid-template-columns:repeat(2,1fr)}
+.lia-ui__action{padding:0 .5rem;font-size:.82rem;line-height:1.15}
+.lia-ui__item[aria-expanded]::after{content:"";margin-left:auto;width:.45rem;height:.45rem;border-right:2px solid var(--lia-soft);border-bottom:2px solid var(--lia-soft);transform:rotate(45deg) translateY(-2px)}
+.lia-ui__item[aria-expanded=true]::after{transform:rotate(-135deg)}
 .lia-ui__humeur{justify-content:flex-start;gap:.4rem;padding:0 .5rem;font-size:.82rem;border:1px solid transparent}
 .lia-ui__humeur::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--lia-point,var(--lia-soft))}
 .lia-ui__humeur[aria-checked=true]{border-color:var(--lia-point,var(--lia-accent));background:var(--lia-surface-2)}
@@ -2701,7 +2846,7 @@ var DELAI_CHAT_OUBLIE = 120;
 var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
 var SURVOL_MS = 4e3;
 var DELAI_ACCOMPAGNER_MS = 18e4;
-var ETAT_MONDE = { appeler: "alerte", resumer: "surveille", feliciter: "reussi", rappeler: "surveille", souvenir: "content", accompagner: "surveille" };
+var ETAT_MONDE = { appeler: "alerte", resumer: "analyse", feliciter: "reussi", rappeler: "planifie", souvenir: "souvient", accompagner: "lit" };
 var etatSur = (etat) => ST.includes(etat) ? etat : "repos";
 function mountLia(options = {}) {
   if (typeof document === "undefined") throw new Error("mountLia : \xE0 appeler dans le navigateur uniquement");
@@ -2837,6 +2982,7 @@ function mountLia(options = {}) {
     const e = ST.includes(id) ? id : "repos";
     if (e !== etat) debut[e] = sansMouvement ? -1.6 : t;
     etat = e;
+    corpsEl.dataset["etat"] = e;
   };
   const afficherHumeur = (nom) => {
     if (!puceHumeur || !pointHumeur || !texteHumeur) return;
@@ -2901,9 +3047,13 @@ function mountLia(options = {}) {
     parle = true;
     choisir2("reponse");
   };
+  let attendReponse = false;
   const finVoix = () => {
     parle = false;
-    if (!chatOuvert) choisir2(etatForce ?? "repos");
+    if (chatOuvert) choisir2(etatForce ?? (attendReponse ? "demande" : "ecoute"));
+    else if (bulleChips && !bulle.hidden) choisir2(etatForce ?? "demande");
+    else if (attention?.type === "element" && attention.colle) choisir2(etatForce ?? attention.etatArrivee);
+    else choisir2(etatForce ?? "repos");
   };
   let bulleChips = null;
   const tais = () => {
@@ -2980,8 +3130,9 @@ function mountLia(options = {}) {
       points = null;
     }
   };
-  const poser = async (question, envoi = question) => {
+  const poser = async (question, envoi = question, base = activiteQuestion(question)) => {
     enCours?.abort();
+    attendReponse = false;
     ajouterMsg(question, "moi");
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
@@ -2991,7 +3142,15 @@ function mountLia(options = {}) {
     const ctrl = new AbortController();
     enCours = ctrl;
     const minuterie = setTimeout(() => ctrl.abort(), DELAI_QUESTION);
-    choisir2("reflexion");
+    const debutAttente = t;
+    let silhouette = "";
+    const suivreAttente = () => {
+      if (enCours !== ctrl || detruit || etatForce) return;
+      const e = suiteReflexion(base, t - debutAttente);
+      if (e !== silhouette) choisir2(silhouette = e);
+    };
+    suivreAttente();
+    const veilleAttente = setInterval(suivreAttente, 500);
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
@@ -3006,7 +3165,14 @@ function mountLia(options = {}) {
       }
       if (rep.blocks?.length && options.renderBlocks) options.renderBlocks(rep.blocks, m);
       if (rep.mood) setHumeur2(rep.mood);
+      attendReponse = !!rep.chips?.length || /\?\s*[»"]?$/.test(rep.text.trim());
       voix(rep.text);
+      if (rep.etat && estAction(rep.etat) && !etatForce) {
+        choisir2(rep.etat);
+        setTimeout(() => {
+          if (!detruit && parle && !etatForce) choisir2("reponse");
+        }, 1600);
+      }
     } catch (e) {
       if (detruit) return;
       montrerReflexion(false);
@@ -3016,6 +3182,7 @@ function mountLia(options = {}) {
       choisir2("indispo");
     } finally {
       clearTimeout(minuterie);
+      clearInterval(veilleAttente);
       if (enCours === ctrl) enCours = null;
       if (envoyer) envoyer.disabled = false;
       champ?.focus();
@@ -3150,6 +3317,40 @@ function mountLia(options = {}) {
     }
     return rangee;
   };
+  const panneauActions = (replacer) => {
+    const bascule = el("button", "lia-ui__item", "Toutes ses actions");
+    bascule.type = "button";
+    bascule.setAttribute("role", "menuitem");
+    bascule.setAttribute("aria-expanded", "false");
+    const panneau = el("div", "lia-ui__actions");
+    panneau.hidden = true;
+    const remplir = () => {
+      for (const f of FAMILLES_ACTIONS) {
+        const groupe = el("div", "lia-ui__famille");
+        groupe.setAttribute("role", "group");
+        groupe.setAttribute("aria-label", f.famille);
+        groupe.appendChild(el("p", "lia-ui__famille-titre", f.famille));
+        const grille = el("div", "lia-ui__rangee lia-ui__rangee--actions");
+        for (const a of f.actions) {
+          const b = item(a.libelle, () => {
+            activite(a.id, 5);
+          });
+          b.classList.add("lia-ui__action");
+          b.dataset["action"] = a.id;
+          grille.appendChild(b);
+        }
+        groupe.appendChild(grille);
+        panneau.appendChild(groupe);
+      }
+    };
+    bascule.addEventListener("click", () => {
+      if (!panneau.firstChild) remplir();
+      panneau.hidden = !panneau.hidden;
+      bascule.setAttribute("aria-expanded", String(!panneau.hidden));
+      replacer();
+    });
+    return [bascule, panneau];
+  };
   const caseAnimations = () => {
     const b = item("Animations compl\xE8tes", () => {
       doux = !doux;
@@ -3166,6 +3367,13 @@ function mountLia(options = {}) {
     fermerMenu();
     tais();
     menuOuvert = true;
+    const placerMenu = () => {
+      if (!menu) return;
+      const z = zoneVie();
+      const r = couche.getBoundingClientRect();
+      menu.style.left = `${limiter2(x - r.left, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
+      menu.style.top = `${limiter2(y - r.top, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
+    };
     menu = el("div", "lia-ui__menu");
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", element ? "LIA : que faire de cet \xE9l\xE9ment" : "Actions de LIA");
@@ -3179,7 +3387,10 @@ function mountLia(options = {}) {
       menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
       menu.appendChild(item("Lui parler", ouvrirChat));
       menu.appendChild(rangeeHumeurs());
-      if (!sansMouvement) menu.appendChild(rangeeGestes());
+      if (!sansMouvement) {
+        menu.appendChild(rangeeGestes());
+        menu.append(...panneauActions(placerMenu));
+      }
       if (reduit && !sansMouvement) menu.appendChild(caseAnimations());
       menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
     }
@@ -3197,7 +3408,7 @@ function mountLia(options = {}) {
       }
     }
     menu.addEventListener("keydown", (e) => {
-      const items = [...menu?.querySelectorAll("[role^=menuitem]") ?? []];
+      const items = [...menu?.querySelectorAll("[role^=menuitem]") ?? []].filter((x2) => !x2.closest("[hidden]"));
       const i = items.indexOf(document.activeElement);
       if (e.key === "Escape") {
         e.preventDefault();
@@ -3214,12 +3425,7 @@ function mountLia(options = {}) {
       }
     });
     couche.appendChild(menu);
-    const z = zoneVie();
-    const r = couche.getBoundingClientRect();
-    const lx = x - r.left;
-    const ly = y - r.top;
-    menu.style.left = `${limiter2(lx, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
-    menu.style.top = `${limiter2(ly, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
+    placerMenu();
     menu.querySelector("[role=menuitem]")?.focus();
   };
   function fermerMenu() {
@@ -3258,6 +3464,7 @@ function mountLia(options = {}) {
   function surElement(cible2, d, mode) {
     if (detruit) return;
     clearTimeout(attenteElement);
+    const baseMode = { expliquer: "analyse", changer: "planifie", regarder: "lit", question: "reflexion" }[mode];
     const demarrer = () => {
       if (detruit || !cible2.isConnected) return;
       reperee = cible2;
@@ -3268,10 +3475,9 @@ function mountLia(options = {}) {
         return;
       }
       impulsion(reseau, "demande");
-      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d));
+      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d), baseMode);
     };
-    if (!allerVoir(cible2, 8)) return demarrer();
-    choisir2("reflexion");
+    if (!allerVoir(cible2, 8, baseMode)) return demarrer();
     let essais = 0;
     const guetter = () => {
       const a = attention;
@@ -3438,11 +3644,18 @@ function mountLia(options = {}) {
     choisir2(etatForce ?? "repos");
     return true;
   }
-  function allerVoir(element, secondes = 10) {
+  function allerVoir(element, secondes = 10, etatArrivee) {
     if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
-    attention = { type: "element", el: element, jusqua: t + secondes, colle: false };
+    const r = element.getBoundingClientRect();
+    attention = {
+      type: "element",
+      el: element,
+      jusqua: t + secondes,
+      colle: false,
+      etatArrivee: etatArrivee && estAction(etatArrivee) ? etatArrivee : activiteElement(element, { largeur: r.width, hauteur: r.height })
+    };
     errance = { jusqua: t + secondes };
-    choisir2(etatForce ?? "surveille");
+    choisir2(etatForce ?? "cherche");
     marquerRegard(element);
     return true;
   }
@@ -3472,7 +3685,10 @@ function mountLia(options = {}) {
     if (!rect || !estVisible(rect, f)) return finAttention();
     const p = pointPresDeLElement(rect, rayon, f);
     cible = { x: p.x - r.left, y: p.y - r.top };
-    if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) a.colle = true;
+    if (!a.colle && Math.hypot(cible.x - pos.x, cible.y - pos.y) < 22 && Math.hypot(pos.vx, pos.vy) < 200) {
+      a.colle = true;
+      if (!etatForce && !parle) choisir2(a.etatArrivee);
+    }
   }
   const LONGUEUR_MAX_SPONTANE = 280;
   const silence = options.silence ?? [22, 7];
@@ -3506,26 +3722,32 @@ function mountLia(options = {}) {
     if (dit) direLa(el2, dit, true);
   };
   function envoyerVers(element, opts = {}) {
-    if (!allerVoir(element, opts.secondes ?? 10)) return false;
+    if (!allerVoir(element, opts.secondes ?? 10, opts.etat)) return false;
     if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir2(opts.etat);
     const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (dit) direLa(element, dit, false);
     return true;
   }
   let finGeste;
-  function geste(id, secondes) {
-    const g = trouverGeste(id);
-    if (!g || !peutBouger()) return false;
+  function tenir(etat2, secondes) {
+    if (!ST.includes(etat2) || !peutBouger()) return false;
     clearTimeout(finGeste);
     finAttention();
-    etatForce = g.etat;
-    choisir2(g.etat);
+    etatForce = etat2;
+    choisir2(etat2);
     finGeste = setTimeout(() => {
-      if (detruit || etatForce !== g.etat) return;
+      if (detruit || etatForce !== etat2) return;
       etatForce = null;
       choisir2("repos");
     }, dureeGeste(secondes) * 1e3);
     return true;
+  }
+  function geste(id, secondes) {
+    const g = trouverGeste(id);
+    return !!g && tenir(g.etat, secondes);
+  }
+  function activite(etat2, secondes) {
+    return estAction(etat2) && tenir(etat2, secondes);
   }
   const passagere = (etat2, secondes) => {
     choisir2(etat2);
@@ -3544,11 +3766,12 @@ function mountLia(options = {}) {
   const direMonde = (motif, p) => {
     const texte = p.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     const el2 = p.element?.isConnected && estRegarde(p.element.getBoundingClientRect(), fenetre()) ? p.element : null;
-    if (el2 && allerVoir(el2, 9)) {
-      if (!etatForce) choisir2(etatSur(ETAT_MONDE[motif]));
+    const etat2 = etatSur(p.etat && estAction(p.etat) ? p.etat : ETAT_MONDE[motif]);
+    if (el2 && allerVoir(el2, 9, etat2)) {
+      if (!etatForce) choisir2(etat2);
     } else {
       if (motif === "appeler") venirPres();
-      passagere(etatSur(ETAT_MONDE[motif]), 5);
+      passagere(etat2, 5);
     }
     setTimeout(() => {
       if (detruit || chatOuvert || menuOuvert || glisse || parle) return;
@@ -3565,7 +3788,7 @@ function mountLia(options = {}) {
     };
     if (id === "jouer") {
       const pool = SILHOUETTES_JEU[humeurNom] ?? SILHOUETTES_JEU["neutre"] ?? ["repos"];
-      passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 3.6, 5.6));
+      passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 5, 8));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
       errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
@@ -3606,7 +3829,7 @@ function mountLia(options = {}) {
       }
       errance = { jusqua: t + 4 };
     } else {
-      errance = { jusqua: t + entre(Math.random, 8, 16) };
+      errance = { jusqua: t + entre(Math.random, 6, 12) };
       choisir2("repos");
     }
   };
@@ -3936,6 +4159,7 @@ function mountLia(options = {}) {
     partage: () => ({ actif: !!hote, lu: lectureFaite, version: versionVue, maj: majVue }),
     envoyer: envoyerVers,
     geste,
+    activite,
     venirPres,
     rester: () => {
       finAttention();
@@ -3974,8 +4198,10 @@ function mountLia(options = {}) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  ACTIONS_LIA,
   ENTREES_MENU,
   ENVIES_DEPART,
+  FAMILLES_ACTIONS,
   GESTES,
   HUMEURS_LIA,
   HUMEURS_MENU,
