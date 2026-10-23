@@ -105,12 +105,12 @@ export interface ContexteChoix {
   veille?: boolean;
   /** Ses intentions (0 à 1) ; absent = aucune. */
   intentions?: Readonly<Record<string, number>>;
-  /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 40 s, l'envie de bouger monte. */
+  /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 30 s, l'envie de bouger monte. */
   secondesImmobile?: number;
 }
 
-/** Envie de bouger qui monte avec l'immobilité : rien avant 40 s, puis jusqu'à +1,2 à 100 s (promener devient alors le choix le plus probable). */
-export const envieDeBouger = (secondesImmobile: number | undefined): number => Math.min(1.2, Math.max(0, ((secondesImmobile ?? 0) - 40) / 50));
+/** Envie de bouger qui monte avec l'immobilité : rien avant 30 s, +1 à 50 s, puis jusqu'à +3,6 (vers 100 s, promener bat même « appeler »). Elle ne reste jamais figée bien longtemps. */
+export const envieDeBouger = (secondesImmobile: number | undefined): number => Math.min(3.6, Math.max(0, ((secondesImmobile ?? 0) - 30) / 20));
 
 export interface Candidat {
   id: Comportement;
