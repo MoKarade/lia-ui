@@ -1,0 +1,145 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ENVIES_DEPART } from "../src/cerveau.js";
+import { adopter, empreinte, validerEtat, type EtatHote, type EtatLia } from "../src/etat.js";
+import { mountLia } from "../src/lia.js";
+import type { LiaHandle } from "../src/types.js";
+import { installerEnvironnement } from "./setup.js";
+
+const jour = (d = new Date()): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const etat = (o: Partial<EtatLia> = {}): EtatLia => ({
+  version: 3,
+  maj: Date.now() + 1000,
+  envies: { ...ENVIES_DEPART, joie: 0.9, ennui: 0.1 },
+  journal: [{ t: Date.now() - 5000, quoi: "jouer" }],
+  lente: { calme: 0.4 },
+  humeur: "joyeux",
+  relances: { jour: jour(), n: 1 },
+  ...o,
+});
+
+describe("validerEtat : ce que l'hôte rend est une donnée", () => {
+  it("accepte un état complet et retire les clés inconnues", () => {
+    const e = validerEtat({ ...etat(), secret: "x", journal: [{ t: 5, quoi: "jouer", contenu: "texte de Marc" }] });
+    expect(e).not.toBeNull();
+    expect(e).not.toHaveProperty("secret");
+    expect(e?.journal).toEqual([{ t: 5, quoi: "jouer" }]);
+  });
+
+  it("refuse ce qui n'est pas un état", () => {
+    for (const x of [null, 3, "x", {}, { ...etat(), version: -1 }, { ...etat(), version: 1.5 }, { ...etat(), maj: 0 }, { ...etat(), envies: { joie: 2 } }, { ...etat(), humeur: "<img src=x>" }, { ...etat(), relances: { jour: "hier", n: 1 } }, { ...etat(), relances: { jour: jour(), n: 1000 } }]) {
+      expect(validerEtat(x)).toBeNull();
+    }
+  });
+
+  it("borne les nombres : une mémoire lente hors de [0, 1] ou à clé douteuse est écartée, les faits inconnus aussi", () => {
+    const e = validerEtat(etat({ lente: { calme: 0.5, mauvais: 7, "a b": 0.2, "<x>": 0.3 }, journal: [{ t: 1, quoi: "jouer" }, { t: 2, quoi: "inconnu" as never }, { t: Number.NaN, quoi: "repos" }] }));
+    expect(e?.lente).toEqual({ calme: 0.5 });
+    expect(e?.journal).toEqual([{ t: 1, quoi: "jouer" }]);
+  });
+});
+
+describe("adopter et empreinte", () => {
+  it("adopte seulement un état plus récent (ou de même date et de version plus haute)", () => {
+    const d = etat({ maj: 1000, version: 5 });
+    expect(adopter(null, 0, 0)).toBe(false);
+    expect(adopter(d, 999, 9)).toBe(true);
+    expect(adopter(d, 1000, 4)).toBe(true);
+    expect(adopter(d, 1000, 5)).toBe(false);
+    expect(adopter(d, 1001, 0)).toBe(false);
+  });
+
+  it("l'empreinte ignore les variations minuscules des envies et réagit à l'humeur ou au journal", () => {
+    const a = etat();
+    expect(empreinte({ ...a, envies: { ...a.envies, joie: a.envies.joie + 0.01 } })).toBe(empreinte(a));
+    expect(empreinte({ ...a, humeur: "triste" })).not.toBe(empreinte(a));
+    expect(empreinte({ ...a, journal: [...a.journal, { t: 9, quoi: "repos" }] })).not.toBe(empreinte(a));
+  });
+});
+
+describe("LIA avec un état partagé", () => {
+  let lia: LiaHandle | null = null;
+  beforeEach(() => {
+    installerEnvironnement();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 23, 14, 0, 0));
+  });
+  afterEach(() => {
+    lia?.destroy();
+    lia = null;
+    vi.useRealTimers();
+  });
+  const monter = (hote: EtatHote): LiaHandle => (lia = mountLia({ etat: hote, vieAutonome: false, cle: "etat" }));
+
+  it("lit au montage et prend l'humeur, les envies et le journal de l'état partagé", async () => {
+    const distant = etat({ humeur: "inquiet" });
+    const l = monter({ lire: async () => distant, ecrire: async () => null });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(l.humeur().nom).toBe("inquiet");
+    expect(l.envies().joie).toBeCloseTo(0.9, 1);
+    expect(l.journal().map((f) => f.quoi)).toContain("jouer");
+    expect(l.partage()).toMatchObject({ actif: true, lu: true, version: 3 });
+  });
+
+  it("garde l'humeur de l'autre page malgré son propre réseau", async () => {
+    const l = monter({ lire: async () => etat({ humeur: "triste" }), ecrire: async () => null });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(l.humeur().nom).toBe("triste");
+  });
+
+  it("n'écrit jamais avant d'avoir lu : un hôte en panne ne fait pas effacer l'état d'une autre page", async () => {
+    const ecrire = vi.fn(async () => null);
+    const erreur = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const l = monter({ lire: async () => Promise.reject(new Error("hors ligne")), ecrire });
+    await vi.advanceTimersByTimeAsync(50_000);
+    expect(ecrire).not.toHaveBeenCalled();
+    expect(l.partage()).toMatchObject({ actif: true, lu: false });
+    expect(erreur).toHaveBeenCalledTimes(1);
+    expect(l.humeur().nom.length).toBeGreaterThan(0);
+  });
+
+  it("ignore un état invalide et garde le sien", async () => {
+    const l = monter({ lire: async () => ({ version: "x" }), ecrire: async () => null });
+    const avant = l.envies().joie;
+    await vi.advanceTimersByTimeAsync(10);
+    expect(l.envies().joie).toBeCloseTo(avant, 1);
+    expect(l.partage().version).toBe(0);
+  });
+
+  it("écrit son état à la version suivante au plus tard 20 s après quand il a changé", async () => {
+    const ecrire = vi.fn(async (e: EtatLia) => e);
+    const l = monter({ lire: async () => null, ecrire });
+    await vi.advanceTimersByTimeAsync(10);
+    l.setHumeur("fier");
+    await vi.advanceTimersByTimeAsync(21_000);
+    expect(ecrire).toHaveBeenCalled();
+    const e = ecrire.mock.calls[0]?.[0] as EtatLia;
+    expect(e.version).toBe(1);
+    expect(e.humeur).toBe("fier");
+    expect(Object.keys(e).sort()).toEqual(["envies", "humeur", "journal", "lente", "maj", "relances", "version"]);
+    expect(l.partage().version).toBeGreaterThanOrEqual(1);
+  });
+
+  it("si l'hôte rend un état plus récent (conflit), elle le prend", async () => {
+    const plusRecent = etat({ version: 40, humeur: "excite", maj: Date.now() + 60_000 });
+    const l = monter({ lire: async () => null, ecrire: async () => plusRecent });
+    await vi.advanceTimersByTimeAsync(21_000);
+    expect(l.partage().version).toBe(40);
+    expect(l.humeur().nom).toBe("excite");
+  });
+
+  it("relit chaque minute : l'état d'une autre page arrive en une minute au plus", async () => {
+    let distant: EtatLia | null = null;
+    // L'autre page écrit au moment où on la lit : son état est plus récent que le nôtre (qui s'est écrit à 20 s).
+    const l = monter({ lire: async () => (distant ? { ...distant, maj: Date.now() } : null), ecrire: async () => null });
+    await vi.advanceTimersByTimeAsync(10);
+    distant = etat({ humeur: "fier" });
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(l.humeur().nom).toBe("fier");
+  });
+
+  it("sans `etat`, rien ne part et elle vit comme avant", async () => {
+    const l = (lia = mountLia({ vieAutonome: false, cle: "sans" }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(l.partage()).toEqual({ actif: false, lu: false, version: 0, maj: 0 });
+  });
+});

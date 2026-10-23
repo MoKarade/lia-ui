@@ -1,4 +1,5 @@
 import type { Envies, FaitLia, MotifMonde } from "./cerveau.js";
+import type { EtatHote } from "./etat.js";
 import type { GesteLia } from "./gestes.js";
 
 export type { MotifMonde };
@@ -139,6 +140,13 @@ export interface OptionsLia {
    */
   humeurVisible?: boolean;
   /**
+   * Son état PARTAGÉ (envies, journal, mémoire lente, humeur, relances du jour) : c'est ce qui fait d'elle UNE seule LIA dans
+   * toutes les apps. Fourni par l'hôte (`etatHttp(url)` de `@mokarade/lia-ui/etat-http` pour une route de même origine) ; elle le lit au
+   * montage puis chaque minute, l'écrit toutes les 20 s si quelque chose a changé et à la fermeture de la page. Sans `etat`, ou si
+   * l'hôte échoue, elle garde son état local et vit quand même (jamais d'état inventé). La position et « animations complètes » restent locales.
+   */
+  etat?: EtatHote;
+  /**
    * Ce que l'hôte sait du monde, appelé chaque seconde : des entrées du réseau interne de LIA entre 0 et 1
    * (`alerte`, `nbAlertes`, `toutVert`, `changement`, `recurrence`, `tendBonne`, `tendMauvaise`, `g_<app>`, `v_<app>`…).
    * Elles priment sur celles qu'elle calcule seule (heure, activité de Marc, rythme des échanges). Absent : elle vit sans monde.
@@ -234,6 +242,8 @@ export interface LiaHandle {
   impulsion(nom: "touche" | "parle" | "reponse" | "rejet" | "scroll" | "demande" | "bon" | "mauvais", valeur?: number): void;
   /** Ce qu'elle a fait ces derniers temps (20 faits au plus, gardés dans le navigateur) : à l'hôte d'en faire une phrase. */
   journal(): FaitLia[];
+  /** Où en est son état partagé (`etat`) : branché, lu au moins une fois, et la dernière version/date vue ou écrite. */
+  partage(): { actif: boolean; lu: boolean; version: number; maj: number };
   /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
   venirPres(): boolean;
   /** Arrête de suivre ou de regarder : elle reste où elle est. */

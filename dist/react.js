@@ -301,6 +301,52 @@ function couleurHumeur(nom) {
   return tc ? `#${hex2(tc[0])}${hex2(tc[1])}${hex2(tc[2])}` : COULEURS_12["neutre"] ?? "#A7AEBD";
 }
 
+// src/etat.ts
+var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
+var LENTE_MAX = 80;
+var VERSION_MAX = 1e9;
+var estFraction = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
+function validerEtat(brut2) {
+  if (typeof brut2 !== "object" || brut2 === null) return null;
+  const o = brut2;
+  const { version, maj, envies, journal, lente, humeur: humeur2, relances } = o;
+  if (typeof version !== "number" || !Number.isInteger(version) || version < 0 || version > VERSION_MAX) return null;
+  if (typeof maj !== "number" || !Number.isFinite(maj) || maj <= 0) return null;
+  if (typeof envies !== "object" || envies === null || !Array.isArray(journal)) return null;
+  const e = envies;
+  if (!NOMS_ENVIES.every((k) => estFraction(e[k]))) return null;
+  if (typeof humeur2 !== "string" || !/^[a-zà-ÿ_-]{1,40}$/i.test(humeur2)) return null;
+  if (typeof relances !== "object" || relances === null) return null;
+  const { jour, n } = relances;
+  if (typeof jour !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(jour)) return null;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 100) return null;
+  const propre = {};
+  if (typeof lente === "object" && lente !== null) {
+    for (const [k, v] of Object.entries(lente).slice(0, LENTE_MAX)) {
+      if (/^[A-Za-z0-9_-]{1,40}$/.test(k) && estFraction(v)) propre[k] = v;
+    }
+  }
+  const faits = [];
+  for (const f of journal) {
+    if (typeof f !== "object" || f === null) continue;
+    const { t, quoi } = f;
+    if (typeof t === "number" && Number.isFinite(t) && t > 0 && typeof quoi === "string" && COMPORTEMENTS.includes(quoi)) {
+      faits.push({ t, quoi });
+    }
+  }
+  const enviesPropres = Object.fromEntries(NOMS_ENVIES.map((k) => [k, e[k]]));
+  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur: humeur2, relances: { jour, n } };
+}
+function adopter(distant, majVue, versionVue) {
+  if (!distant) return false;
+  return distant.maj > majVue || distant.maj === majVue && distant.version > versionVue;
+}
+function empreinte(e) {
+  const arrondi = NOMS_ENVIES.map((k) => Math.round(e.envies[k] * 20)).join(",");
+  const dernier = e.journal[e.journal.length - 1];
+  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}`;
+}
+
 // src/poids.ts
 var APP_IDS = ["financeai", "batchchef", "jobai", "driveai", "carai", "memoryai"];
 var ENTREES = [
@@ -681,6 +727,13 @@ function multIntention(r, id) {
 }
 function top3(r) {
   return MOODS.map((m) => [m, r.act[m] ?? 0]).sort((a, b) => b[1] - a[1]).slice(0, 3).filter((x) => x[1] > 0.06);
+}
+function chargerLente(r, lente, ageMs) {
+  const oubli = Math.exp(-Math.max(0, ageMs) / 1e3 / TAU_LENT);
+  for (const k of Object.keys(r.slow)) {
+    const v = lente[k];
+    if (Number.isFinite(v)) r.slow[k] = clamp01(v) * oubli;
+  }
 }
 function etatLent(r) {
   return { ...r.slow };
@@ -2352,7 +2405,7 @@ var HUMEURS_MENU = [
 
 // src/stockage.ts
 var PREFIXE = "lia-ui:";
-function estFraction(x) {
+function estFraction2(x) {
   return typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
 }
 function lireMemoire(cle) {
@@ -2362,7 +2415,7 @@ function lireMemoire(cle) {
     const j = JSON.parse(brut2);
     if (typeof j !== "object" || j === null) return null;
     const { u, v, choixVie } = j;
-    if (!estFraction(u) || !estFraction(v)) return null;
+    if (!estFraction2(u) || !estFraction2(v)) return null;
     return typeof choixVie === "boolean" ? { u, v, choixVie } : { u, v };
   } catch {
     return null;
@@ -2392,7 +2445,7 @@ function ecrireRelances(cle, r) {
   } catch {
   }
 }
-var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
+var NOMS_ENVIES2 = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
 function lireCerveau(cle) {
   try {
     const brut2 = localStorage.getItem(`${PREFIXE}${cle}:cerveau`);
@@ -2402,7 +2455,7 @@ function lireCerveau(cle) {
     const { envies, journal } = j;
     if (typeof envies !== "object" || envies === null || !Array.isArray(journal)) return null;
     const e = envies;
-    if (!NOMS_ENVIES.every((k) => estFraction(e[k]))) return null;
+    if (!NOMS_ENVIES2.every((k) => estFraction2(e[k]))) return null;
     const faits = journal.filter(
       (f) => typeof f === "object" && f !== null && Number.isFinite(f.t) && COMPORTEMENTS.includes(f.quoi)
     );
@@ -2426,7 +2479,7 @@ function lireLente(cle) {
     const { t, slow } = j;
     if (!Number.isFinite(t) || typeof slow !== "object" || slow === null) return null;
     const propre = {};
-    for (const [k, v] of Object.entries(slow)) if (estFraction(v)) propre[k] = v;
+    for (const [k, v] of Object.entries(slow)) if (estFraction2(v)) propre[k] = v;
     return { t, slow: propre };
   } catch {
     return null;
@@ -2633,6 +2686,7 @@ function mountLia(options = {}) {
   let humeurNom = reseauActif ? "neutre" : "curieux";
   let humeurId = "curieux";
   let forcee = null;
+  let partagee = null;
   if (reseauActif) {
     setHumeur("auto");
     setMelange(() => reseau.mix);
@@ -3546,12 +3600,100 @@ function mountLia(options = {}) {
       forcee = null;
       setHumeur("auto");
     }
-    if (!forcee) appliquerHumeur(reseau.dom);
+    if (!forcee) appliquerHumeur(partagee && now < partagee.jusqua ? partagee.nom : reseau.dom);
   };
   const garder = () => {
     ecrireCerveau(cle, { envies, journal: faits });
     if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
   };
+  const hote = reseauActif ? options.etat : void 0;
+  let majVue = 0;
+  let versionVue = 0;
+  let lectureFaite = false;
+  let derniereEmpreinte = "";
+  let enEcriture = false;
+  let avertie = false;
+  const avertirEtat = (e) => {
+    if (avertie) return;
+    avertie = true;
+    console.error("LIA : son \xE9tat partag\xE9 est indisponible, elle garde son \xE9tat local", e);
+  };
+  const etatCourant = (version, maj) => {
+    const jour = jourLocal(new Date(maj));
+    return {
+      version,
+      maj,
+      envies: { ...envies },
+      journal: faits.map((f) => ({ ...f })),
+      lente: etatLent(reseau),
+      humeur: humeurNom,
+      relances: { jour, n: lireRelances(cle, jour) }
+    };
+  };
+  const appliquerEtat = (e) => {
+    envies = { ...e.envies };
+    faits = e.journal.map((f) => ({ ...f }));
+    chargerLente(reseau, e.lente, Date.now() - e.maj);
+    const jour = jourLocal(/* @__PURE__ */ new Date());
+    if (e.relances.jour === jour && e.relances.n > lireRelances(cle, jour)) ecrireRelances(cle, e.relances);
+    if (e.humeur !== humeurNom && HUMEURS[e.humeur]) {
+      pousserHumeur(reseau, e.humeur, Date.now());
+      reseau.dom = e.humeur;
+      reseau.domDepuis = Date.now();
+      partagee = { nom: e.humeur, jusqua: Date.now() + 3e4 };
+      if (!forcee) appliquerHumeur(e.humeur);
+    }
+    garder();
+  };
+  const retenir = (e) => {
+    majVue = e.maj;
+    versionVue = e.version;
+    derniereEmpreinte = empreinte(e);
+  };
+  const lireEtat = async () => {
+    if (!hote || detruit) return;
+    try {
+      const d = validerEtat(await hote.lire());
+      if (detruit) return;
+      lectureFaite = true;
+      if (d && adopter(d, majVue, versionVue)) {
+        appliquerEtat(d);
+        retenir(d);
+      }
+    } catch (e) {
+      avertirEtat(e);
+    }
+  };
+  const ecrireEtat = async (hors = false) => {
+    if (!hote || detruit || !lectureFaite || enEcriture || document.hidden && !hors) return;
+    const e = etatCourant(versionVue + 1, Date.now());
+    if (empreinte(e) === derniereEmpreinte) return;
+    enEcriture = true;
+    try {
+      const rendu = validerEtat(await hote.ecrire(e));
+      if (rendu && rendu.version !== e.version && adopter(rendu, majVue, versionVue)) {
+        appliquerEtat(rendu);
+        retenir(rendu);
+      } else {
+        retenir(e);
+      }
+    } catch (err) {
+      avertirEtat(err);
+    } finally {
+      enEcriture = false;
+    }
+  };
+  const minuterieLecture = hote ? setInterval(() => void lireEtat(), 6e4) : void 0;
+  const minuterieEcriture = hote ? setInterval(() => void ecrireEtat(), 2e4) : void 0;
+  const surFermeture = () => {
+    if (document.visibilityState === "hidden") void ecrireEtat(true);
+    else void lireEtat();
+  };
+  if (hote) {
+    window.addEventListener("pagehide", surFermeture);
+    document.addEventListener("visibilitychange", surFermeture);
+    void lireEtat();
+  }
   let tics = 0;
   const minuterieEnvies = setInterval(() => {
     if (document.hidden || detruit) return;
@@ -3693,6 +3835,7 @@ function mountLia(options = {}) {
       dernierMonde = Date.now();
     },
     journal: () => faits.map((f) => ({ ...f })),
+    partage: () => ({ actif: !!hote, lu: lectureFaite, version: versionVue, maj: majVue }),
     envoyer: envoyerVers,
     geste,
     venirPres,
@@ -3704,6 +3847,10 @@ function mountLia(options = {}) {
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
       clearInterval(minuterieEnvies);
+      clearInterval(minuterieLecture);
+      clearInterval(minuterieEcriture);
+      window.removeEventListener("pagehide", surFermeture);
+      document.removeEventListener("visibilitychange", surFermeture);
       garder();
       setMelange(null);
       for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
@@ -3741,6 +3888,7 @@ function Lia(props) {
       ...p.silence ? { silence: p.silence } : {},
       ...p.quandMouvementReduit ? { quandMouvementReduit: p.quandMouvementReduit } : {},
       ...p.humeurVisible !== void 0 ? { humeurVisible: p.humeurVisible } : {},
+      ...p.etat ? { etat: p.etat } : {},
       ...p.relancesParJour !== void 0 ? { relancesParJour: p.relancesParJour } : {},
       ...p.onSpontane ? { onSpontane: (m) => derniere.current.onSpontane?.(m) ?? null } : {},
       ...p.elements === false ? { elements: false } : p.elements ? {

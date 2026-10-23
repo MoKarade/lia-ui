@@ -247,6 +247,15 @@ export function top3(r: Reseau): Array<[string, number]> {
     .filter((x) => x[1] > 0.06);
 }
 
+/** Remplace la mémoire lente par celle qu'une autre page a écrite (`ageMs` : le temps écoulé depuis, elle s'est estompée d'autant). */
+export function chargerLente(r: Reseau, lente: Readonly<Record<string, number>>, ageMs: number): void {
+  const oubli = Math.exp(-Math.max(0, ageMs) / 1000 / TAU_LENT);
+  for (const k of Object.keys(r.slow)) {
+    const v = lente[k];
+    if (Number.isFinite(v)) r.slow[k] = clamp01(v as number) * oubli;
+  }
+}
+
 /** Ce qu'il faut garder d'une visite à l'autre : la mémoire lente des émotions. */
 export function etatLent(r: Reseau): Record<string, number> {
   return { ...r.slow };

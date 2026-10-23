@@ -17,7 +17,8 @@ import {
 } from "./cerveau.js";
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
-import { ajouterImpulsion, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
+import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
+import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
 import {
   HUMEURS as HUMEURS_MOTEUR,
   ST,
@@ -214,6 +215,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let humeurId: HumeurLia = "curieux";
   /** Humeur imposée (menu, réponse, hôte) : gardée 100 s, puis son réseau reprend la main. */
   let forcee: { jusqua: number } | null = null;
+  /** L'humeur qu'une autre page vient de lui donner (état partagé) : tenue 30 s, le temps que son propre réseau s'y fasse. */
+  let partagee: { nom: string; jusqua: number } | null = null;
   if (reseauActif) {
     moteurHumeur("auto");
     setMelange(() => reseau.mix);
@@ -1228,12 +1231,104 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       forcee = null;
       moteurHumeur("auto");
     }
-    if (!forcee) appliquerHumeur(reseau.dom);
+    if (!forcee) appliquerHumeur(partagee && now < partagee.jusqua ? partagee.nom : reseau.dom);
   };
   const garder = (): void => {
     ecrireCerveau(cle, { envies, journal: faits });
     if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
   };
+
+  /* ── son état partagé : UNE seule LIA dans toutes les apps (ADR « une seule LIA »). L'hôte fournit `etat` ; sans lui, tout reste local. ── */
+  const hote = reseauActif ? options.etat : undefined;
+  let majVue = 0;
+  let versionVue = 0;
+  let lectureFaite = false;
+  let derniereEmpreinte = "";
+  let enEcriture = false;
+  let avertie = false;
+  const avertirEtat = (e: unknown): void => {
+    if (avertie) return;
+    avertie = true;
+    console.error("LIA : son état partagé est indisponible, elle garde son état local", e);
+  };
+  const etatCourant = (version: number, maj: number): EtatLia => {
+    const jour = jourLocal(new Date(maj));
+    return {
+      version,
+      maj,
+      envies: { ...envies },
+      journal: faits.map((f) => ({ ...f })),
+      lente: etatLent(reseau),
+      humeur: humeurNom,
+      relances: { jour, n: lireRelances(cle, jour) },
+    };
+  };
+  const appliquerEtat = (e: EtatLia): void => {
+    envies = { ...e.envies };
+    faits = e.journal.map((f) => ({ ...f }));
+    chargerLente(reseau, e.lente, Date.now() - e.maj);
+    const jour = jourLocal(new Date());
+    if (e.relances.jour === jour && e.relances.n > lireRelances(cle, jour)) ecrireRelances(cle, e.relances);
+    if (e.humeur !== humeurNom && (HUMEURS_MOTEUR as Record<string, unknown>)[e.humeur]) {
+      // La même humeur que dans l'autre page : on la pousse dans le réseau (100 s) et on la prend tout de suite pour dominante.
+      pousserHumeur(reseau, e.humeur, Date.now());
+      reseau.dom = e.humeur;
+      reseau.domDepuis = Date.now();
+      partagee = { nom: e.humeur, jusqua: Date.now() + 30_000 };
+      if (!forcee) appliquerHumeur(e.humeur);
+    }
+    garder();
+  };
+  const retenir = (e: EtatLia): void => {
+    majVue = e.maj;
+    versionVue = e.version;
+    derniereEmpreinte = empreinte(e);
+  };
+  const lireEtat = async (): Promise<void> => {
+    if (!hote || detruit) return;
+    try {
+      const d = validerEtat(await hote.lire());
+      if (detruit) return;
+      lectureFaite = true;
+      if (d && adopter(d, majVue, versionVue)) {
+        appliquerEtat(d);
+        retenir(d);
+      }
+    } catch (e) {
+      avertirEtat(e);
+    }
+  };
+  const ecrireEtat = async (hors = false): Promise<void> => {
+    // Jamais avant d'avoir lu : écrire d'abord son état de départ effacerait celui d'une autre page.
+    if (!hote || detruit || !lectureFaite || enEcriture || (document.hidden && !hors)) return;
+    const e = etatCourant(versionVue + 1, Date.now());
+    if (empreinte(e) === derniereEmpreinte) return;
+    enEcriture = true;
+    try {
+      const rendu = validerEtat(await hote.ecrire(e));
+      if (rendu && rendu.version !== e.version && adopter(rendu, majVue, versionVue)) {
+        appliquerEtat(rendu);
+        retenir(rendu);
+      } else {
+        retenir(e);
+      }
+    } catch (err) {
+      avertirEtat(err);
+    } finally {
+      enEcriture = false;
+    }
+  };
+  const minuterieLecture = hote ? setInterval(() => void lireEtat(), 60_000) : undefined;
+  const minuterieEcriture = hote ? setInterval(() => void ecrireEtat(), 20_000) : undefined;
+  const surFermeture = (): void => {
+    if (document.visibilityState === "hidden") void ecrireEtat(true);
+    else void lireEtat();
+  };
+  if (hote) {
+    window.addEventListener("pagehide", surFermeture);
+    document.addEventListener("visibilitychange", surFermeture);
+    void lireEtat();
+  }
   let tics = 0;
   const minuterieEnvies = setInterval(() => {
     if (document.hidden || detruit) return;
@@ -1387,6 +1482,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       dernierMonde = Date.now();
     },
     journal: () => faits.map((f) => ({ ...f })),
+    partage: () => ({ actif: !!hote, lu: lectureFaite, version: versionVue, maj: majVue }),
     envoyer: envoyerVers,
     geste,
     venirPres,
@@ -1398,6 +1494,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
       clearInterval(minuterieEnvies);
+      clearInterval(minuterieLecture);
+      clearInterval(minuterieEcriture);
+      window.removeEventListener("pagehide", surFermeture);
+      document.removeEventListener("visibilitychange", surFermeture);
       garder();
       setMelange(null);
       for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);

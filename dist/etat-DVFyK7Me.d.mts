@@ -1,152 +1,3 @@
-/** Générateur de hasard injecté (tests déterministes) : renvoie un nombre dans [0, 1[. */
-type Hasard = () => number;
-type Decision = {
-    type: "attendre";
-    duree: number;
-} | {
-    type: "errer";
-    u: number;
-    v: number;
-    duree: number;
-    etat: string;
-} | {
-    type: "suivre";
-    duree: number;
-} | {
-    type: "voir";
-    rang: number;
-    duree: number;
-} | {
-    type: "parler";
-    motif: "salut" | "rien";
-} | {
-    type: "relance";
-} | {
-    type: "humeur";
-    humeur: HumeurLia;
-};
-/** Ce que LIA peut faire en ce moment : suivre le curseur (bougé récemment) ou aller voir un des éléments désignés. */
-interface ContexteVie {
-    curseurRecent: boolean;
-    cibles: number;
-    /** Vrai quand l'hôte sait quoi lui faire dire (`onSpontane`) et que l'heure le permet. Sinon elle se tait. */
-    parole?: boolean;
-    /** Vrai tant que le plafond de relances du jour n'est pas atteint. */
-    relance?: boolean;
-}
-/**
- * Ce que LIA décide de faire quand rien ne se passe. Pure : le hasard est injecté.
- * `u` et `v` sont des fractions (0..1) de la zone de vie ; l'appelant les convertit en pixels
- * en gardant une marge égale au rayon. Elle ne décide jamais de parler : seul l'hôte la fait parler.
- * Sans `contexte`, seul le hasard décide (errer, attendre, humeur) ; avec lui, une part de l'errance
- * devient « suivre le curseur » ou « aller voir un élément » quand c'est possible. `rang` est un tirage
- * dans [0, 1[ que l'appelant convertit en rang parmi les éléments qu'il connaît.
- */
-declare function prochaineDecision(hasard: Hasard, contexte?: ContexteVie): Decision;
-/** Convertit une fraction de la zone en position, en gardant `marge` pixels du bord. */
-declare function pointDansZone(zone: {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-}, u: number, v: number, marge: number): {
-    x: number;
-    y: number;
-};
-/** Garde un point dans la zone, à `marge` pixels du bord. */
-declare function dansZone(zone: {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-}, x: number, y: number, marge: number): {
-    x: number;
-    y: number;
-};
-
-/**
- * Le cerveau local de LIA, repris de la maquette (`majEnvies` et `penser`, tail.js) : six envies qui montent
- * et descendent avec le temps et ce qu'elle fait, et un choix pondéré parmi ce qu'elle peut faire en ce moment.
- * Pur : aucun réseau, aucun coût, aucun texte ; le hasard est injecté. Ce que « faire » veut dire (se déplacer,
- * parler) reste dans `lia.ts` ; ce qui est propre à l'hôte (une app en panne, un rappel) viendra par l'interface `monde`.
- */
-interface Envies {
-    energie: number;
-    curiosite: number;
-    social: number;
-    inquiet: number;
-    joie: number;
-    ennui: number;
-}
-declare const ENVIES_DEPART: Readonly<Envies>;
-/** Ce qu'elle choisit de faire quand rien ne se passe. `relancer` : une remarque que l'hôte voulait lui voir répéter (2 par jour au plus). */
-type Comportement = "repos" | "suivre" | "promener" | "causer" | "relancer" | "jouer" | "voir" | "rentrer" | "dormir" | MotifMonde | "veiller";
-/** Ce que l'hôte sait lui faire dire de vrai : `appeler` (un problème), `resumer` (une tendance), `feliciter`, `rappeler`, `souvenir`, `accompagner` (ce que Marc regarde). */
-type MotifMonde = "appeler" | "resumer" | "feliciter" | "rappeler" | "souvenir" | "accompagner";
-interface ContexteEnvies {
-    /** Elle dort (veille) : l'énergie remonte. */
-    dort: boolean;
-    /** Elle est occupée par un comportement (pas au repos). */
-    occupee: boolean;
-    /** Elle est au repos. */
-    auRepos: boolean;
-    /** Secondes depuis sa dernière décision : au-delà de 30 s sans rien faire, le besoin de compagnie monte plus vite. */
-    secondesDepuisDecision: number;
-    /** Gravité (0..1) d'un problème que l'hôte voudrait annoncer ; 0 sans `monde`. */
-    inquietude: number;
-}
-/** Fait avancer les envies de `dt` secondes (appelée chaque seconde, comme dans la maquette). */
-declare function majEnvies(e: Readonly<Envies>, dt: number, c: ContexteEnvies): Envies;
-/** Ce que faire coûte ou rapporte aux envies (valeurs de la maquette). */
-declare function apresComportement(e: Readonly<Envies>, id: Comportement): Envies;
-interface ContexteChoix {
-    /** Le curseur (souris ou stylet) a bougé il y a moins de 2,5 s. */
-    curseurRecent: boolean;
-    /** Combien d'éléments `[data-lia-cible]` elle voit. */
-    cibles: number;
-    /** L'hôte a quelque chose à lui faire dire et l'heure le permet. */
-    parole: boolean;
-    /** Le plafond de relances du jour n'est pas atteint. */
-    relance: boolean;
-    /** Ce qu'elle ressent (l'une des 40 humeurs de son réseau). */
-    humeur: string;
-    /** Elle vient de se déplacer ou de suivre Marc : elle se tient tranquille un moment. */
-    tranquille: boolean;
-    /** Elle est loin de sa maison. */
-    loinDeLaMaison: boolean;
-    /** Elle a le droit de traverser l'écran (faux avec « mouvement réduit doux »). */
-    deplacement: boolean;
-    /** Secondes depuis qu'elle a parlé seule : pas de remarque avant 90 s. */
-    secondesDepuisParole: number;
-    /** Les motifs pour lesquels l'hôte a une proposition vraie et dont le délai est passé ; absent = aucun. */
-    monde?: readonly MotifMonde[];
-    /** Marc est là (il a bougé il y a moins d'une minute). */
-    present?: boolean;
-    /** C'est la nuit ou Marc est parti depuis un moment : elle peut veiller, et le délai de 4 min est passé. */
-    veille?: boolean;
-    /** Ses intentions (0 à 1) ; absent = aucune. */
-    intentions?: Readonly<Record<string, number>>;
-    /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 40 s, l'envie de bouger monte. */
-    secondesImmobile?: number;
-}
-interface Candidat {
-    id: Comportement;
-    poids: number;
-}
-/** Les comportements possibles maintenant, avec leur poids (formules de `penser()` de la maquette). */
-declare function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[];
-/**
- * Tirage pondéré (exponentielle de 2,4 × le poids) ; le comportement en cours est un peu moins probable (−0,5).
- * `pesee` multiplie le poids de chacun (ses intentions : ce qu'elle a envie de faire).
- */
-declare function choisirComportement(liste: readonly Candidat[], hasard: Hasard, courant?: Comportement | null, pesee?: (id: Comportement) => number): Comportement;
-/** Un fait gardé de ce qu'elle a fait (le texte, c'est à l'hôte de le choisir). */
-interface FaitLia {
-    /** Millisecondes depuis 1970. */
-    t: number;
-    quoi: Comportement;
-}
-
 /**
  * Les gestes que Marc peut lui demander dans le menu de son corps (maquette v5, `maison.js`) : une
  * silhouette de son moteur, tenue quelques secondes, puis elle reprend sa vie. Pas de phrase écrite ici :
@@ -298,6 +149,13 @@ interface OptionsLia {
      */
     humeurVisible?: boolean;
     /**
+     * Son état PARTAGÉ (envies, journal, mémoire lente, humeur, relances du jour) : c'est ce qui fait d'elle UNE seule LIA dans
+     * toutes les apps. Fourni par l'hôte (`etatHttp(url)` de `@mokarade/lia-ui/etat-http` pour une route de même origine) ; elle le lit au
+     * montage puis chaque minute, l'écrit toutes les 20 s si quelque chose a changé et à la fermeture de la page. Sans `etat`, ou si
+     * l'hôte échoue, elle garde son état local et vit quand même (jamais d'état inventé). La position et « animations complètes » restent locales.
+     */
+    etat?: EtatHote;
+    /**
      * Ce que l'hôte sait du monde, appelé chaque seconde : des entrées du réseau interne de LIA entre 0 et 1
      * (`alerte`, `nbAlertes`, `toutVert`, `changement`, `recurrence`, `tendBonne`, `tendMauvaise`, `g_<app>`, `v_<app>`…).
      * Elles priment sur celles qu'elle calcule seule (heure, activité de Marc, rythme des échanges). Absent : elle vit sans monde.
@@ -397,6 +255,13 @@ interface LiaHandle {
     impulsion(nom: "touche" | "parle" | "reponse" | "rejet" | "scroll" | "demande" | "bon" | "mauvais", valeur?: number): void;
     /** Ce qu'elle a fait ces derniers temps (20 faits au plus, gardés dans le navigateur) : à l'hôte d'en faire une phrase. */
     journal(): FaitLia[];
+    /** Où en est son état partagé (`etat`) : branché, lu au moins une fois, et la dernière version/date vue ou écrite. */
+    partage(): {
+        actif: boolean;
+        lu: boolean;
+        version: number;
+        maj: number;
+    };
     /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
     venirPres(): boolean;
     /** Arrête de suivre ou de regarder : elle reste où elle est. */
@@ -404,4 +269,184 @@ interface LiaHandle {
     destroy(): void;
 }
 
-export { type ActionLia as A, type Candidat as C, type Decision as D, ENVIES_DEPART as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type LiaHandle as L, type MotifMonde as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, type Comportement as a, type DescriptionElement as b, type Envies as c, type EnvoiLia as d, type GesteLia as e, HUMEURS_MENU as f, type Hasard as g, type HumeurLia as h, LIBELLE_HUMEUR as i, type MotifSpontane as j, type OptionsElements as k, type PropositionMonde as l, type PuceLia as m, apresComportement as n, candidats as o, choisirComportement as p, dansZone as q, majEnvies as r, pointDansZone as s, prochaineDecision as t };
+/** Générateur de hasard injecté (tests déterministes) : renvoie un nombre dans [0, 1[. */
+type Hasard = () => number;
+type Decision = {
+    type: "attendre";
+    duree: number;
+} | {
+    type: "errer";
+    u: number;
+    v: number;
+    duree: number;
+    etat: string;
+} | {
+    type: "suivre";
+    duree: number;
+} | {
+    type: "voir";
+    rang: number;
+    duree: number;
+} | {
+    type: "parler";
+    motif: "salut" | "rien";
+} | {
+    type: "relance";
+} | {
+    type: "humeur";
+    humeur: HumeurLia;
+};
+/** Ce que LIA peut faire en ce moment : suivre le curseur (bougé récemment) ou aller voir un des éléments désignés. */
+interface ContexteVie {
+    curseurRecent: boolean;
+    cibles: number;
+    /** Vrai quand l'hôte sait quoi lui faire dire (`onSpontane`) et que l'heure le permet. Sinon elle se tait. */
+    parole?: boolean;
+    /** Vrai tant que le plafond de relances du jour n'est pas atteint. */
+    relance?: boolean;
+}
+/**
+ * Ce que LIA décide de faire quand rien ne se passe. Pure : le hasard est injecté.
+ * `u` et `v` sont des fractions (0..1) de la zone de vie ; l'appelant les convertit en pixels
+ * en gardant une marge égale au rayon. Elle ne décide jamais de parler : seul l'hôte la fait parler.
+ * Sans `contexte`, seul le hasard décide (errer, attendre, humeur) ; avec lui, une part de l'errance
+ * devient « suivre le curseur » ou « aller voir un élément » quand c'est possible. `rang` est un tirage
+ * dans [0, 1[ que l'appelant convertit en rang parmi les éléments qu'il connaît.
+ */
+declare function prochaineDecision(hasard: Hasard, contexte?: ContexteVie): Decision;
+/** Convertit une fraction de la zone en position, en gardant `marge` pixels du bord. */
+declare function pointDansZone(zone: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}, u: number, v: number, marge: number): {
+    x: number;
+    y: number;
+};
+/** Garde un point dans la zone, à `marge` pixels du bord. */
+declare function dansZone(zone: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}, x: number, y: number, marge: number): {
+    x: number;
+    y: number;
+};
+
+/**
+ * Le cerveau local de LIA, repris de la maquette (`majEnvies` et `penser`, tail.js) : six envies qui montent
+ * et descendent avec le temps et ce qu'elle fait, et un choix pondéré parmi ce qu'elle peut faire en ce moment.
+ * Pur : aucun réseau, aucun coût, aucun texte ; le hasard est injecté. Ce que « faire » veut dire (se déplacer,
+ * parler) reste dans `lia.ts` ; ce qui est propre à l'hôte (une app en panne, un rappel) viendra par l'interface `monde`.
+ */
+interface Envies {
+    energie: number;
+    curiosite: number;
+    social: number;
+    inquiet: number;
+    joie: number;
+    ennui: number;
+}
+declare const ENVIES_DEPART: Readonly<Envies>;
+/** Ce qu'elle choisit de faire quand rien ne se passe. `relancer` : une remarque que l'hôte voulait lui voir répéter (2 par jour au plus). */
+type Comportement = "repos" | "suivre" | "promener" | "causer" | "relancer" | "jouer" | "voir" | "rentrer" | "dormir" | MotifMonde | "veiller";
+/** Ce que l'hôte sait lui faire dire de vrai : `appeler` (un problème), `resumer` (une tendance), `feliciter`, `rappeler`, `souvenir`, `accompagner` (ce que Marc regarde). */
+type MotifMonde = "appeler" | "resumer" | "feliciter" | "rappeler" | "souvenir" | "accompagner";
+interface ContexteEnvies {
+    /** Elle dort (veille) : l'énergie remonte. */
+    dort: boolean;
+    /** Elle est occupée par un comportement (pas au repos). */
+    occupee: boolean;
+    /** Elle est au repos. */
+    auRepos: boolean;
+    /** Secondes depuis sa dernière décision : au-delà de 30 s sans rien faire, le besoin de compagnie monte plus vite. */
+    secondesDepuisDecision: number;
+    /** Gravité (0..1) d'un problème que l'hôte voudrait annoncer ; 0 sans `monde`. */
+    inquietude: number;
+}
+/** Fait avancer les envies de `dt` secondes (appelée chaque seconde, comme dans la maquette). */
+declare function majEnvies(e: Readonly<Envies>, dt: number, c: ContexteEnvies): Envies;
+/** Ce que faire coûte ou rapporte aux envies (valeurs de la maquette). */
+declare function apresComportement(e: Readonly<Envies>, id: Comportement): Envies;
+interface ContexteChoix {
+    /** Le curseur (souris ou stylet) a bougé il y a moins de 2,5 s. */
+    curseurRecent: boolean;
+    /** Combien d'éléments `[data-lia-cible]` elle voit. */
+    cibles: number;
+    /** L'hôte a quelque chose à lui faire dire et l'heure le permet. */
+    parole: boolean;
+    /** Le plafond de relances du jour n'est pas atteint. */
+    relance: boolean;
+    /** Ce qu'elle ressent (l'une des 40 humeurs de son réseau). */
+    humeur: string;
+    /** Elle vient de se déplacer ou de suivre Marc : elle se tient tranquille un moment. */
+    tranquille: boolean;
+    /** Elle est loin de sa maison. */
+    loinDeLaMaison: boolean;
+    /** Elle a le droit de traverser l'écran (faux avec « mouvement réduit doux »). */
+    deplacement: boolean;
+    /** Secondes depuis qu'elle a parlé seule : pas de remarque avant 90 s. */
+    secondesDepuisParole: number;
+    /** Les motifs pour lesquels l'hôte a une proposition vraie et dont le délai est passé ; absent = aucun. */
+    monde?: readonly MotifMonde[];
+    /** Marc est là (il a bougé il y a moins d'une minute). */
+    present?: boolean;
+    /** C'est la nuit ou Marc est parti depuis un moment : elle peut veiller, et le délai de 4 min est passé. */
+    veille?: boolean;
+    /** Ses intentions (0 à 1) ; absent = aucune. */
+    intentions?: Readonly<Record<string, number>>;
+    /** Secondes depuis son dernier déplacement ; absent = 0. Au-delà de 40 s, l'envie de bouger monte. */
+    secondesImmobile?: number;
+}
+interface Candidat {
+    id: Comportement;
+    poids: number;
+}
+/** Les comportements possibles maintenant, avec leur poids (formules de `penser()` de la maquette). */
+declare function candidats(e: Readonly<Envies>, c: ContexteChoix): Candidat[];
+/**
+ * Tirage pondéré (exponentielle de 2,4 × le poids) ; le comportement en cours est un peu moins probable (−0,5).
+ * `pesee` multiplie le poids de chacun (ses intentions : ce qu'elle a envie de faire).
+ */
+declare function choisirComportement(liste: readonly Candidat[], hasard: Hasard, courant?: Comportement | null, pesee?: (id: Comportement) => number): Comportement;
+/** Un fait gardé de ce qu'elle a fait (le texte, c'est à l'hôte de le choisir). */
+interface FaitLia {
+    /** Millisecondes depuis 1970. */
+    t: number;
+    quoi: Comportement;
+}
+
+/**
+ * L'état partagé de LIA : ce qui fait qu'elle est UNE seule, quel que soit l'hôte (hub, MemoryAI, apps).
+ * Fonctions pures : le paquet ne touche jamais le réseau ici, c'est l'hôte qui fournit `etat.lire` / `etat.ecrire`.
+ * Ce qui arrive de l'hôte est une DONNÉE : on le valide, on borne les nombres et on ne garde que des verbes de LIA.
+ */
+
+interface RelancesPartagees {
+    /** Date locale AAAA-MM-JJ. */
+    jour: string;
+    n: number;
+}
+interface EtatLia {
+    /** Numéro d'écriture : l'hôte refuse une écriture qui ne dépasse pas la version qu'il garde (contrôle optimiste). */
+    version: number;
+    /** Millisecondes depuis 1970 : le plus récent gagne. */
+    maj: number;
+    envies: Envies;
+    /** Ce qu'elle a fait (des verbes de LIA, jamais le contenu de Marc). */
+    journal: FaitLia[];
+    /** Mémoire lente du réseau d'humeurs. */
+    lente: Record<string, number>;
+    /** Son humeur dominante (l'une des 40). */
+    humeur: string;
+    relances: RelancesPartagees;
+}
+/** Ce que l'hôte fournit. `ecrire` peut rendre l'état que l'hôte garde (plus récent que le nôtre), `lire` rend `null` s'il n'en a aucun. */
+interface EtatHote {
+    lire(): Promise<unknown>;
+    ecrire(etat: EtatLia): Promise<unknown>;
+}
+
+export { type ActionLia as A, type Candidat as C, type Decision as D, type EtatHote as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type LiaHandle as L, type MotifMonde as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, type Comportement as a, type DescriptionElement as b, ENVIES_DEPART as c, type Envies as d, type EnvoiLia as e, type EtatLia as f, type GesteLia as g, HUMEURS_MENU as h, type Hasard as i, type HumeurLia as j, LIBELLE_HUMEUR as k, type MotifSpontane as l, type OptionsElements as m, type PropositionMonde as n, type PuceLia as o, apresComportement as p, candidats as q, choisirComportement as r, dansZone as s, majEnvies as t, pointDansZone as u, prochaineDecision as v };
