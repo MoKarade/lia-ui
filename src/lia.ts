@@ -1000,7 +1000,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       menu.classList.add("lia-ui__menu--element");
       menu.appendChild(el("p", "lia-ui__menu-titre", titreMenu(element.d)));
       for (const { mode, libelle } of ENTREES_MENU) {
-        menu.appendChild(item(libelle, () => surElement(element.cible, element.d, mode)));
+        menu.appendChild(
+          item(libelle, () => {
+            annoncerMode(mode, element.cible, element.d);
+            surElement(element.cible, element.d, mode);
+          }),
+        );
       }
     } else {
       menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
@@ -1237,6 +1242,18 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       // L'hôte a mal décrit son élément : le menu du navigateur reste, la page continue.
       console.error("LIA : elements.decrire a échoué, le clic droit n'est pas pris", e);
       return null;
+    }
+  };
+
+  /** Dit à l'hôte l'entrée choisie ; informatif, une erreur n'arrête rien (comme `surToucher`). */
+  const annoncerMode = (mode: ModeElement, cible: Element, d: ElementDecrit): void => {
+    const surMode = optElements?.surMode;
+    if (!surMode) return;
+    const echec = (e: unknown): void => console.error("LIA : elements.surMode a échoué, sa demande continue", e);
+    try {
+      void Promise.resolve(surMode(mode, cible, { ...d })).catch(echec);
+    } catch (e) {
+      echec(e);
     }
   };
 
