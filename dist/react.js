@@ -3763,9 +3763,9 @@ function ecrireMemoire(cle, m) {
   } catch {
   }
 }
-function lireRelances(cle, jour) {
+function lireCompteur(cle, nom, jour) {
   try {
-    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:relances`);
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:${nom}`);
     if (brut2 === null) return 0;
     const j = JSON.parse(brut2);
     if (typeof j !== "object" || j === null) return 0;
@@ -3775,12 +3775,16 @@ function lireRelances(cle, jour) {
     return 0;
   }
 }
-function ecrireRelances(cle, r) {
+function ecrireCompteur(cle, nom, r) {
   try {
-    localStorage.setItem(`${PREFIXE}${cle}:relances`, JSON.stringify(r));
+    localStorage.setItem(`${PREFIXE}${cle}:${nom}`, JSON.stringify(r));
   } catch {
   }
 }
+var lireRelances = (cle, jour) => lireCompteur(cle, "relances", jour);
+var ecrireRelances = (cle, r) => ecrireCompteur(cle, "relances", r);
+var lireSpontanees = (cle, jour) => lireCompteur(cle, "spontanees", jour);
+var ecrireSpontanees = (cle, r) => ecrireCompteur(cle, "spontanees", r);
 var NOMS_ENVIES2 = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
 function lireCerveau(cle) {
   try {
@@ -4465,6 +4469,11 @@ function mountLia(options = {}) {
       ajouterMsg(dite, "lia");
       impulsion(reseau, "reponse");
       voix(dite);
+      return;
+    }
+    if (enPause()) {
+      ajouterMsg("Je suis en pause pour le moment.", "lia", true);
+      choisir2("indispo");
       return;
     }
     if (!options.ask) {
@@ -5296,7 +5305,22 @@ function mountLia(options = {}) {
   const silence = options.silence ?? [22, 7];
   const parolePropre = options.parolePropre !== false;
   const relancesMax = options.relancesParJour ?? 2;
-  const peutParlerSeule = () => !enSilence((/* @__PURE__ */ new Date()).getHours(), silence);
+  const enPause = () => {
+    if (!options.pause) return false;
+    try {
+      return options.pause() === true;
+    } catch (e) {
+      console.error("LIA : pause a \xE9chou\xE9, elle reste en pause", e);
+      return true;
+    }
+  };
+  const plafondSpontanees = options.plafondSpontaneesParJour;
+  const spontaneesRestantes = () => plafondSpontanees === void 0 || lireSpontanees(cle, jourLocal(/* @__PURE__ */ new Date())) < plafondSpontanees;
+  const compterSpontanee = () => {
+    const jour = jourLocal(/* @__PURE__ */ new Date());
+    ecrireSpontanees(cle, { jour, n: lireSpontanees(cle, jour) + 1 });
+  };
+  const peutParlerSeule = () => !enPause() && !enSilence((/* @__PURE__ */ new Date()).getHours(), silence) && spontaneesRestantes();
   const relancesRestantes = () => lireRelances(cle, jourLocal(/* @__PURE__ */ new Date())) < relancesMax;
   const direSpontane = (motif) => {
     if (!options.onSpontane || !peutParlerSeule()) return false;
@@ -5311,7 +5335,10 @@ function mountLia(options = {}) {
     const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (!parole || !texte) return false;
     const dite = dire(texte, parole.chips ? { chips: parole.chips } : void 0);
-    if (dite) hoteDeSuite++;
+    if (dite) {
+      hoteDeSuite++;
+      compterSpontanee();
+    }
     return dite;
   };
   let recentesParoles = [];
@@ -5327,6 +5354,7 @@ function mountLia(options = {}) {
     if (dite) {
       hoteDeSuite = 0;
       apresVoix = SILHOUETTE_PAROLE[p.id] ?? null;
+      compterSpontanee();
     }
     return dite;
   };
@@ -5335,7 +5363,10 @@ function mountLia(options = {}) {
       if (detruit || chatOuvert || glisse || parle || respecterSilence && !peutParlerSeule()) return;
       if (attention?.type !== "element" || attention.el !== el2) return;
       if (respecterSilence && parolePropre && hoteDeSuite >= 1) return;
-      if (dire(texte)) hoteDeSuite++;
+      if (dire(texte)) {
+        hoteDeSuite++;
+        compterSpontanee();
+      }
     }, 1500);
   };
   const visiter = (el2, secondes) => {
@@ -5397,8 +5428,8 @@ function mountLia(options = {}) {
       passagere(etat2, 5);
     }
     setTimeout(() => {
-      if (detruit || chatOuvert || menuOuvert || glisse || parle) return;
-      dire(texte, p.chips ? { chips: p.chips } : void 0);
+      if (detruit || chatOuvert || menuOuvert || glisse || parle || !peutParlerSeule()) return;
+      if (dire(texte, p.chips ? { chips: p.chips } : void 0)) compterSpontanee();
     }, 1500);
   };
   const anticiper = () => {

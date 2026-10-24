@@ -90,6 +90,10 @@ Elle sait **pourquoi** elle va comme elle va. À « pourquoi tu es triste ? » o
 
 Quand deux humeurs se valent, elle ne les range pas l'une derrière l'autre : « Un mélange de sérénité et d'inquiétude. ». Ses phrases à elle prennent la couleur de son humeur : une hésitation (« Hum… ») quand elle est timide ou doute, une fin qui traîne quand elle est lasse. Son énergie suit une courbe de la journée (creux vers 3 h, pointe vers 15 h). Quand une raison pèse assez (force d'au moins 0,5), elle peut aussi la laisser échapper d'elle-même, sans qu'on le lui demande (« On m'a un peu brusquée tout à l'heure. », « Le silence dure. »), avec les garde-fous de ses paroles spontanées (silence de 22 h à 7 h, jamais deux fois de suite la même). Rien de tout cela ne touche un texte de l'hôte. Code : `src/pensee.ts` (pur, hasard et heure injectés).
 
+## Pause et plafond de paroles (v0.31.0)
+
+L'hôte peut la couper d'un geste : `pause: () => boolean`, relue à chaque pas et avant chaque `ask`. En pause, elle ne parle plus seule, ne rappelle plus `onSpontane` ni `monde`, et n'appelle plus `ask` (elle répond « Je suis en pause pour le moment. ») ; une `pause` qui lève une erreur vaut pause. `plafondSpontaneesParJour` borne toutes ses paroles spontanées par jour local (compté dans le navigateur, aucun plafond par défaut). Ce n'est que le côté client : l'état de la pause et le refus d'appeler le modèle se vérifient côté serveur, chez l'hôte.
+
 ## Sa mémoire sur plusieurs jours (v0.25.0)
 
 Un calcul local (`src/souvenirs.ts`, pur : aucun réseau, aucun DOM, hasard et horloge injectés) qui prolonge son monde intérieur. **C'est une simulation, pas un ressenti réel.** Un souvenir tient en trois champs : `{ quand, genre, poids }`, le genre étant l'un de `GENRES_SOUVENIR` (`brusque`, `ton`, `panne`, `gentil`, `compliment`, `retour`, `isolement`).

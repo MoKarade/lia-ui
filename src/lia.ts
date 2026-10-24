@@ -67,6 +67,7 @@ import {
   ecrireMemoire,
   ecrireMouvement,
   ecrireRelances,
+  ecrireSpontanees,
   lireCerveau,
   lireInterieur,
   lireSouvenirs,
@@ -76,6 +77,7 @@ import {
   lireMemoire,
   lireMouvement,
   lireRelances,
+  lireSpontanees,
 } from "./stockage.js";
 import { CSS } from "./styles.js";
 import {
@@ -648,6 +650,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       ajouterMsg(dite, "lia");
       impulsion(reseau, "reponse");
       voix(dite);
+      return;
+    }
+    if (enPause()) {
+      ajouterMsg("Je suis en pause pour le moment.", "lia", true);
+      choisir("indispo");
       return;
     }
     if (!options.ask) {
@@ -1568,7 +1575,24 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const silence = options.silence ?? [22, 7];
   const parolePropre = options.parolePropre !== false;
   const relancesMax = options.relancesParJour ?? 2;
-  const peutParlerSeule = (): boolean => !enSilence(new Date().getHours(), silence);
+  /** En pause : l'hôte le dit, ou sa fonction `pause` échoue (échec fermé). */
+  const enPause = (): boolean => {
+    if (!options.pause) return false;
+    try {
+      return options.pause() === true;
+    } catch (e) {
+      console.error("LIA : pause a échoué, elle reste en pause", e);
+      return true;
+    }
+  };
+  const plafondSpontanees = options.plafondSpontaneesParJour;
+  const spontaneesRestantes = (): boolean => plafondSpontanees === undefined || lireSpontanees(cle, jourLocal(new Date())) < plafondSpontanees;
+  /** Une parole qu'elle vient de dire seule compte pour le plafond du jour. */
+  const compterSpontanee = (): void => {
+    const jour = jourLocal(new Date());
+    ecrireSpontanees(cle, { jour, n: lireSpontanees(cle, jour) + 1 });
+  };
+  const peutParlerSeule = (): boolean => !enPause() && !enSilence(new Date().getHours(), silence) && spontaneesRestantes();
   const relancesRestantes = (): boolean => lireRelances(cle, jourLocal(new Date())) < relancesMax;
 
   /** Ce que l'hôte la fait dire seule. Son échec ne doit jamais arrêter sa vie : elle se tait et le dit dans la console. */
@@ -1585,7 +1609,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const texte = parole?.text.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (!parole || !texte) return false;
     const dite = dire(texte, parole.chips ? { chips: parole.chips } : undefined);
-    if (dite) hoteDeSuite++;
+    if (dite) {
+      hoteDeSuite++;
+      compterSpontanee();
+    }
     return dite;
   };
 
@@ -1604,6 +1631,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (dite) {
       hoteDeSuite = 0;
       apresVoix = SILHOUETTE_PAROLE[p.id] ?? null;
+      compterSpontanee();
     }
     return dite;
   };
@@ -1615,7 +1643,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (attention?.type !== "element" || attention.el !== el) return;
       // Une visite qu'elle décide seule ne répète pas un projet juste après un autre : elle regarde, sans le dire (c'est son tour de parler d'elle).
       if (respecterSilence && parolePropre && hoteDeSuite >= 1) return;
-      if (dire(texte)) hoteDeSuite++;
+      if (dire(texte)) {
+        hoteDeSuite++;
+        compterSpontanee();
+      }
     }, 1500);
   };
 
@@ -1689,8 +1720,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       passagere(etat, 5);
     }
     setTimeout(() => {
-      if (detruit || chatOuvert || menuOuvert || glisse || parle) return;
-      dire(texte, p.chips ? { chips: p.chips } : undefined);
+      if (detruit || chatOuvert || menuOuvert || glisse || parle || !peutParlerSeule()) return;
+      if (dire(texte, p.chips ? { chips: p.chips } : undefined)) compterSpontanee();
     }, 1500);
   };
 
