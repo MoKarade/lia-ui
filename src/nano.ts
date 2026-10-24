@@ -39,18 +39,17 @@ export interface Essaim {
 
 /** Marge autour de l'élément où ils se répartissent (les petits éléments restent lisibles). */
 export const MARGE = 5;
-const MIN = 18;
-const MAX = 100;
+/** Ils sont toujours cent, comme les traits de son corps (Marc, 24/10 : « seulement les 100 nanobots »). */
+export const NOMBRE = 100;
 /** Période de l'onde de lecture (s) et sa traîne dans la phase de sortie. */
 const PERIODE_ONDE = 1.9;
 
-export function nombreDeNano(zone: Zone): number {
-  const cote = Math.sqrt(Math.max(0, zone.w) * Math.max(0, zone.h));
-  return Math.max(MIN, Math.min(MAX, Math.round(cote / 2.2)));
+export function nombreDeNano(): number {
+  return NOMBRE;
 }
 
 export function creerEssaim(zone: Zone, source: Point, hasard: () => number, mode: ModeEssaim = "complet"): Essaim {
-  const n = nombreDeNano(zone);
+  const n = nombreDeNano();
   const bots: Nano[] = [];
   for (let i = 0; i < n; i++) {
     const b: Nano = {

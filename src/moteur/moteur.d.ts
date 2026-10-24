@@ -60,6 +60,8 @@ export interface DefAction {
   fam: string;
   quand: string;
   desc: string;
+  /** 1 quand le corps se transforme en scène (silhouette propre) pour cette action ; absent au repos et à la réponse. */
+  sc?: number;
 }
 
 export const ACT: Record<string, DefAction>;

@@ -15,11 +15,11 @@ const courir = (e: ReturnType<typeof creerEssaim>, secondes: number, zone: Zone 
 };
 
 describe("nanobots : l'essaim qui analyse", () => {
-  it("le nombre suit la taille de l'élément, borné", () => {
-    expect(nombreDeNano({ x: 0, y: 0, w: 20, h: 14 })).toBe(18);
-    expect(nombreDeNano({ x: 0, y: 0, w: 431, h: 487 })).toBe(100);
-    expect(nombreDeNano({ x: 0, y: 0, w: 0, h: 0 })).toBe(18);
-    expect(nombreDeNano(carte)).toBeGreaterThan(40);
+  it("ils sont toujours cent, comme les traits de son corps, quelle que soit la taille de l'élément", () => {
+    expect(nombreDeNano()).toBe(100);
+    expect(creerEssaim({ x: 0, y: 0, w: 20, h: 14 }, corps, graine(1)).bots).toHaveLength(100);
+    expect(creerEssaim({ x: 0, y: 0, w: 0, h: 0 }, corps, graine(2)).bots).toHaveLength(100);
+    expect(creerEssaim(carte, corps, graine(3)).bots).toHaveLength(100);
   });
 
   it("ils sortent de son corps en filet, puis se répartissent sur l'élément (au moins 90 % dessus après 2 s)", () => {
@@ -55,7 +55,7 @@ describe("nanobots : l'essaim qui analyse", () => {
     const petit: Zone = { x: 500, y: 300, w: 20, h: 14 };
     const e = creerEssaim(petit, corps, graine(4));
     courir(e, 2.5, petit);
-    expect(e.bots.length).toBe(18);
+    expect(e.bots.length).toBe(100);
     expect(surLaCible(e, petit)).toBeGreaterThanOrEqual(0.9);
   });
 

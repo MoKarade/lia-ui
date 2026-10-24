@@ -32,7 +32,7 @@ import {
   pointDansZone,
   prochaineDecision,
   validerEtat
-} from "./chunk-LEGOBPYF.mjs";
+} from "./chunk-NSC4QMEG.mjs";
 export {
   ACTIONS_LIA,
   CAUSES,

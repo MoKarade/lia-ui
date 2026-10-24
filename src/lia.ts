@@ -29,6 +29,7 @@ import { ambivalence, raisons as raisonsDeSonEtat, reponsePourquoi, rythmeDuJour
 import { ajouterSouvenir, humeurDeFond, phraseDeRetour, type GenreSouvenir, type Souvenir } from "./souvenirs.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
 import {
+  ACT,
   HUMEURS as HUMEURS_MOTEUR,
   ST,
   brut,
@@ -1126,6 +1127,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   toileNano.setAttribute("aria-hidden", "true");
   couche.insertBefore(toileNano, corpsEl);
   let essaim: Essaim | null = null;
+  /** L'action que le moteur dessine : la sienne, sauf quand ses nanobots travaillent à sa place. */
+  let idCorps = "repos";
+  /** Part (0 à 1) de ses traits partis avec les nanobots : son corps s'efface d'autant. */
+  let videCorps = 0;
   let essaimSur: Element | null = null;
   let essaimZone: { x: number; y: number; w: number; h: number } | null = null;
   const couleurNano = (nom: string, defaut: [number, number, number]): [number, number, number] => {
@@ -1273,7 +1278,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     // Ce qu'elle fait de la demande : expliquer et regarder avec lui = analyser et lire ; que changer = planifier.
     const baseMode = { expliquer: "analyse", changer: "planifie", regarder: "lit", question: "reflexion" }[mode];
     // Le cadre d'analyse apparaît tout de suite, sans attendre qu'elle soit arrivée ni que le modèle réponde.
-    analysePour = baseMode === "analyse" ? cible : null;
+    // Les trois entrées font travailler ses nanobots ; son corps ne se transforme en aucune scène (Marc, 24/10 : « seulement les 100 nanobots »).
+    analysePour = mode === "question" ? null : cible;
     if (analysePour) majEssaim(0);
     const debutAnalyse = Date.now();
     const demarrer = (): void => {
@@ -2466,11 +2472,17 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const px = Math.round(cote * dpr);
     if (toile.width !== px) toile.width = toile.height = px;
+    // Tant que ses nanobots travaillent, son corps garde sa forme de repos (aucune scène dessinée à côté d'elle : ni « analyse », ni « lit », ni « cherche »…)
+    // et se vide de ses traits, partis avec eux ; il se remplit quand ils rentrent.
+    idCorps = essaim && ACT[etat]?.sc ? "repos" : etat;
+    const sortisNano = essaim ? essaim.bots.filter((b) => b.sorti && !b.rentre).length / Math.max(1, essaim.bots.length) : 0;
+    videCorps += (sortisNano - videCorps) * (still ? 1 : 1 - Math.exp(-dt * 6));
+    toile.style.opacity = videCorps > 0.01 ? (1 - 0.85 * videCorps).toFixed(2) : "";
     if (ctx) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cote, cote);
       ctx.lineCap = "round";
-      dessiner(ctx, cote, cote, etatMoteur, sansMouvement ? 0 : t, etat, {
+      dessiner(ctx, cote, cote, etatMoteur, sansMouvement ? 0 : t, idCorps, {
         cx: cote / 2,
         cy: cote / 2,
         R: rayon,
@@ -2632,6 +2644,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       sortis: essaim?.bots.filter((b) => b.sorti && !b.rentre).length ?? 0,
       surCible: essaim && essaimZone ? surLaCible(essaim, essaimZone) : 0,
       cible: essaimZone ? { ...essaimZone } : null,
+      corps: idCorps,
+      vide: videCorps,
     }),
     envoyer: envoyerVers,
     geste,
