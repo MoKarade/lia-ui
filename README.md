@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.22.1
+npm i github:MoKarade/lia-ui#v0.23.0
 ```
 
 ## Utiliser
@@ -87,6 +87,10 @@ Un calcul local (`src/interieur.ts`, aucun réseau, aucun coût) qui prolonge so
 ## Sa physique : lancée, elle vole (v0.21.0)
 
 Lâchée à plus de 450 px/s en plein geste, LIA garde son élan (`src/physique.ts`, pur) : gravité (1 400 px/s²), frottement de l'air, rebonds sur les quatre bords de sa zone de vie (sol 0,55, murs 0,7), roulement au sol. À chaque impact elle s'écrase le long de la normale (jusqu'à 28 %, ressort sous-amorti, elle se balance un instant) ; un impact de plus de 1 400 px/s lui fait mal (un choc simulé par lancer). Posée, une lente flottaison la remonte d'environ deux rayons au-dessus du sol. `data-vol="1"` sur `.lia-ui__corps` pendant le vol. Un appui, le menu, la discussion ou une demande de l'hôte (`envoyer`) l'arrêtent net. Avec `prefers-reduced-motion` en mode « doux » ou « fixe », jamais de vol : elle se pose où on la lâche.
+
+## Ses déplacements : elle bondit (v0.23.0)
+
+Dans 3 promenades sur 10, elle ne glisse pas : elle s'accroupit 0,18 s (écrasement de haut en bas), puis bondit en arc vers son but et y arrive à l'heure dite, entre 0,6 et 1 s (`vitessePourBond` calcule la vitesse de départ avec la gravité et le frottement du vol). Le ressort la pose ensuite. Pendant le vol, une ombre sur le sol de sa zone rapetisse et pâlit avec la hauteur ; sa couleur est `--lia-ombre`. Un appui, le menu, la discussion, une demande de l'hôte ou le mouvement réduit annulent l'accroupissement et le bond ; `data-vol="1"` sur le corps vaut aussi pour un bond.
 
 ## Le menu de son corps
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auRepos, avancerBalle, BALLE_DEFAUT, ECRASEMENT_MAX, energie, frapper, normaleDe, relacherEcrasement, type Corps, type Ecrasement, type ParamsBalle } from "../src/physique.js";
+import { auRepos, avancerBalle, BALLE_DEFAUT, ECRASEMENT_MAX, energie, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Corps, type Ecrasement, type ParamsBalle } from "../src/physique.js";
 
 const zone = { x: 0, y: 0, w: 1000, h: 700 };
 const p: ParamsBalle = { ...BALLE_DEFAUT, marge: 60 };
@@ -116,5 +116,32 @@ describe("l'écrasement à l'impact", () => {
     expect(min).toBeGreaterThanOrEqual(-0.12);
     expect(e.s).toBe(0);
     expect(e.v).toBe(0);
+  });
+});
+
+describe("le bond : arriver au point voulu à l'heure dite", () => {
+  const libre = { x: -1e6, y: -1e6, w: 2e6, h: 2e6 };
+  it("part avec la vitesse qui la dépose sur le but à moins de 2 px, vers le haut, le bas, la gauche ou la droite", () => {
+    for (const [dx, dy, T] of [[400, -150, 0.8], [-600, 220, 0.9], [90, -300, 0.7], [-30, 40, 0.6]] as const) {
+      const depart = { x: 500, y: 400 };
+      const but = { x: depart.x + dx, y: depart.y + dy };
+      const v = vitessePourBond(depart, but, T, { ...BALLE_DEFAUT, marge: 0 });
+      const c: Corps = { ...depart, ...v };
+      for (let t = 0; t < T - 1e-9; t += 0.1) avancerBalle(c, Math.min(0.1, T - t), libre, { ...BALLE_DEFAUT, marge: 0 });
+      expect(Math.hypot(c.x - but.x, c.y - but.y)).toBeLessThan(2);
+    }
+  });
+
+  it("monte d'abord : l'arc passe au-dessus du but quand il est loin sur le côté", () => {
+    const depart = { x: 100, y: 500 };
+    const but = { x: 700, y: 500 };
+    const v = vitessePourBond(depart, but, 0.9, { ...BALLE_DEFAUT, marge: 0 });
+    expect(v.vy).toBeLessThan(-200);
+    expect(v.vx).toBeGreaterThan(600);
+  });
+
+  it("une durée absurde ne donne ni NaN ni vitesse infinie", () => {
+    const v = vitessePourBond({ x: 0, y: 0 }, { x: 300, y: 0 }, -5, { ...BALLE_DEFAUT, marge: 0 });
+    expect(Number.isFinite(v.vx + v.vy)).toBe(true);
   });
 });

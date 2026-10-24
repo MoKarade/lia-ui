@@ -1,6 +1,6 @@
 import {
   mountLia
-} from "./chunk-BINPQVBM.mjs";
+} from "./chunk-NYQE6AL2.mjs";
 
 // src/boot.ts
 var ESSAIS_MAX = 5;

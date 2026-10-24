@@ -18,7 +18,7 @@ import {
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, vieillir, garder as garderInterieur, type Stimulus } from "./interieur.js";
 import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
-import { auRepos, avancerBalle, BALLE_DEFAUT, frapper, normaleDe, relacherEcrasement, type Ecrasement } from "./physique.js";
+import { auRepos, avancerBalle, BALLE_DEFAUT, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Ecrasement } from "./physique.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
@@ -179,6 +179,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const couche = el("div", conteneur ? "lia-ui lia-ui--conteneur" : "lia-ui");
   (conteneur ?? document.body).appendChild(couche);
   const corpsEl = el("div", "lia-ui__corps");
+  const ombre = el("div", "lia-ui__ombre");
   const toile = el("canvas", "lia-ui__toile");
   toile.setAttribute("aria-hidden", "true");
   const ctx = toile.getContext("2d");
@@ -196,6 +197,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     puceHumeur.append(pointHumeur, texteHumeur);
     corpsEl.appendChild(puceHumeur);
   }
+  couche.appendChild(ombre);
   couche.appendChild(corpsEl);
   const bulle = el("div", "lia-ui__bulle");
   bulle.hidden = true;
@@ -254,7 +256,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** Physique du corps : accélération filtrée (les traits la subissent), inclinaison sur ressort, flottement. */
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
   /** Lancée par Marc : un vol avec élan, gravité et rebonds (src/physique.ts) jusqu'à ce qu'elle se pose ; `ecr` est son écrasement à l'impact. */
-  const balle = { actif: false, depuis: 0, choc: false };
+  const balle = { actif: false, depuis: 0, choc: false, fin: 0, but: { x: 0, y: 0 } };
+  /** Un bond décidé par elle : elle s'accroupit un instant, puis part en arc vers `but` et y arrive à `t0 + duree`. Annulé comme un vol. */
+  let bond: { t0: number; duree: number; but: { x: number; y: number }; vx: number; vy: number } | null = null;
   const ecr: Ecrasement = { s: 0, v: 0, angle: 0 };
   let rayon = rayonBase;
   /** Le rayon qu'elle rejoint en douceur (`setRayon`) : plus grande au centre d'un accueil, plus petite ailleurs. */
@@ -1246,6 +1250,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         balle.actif = true;
         balle.depuis = t;
         balle.choc = false;
+        balle.fin = 0;
         pos.vx = limiter(pos.vx, -2600, 2600);
         pos.vy = limiter(pos.vy, -2600, 2600);
       }
@@ -1536,6 +1541,27 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     pos.vy -= (dy / d) * 70;
   };
 
+  /**
+   * Parfois elle ne glisse pas vers `cible` : elle s'accroupit 0,18 s puis bondit en arc et y arrive à l'heure dite (gravité et frottement du vol).
+   * Faux (et rien n'est programmé) si le but est trop proche ou si l'arc sortirait par le haut de sa zone.
+   */
+  const programmerBond = (): boolean => {
+    if (sansMouvement || doux) return false;
+    const z = zoneVie();
+    const but = dansZone(z, cible.x, cible.y, rayon * 0.6);
+    const d = Math.hypot(but.x - pos.x, but.y - pos.y);
+    if (d < rayon * 4) return false;
+    const duree = limiter(0.55 + d / 1500, 0.6, 1);
+    const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
+    const v = vitessePourBond(pos, but, duree, params);
+    // Le sommet de l'arc (sans frottement : un peu pessimiste) doit rester dans la zone.
+    const sommet = pos.y - (v.vy < 0 ? (v.vy * v.vy) / (2 * params.gravite) : 0);
+    if (sommet < z.y + params.marge || Math.hypot(v.vx, v.vy) > 2600) return false;
+    bond = { t0: t + 0.18, duree, but, vx: v.vx, vy: v.vy };
+    cible = { x: pos.x, y: pos.y };
+    return true;
+  };
+
   const lancer = (id: Comportement, vues: Element[]): void => {
     comportement = id;
     derniereDecision = t;
@@ -1549,7 +1575,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 5, 8));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
-      anticiper();
+      if (!(Math.random() < 0.3 && programmerBond())) anticiper();
       errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
       choisir("repos");
       calme(30);
@@ -1847,6 +1873,29 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       balle.actif = false;
       cible = { x: pos.x, y: pos.y };
     }
+    if (bond && (glisse || chatOuvert || menuOuvert || attention || sansMouvement || doux || still)) {
+      cible = { x: pos.x, y: pos.y };
+      bond = null;
+    }
+    if (bond && !balle.actif) {
+      if (t >= bond.t0) {
+        // Le départ : l'accroupissement se détend (le ressort d'écrasement l'étire un instant dans le sens du saut).
+        balle.actif = true;
+        balle.depuis = t;
+        balle.choc = true;
+        balle.fin = t + bond.duree;
+        balle.but = bond.but;
+        pos.vx = bond.vx;
+        pos.vy = bond.vy;
+        bond = null;
+      } else {
+        // L'accroupissement : elle s'aplatit de haut en bas en 0,18 s, sans bouger.
+        ecr.angle = Math.PI / 2;
+        ecr.s = 0.2 * limiter(1 - (bond.t0 - t) / 0.18, 0, 1);
+        ecr.v = 0;
+        pos.vx = pos.vy = 0;
+      }
+    }
     if (sansMouvement || doux || still) {
       pos.x = cc.x;
       pos.y = cc.y;
@@ -1862,7 +1911,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
           stimulerInterieur("choc", Math.min(1, imp.vitesse / 3000));
         }
       }
-      if (auRepos(pos, z, params) || t - balle.depuis > 9) {
+      if (balle.fin && t >= balle.fin) {
+        // Un bond arrivé : elle garde sa vitesse et le ressort de la balade la pose sur son but.
+        balle.actif = false;
+        balle.fin = 0;
+        cible = { x: balle.but.x, y: balle.but.y };
+        choisir(etatForce ?? "repos");
+      } else if (auRepos(pos, z, params) || t - balle.depuis > 9) {
         // Posée : une lente flottaison la remonte d'environ deux rayons au-dessus du sol.
         balle.actif = false;
         pos.vx = pos.vy = 0;
@@ -1983,6 +2038,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     else ecr.s = ecr.v = 0;
     const ecrase = Math.abs(ecr.s) > 0.004 ? ` rotate(${ecr.angle.toFixed(3)}rad) scale(${(1 - ecr.s).toFixed(3)},${(1 + ecr.s * 0.8).toFixed(3)}) rotate(${(-ecr.angle).toFixed(3)}rad)` : "";
     corpsEl.dataset["vol"] = balle.actif ? "1" : "0";
+    // Son ombre sur le sol de sa zone : plus petite et plus pâle quand elle est haute ; elle ne se voit qu'en vol.
+    const solY = z.y + z.h - rayon * 0.6;
+    const haut = Math.max(0, solY - pos.y);
+    const echelleOmbre = 1 / (1 + haut / 450);
+    ombre.style.opacity = balle.actif && !still ? (0.95 * echelleOmbre).toFixed(2) : "0";
+    ombre.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${(z.y + z.h - rayon * 0.3).toFixed(1)}px) translate(-50%,-50%) scale(${((rayon * 2.2 * echelleOmbre) / 100).toFixed(3)},${((rayon * 0.5 * echelleOmbre) / 24).toFixed(3)})`;
     toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${ecrase}${etire > 0.004 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
       puceHumeur.hidden = chatOuvert;
