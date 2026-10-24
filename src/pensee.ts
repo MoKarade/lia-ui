@@ -84,7 +84,15 @@ export function pourquoi(c: ContextePensee, hasard: Hasard): string | null {
   const choisie = seconde && seconde.force >= premiere.force - 0.1 && hasard() < 0.4 ? seconde : premiere;
   const r = hasard();
   const k = Number.isFinite(r) ? Math.max(0, Math.min(INTRODUCTIONS.length - 1, Math.floor(r * INTRODUCTIONS.length))) : 0;
-  return `${INTRODUCTIONS[k] ?? INTRODUCTIONS[0]}${choisie.phrase}.`;
+  const intro = INTRODUCTIONS[k] ?? INTRODUCTIONS[0] ?? "";
+  // « parce que il » s'élide : « parce qu'il », « parce qu'on », « parce qu'une inquiétude ».
+  const elide = /que $/.test(intro) && /^[aeiouyéèêàâîïôûh]/i.test(choisie.phrase);
+  return `${elide ? `${intro.slice(0, -2)}'` : intro}${choisie.phrase}.`;
+}
+
+/** Ce qu'elle répond à « pourquoi tu es comme ça ? » : sa raison la plus pesante, ou, s'il n'y en a aucune, que tout est calme. */
+export function reponsePourquoi(c: ContextePensee, hasard: Hasard): string {
+  return pourquoi(c, hasard) ?? "Pas de raison précise, je crois. Tout est calme.";
 }
 
 /** Les humeurs qui pèsent : quand l'une d'elles est mêlée à une humeur légère, elle sent deux choses à la fois. */

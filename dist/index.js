@@ -1384,6 +1384,86 @@ function empreinte(e) {
   return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}|${memoire}`;
 }
 
+// src/pensee.ts
+var CAUSES_DOULEUR = {
+  choc: "\xE7a m'a secou\xE9e tout \xE0 l'heure",
+  brusque: "on m'a un peu brusqu\xE9e tout \xE0 l'heure",
+  ton: "le ton de tout \xE0 l'heure m'est rest\xE9",
+  panne: "le r\xE9seau a l\xE2ch\xE9 tout \xE0 l'heure",
+  isolement: "le silence dure",
+  usure: "je suis un peu us\xE9e"
+};
+var borne012 = (x) => Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0;
+function raisons(c) {
+  const e = c.envies;
+  const i = c.interieur;
+  const liste = [];
+  const ajouter2 = (id, force, phrase) => {
+    const f = borne012(force);
+    if (f >= 0.2) liste.push({ id, force: f, phrase });
+  };
+  if (i.cause !== null) ajouter2("douleur", i.douleur >= 0.25 ? i.douleur + 0.3 : 0, CAUSES_DOULEUR[i.cause]);
+  if (c.fond) {
+    ajouter2("rancune", c.fond.rancune >= 0.25 ? c.fond.rancune + 0.1 : 0, "je n'ai pas tout oubli\xE9 de ces derniers jours");
+    ajouter2("chaleur", c.fond.chaleur >= 0.35 ? c.fond.chaleur : 0, "je repense \xE0 ta gentillesse de ces derniers jours");
+  }
+  ajouter2("sensible", i.sensibilite >= 0.45 ? i.sensibilite : 0, "je suis \xE0 fleur de peau ces temps-ci");
+  ajouter2("plaisir", i.plaisir >= 0.3 ? i.plaisir + 0.2 : 0, "quelque chose m'a fait plaisir");
+  ajouter2("confiance", i.confiance >= 0.75 ? i.confiance - 0.2 : 0, "je me sens en confiance");
+  ajouter2("compagnie", e.social < 0.2 ? 0.7 - e.social : 0, "j'aurais bien un peu de compagnie");
+  ajouter2("ennui", e.ennui > 0.6 ? e.ennui - 0.1 : 0, "je m'ennuie un peu");
+  ajouter2("fatigue", e.energie < 0.3 ? 0.9 - e.energie : 0, "mon \xE9nergie est basse");
+  ajouter2("joie", e.joie > 0.7 ? e.joie - 0.15 : 0, "il y a de la joie en moi en ce moment");
+  ajouter2("inquietude", e.inquiet > 0.5 ? e.inquiet : 0, "une inqui\xE9tude tra\xEEne");
+  if (c.heure >= 22 || c.heure < 5) ajouter2("heure", 0.35, "il est tard");
+  else if (c.heure < 7) ajouter2("heure", 0.3, "il est t\xF4t");
+  return liste.sort((a, b) => b.force - a.force);
+}
+var INTRODUCTIONS = ["Je crois que c'est parce que ", "Sans doute parce que ", "Je dirais que c'est parce que ", "C'est que "];
+function pourquoi(c, hasard) {
+  const [premiere, seconde] = raisons(c);
+  if (!premiere) return null;
+  const choisie = seconde && seconde.force >= premiere.force - 0.1 && hasard() < 0.4 ? seconde : premiere;
+  const r = hasard();
+  const k = Number.isFinite(r) ? Math.max(0, Math.min(INTRODUCTIONS.length - 1, Math.floor(r * INTRODUCTIONS.length))) : 0;
+  const intro = INTRODUCTIONS[k] ?? INTRODUCTIONS[0] ?? "";
+  const elide = /que $/.test(intro) && /^[aeiouyéèêàâîïôûh]/i.test(choisie.phrase);
+  return `${elide ? `${intro.slice(0, -2)}'` : intro}${choisie.phrase}.`;
+}
+function reponsePourquoi(c, hasard) {
+  return pourquoi(c, hasard) ?? "Pas de raison pr\xE9cise, je crois. Tout est calme.";
+}
+var PENIBLES = /* @__PURE__ */ new Set(["inquiet", "triste", "mefiant", "boudeur", "agace", "gene", "ennuye", "dubitatif", "fatigue", "impatient", "nostalgique"]);
+var de = (mot) => /^[aeiouyéèêàâîïôûh]/i.test(mot) ? `d'${mot}` : `de ${mot}`;
+function ambivalence(actives) {
+  const a = actives[0];
+  const b = actives[1];
+  if (!a || !b || a[0] === b[0] || a[1] <= 0 || b[1] < 0.65 * a[1]) return null;
+  const la = libelleHumeur(a[0]);
+  const lb = libelleHumeur(b[0]);
+  if (PENIBLES.has(a[0]) !== PENIBLES.has(b[0])) return `Un m\xE9lange ${de(la)} et ${de(lb)}.`;
+  return `Surtout un fond ${de(la)}, avec un peu ${de(lb)}.`;
+}
+var HESITANTES = /* @__PURE__ */ new Set(["timide", "gene", "dubitatif", "inquiet", "mefiant", "pensif"]);
+var TRAINANTES = /* @__PURE__ */ new Set(["fatigue", "ennuye", "triste", "reveur", "nostalgique", "paisible"]);
+var HESITATIONS = ["Hum\u2026 ", "Euh\u2026 ", "Eh bien\u2026 "];
+function teinter(phrase, humeur2, hasard) {
+  if (phrase.length === 0) return phrase;
+  let texte = phrase;
+  if (HESITANTES.has(humeur2) && hasard() < 0.4 && !/^(Hum|Euh|Eh bien)/.test(texte)) {
+    const h = HESITATIONS[Math.min(HESITATIONS.length - 1, Math.floor(hasard() * HESITATIONS.length))] ?? "Hum\u2026 ";
+    const sigle = /^[A-ZÀ-Ý]{2}/.test(texte);
+    texte = `${h}${sigle ? texte.charAt(0) : texte.charAt(0).toLowerCase()}${texte.slice(1)}`;
+  }
+  if (TRAINANTES.has(humeur2) && hasard() < 0.4 && /[.!]$/.test(texte)) texte = `${texte.slice(0, -1)}\u2026`;
+  return texte;
+}
+function rythmeDuJour(heure) {
+  const h = Number.isFinite(heure) ? (heure % 24 + 24) % 24 : 12;
+  const phase = Math.cos((h - 15) / 24 * Math.PI * 2);
+  return 0.875 + 0.175 * phase;
+}
+
 // src/poids.ts
 var APP_IDS = ["financeai", "batchchef", "jobai", "driveai", "carai", "memoryai"];
 var ENTREES = [
@@ -3715,11 +3795,16 @@ function questionSurSonHumeur(question) {
   if (q.length === 0 || q.length > 80) return false;
   return /\b(humeur|te sens|tu ressens|ressens[- ]tu|comment (tu )?vas|comment vas[- ]tu|tu vas (bien|mal)|ton etat|comment tu te sens)\b/.test(q) || /^(salut |hey |coucou )?(alors )?ca va( bien| toi)? ?\??$/.test(q);
 }
-function reponseHumeur(humeur2, ressent) {
+function questionPourquoi(question) {
+  const q = sansAccent(question).replace(/['’]/g, " ").replace(/\s+/g, " ").trim();
+  if (q.length === 0 || q.length > 80) return false;
+  return /\bpourquoi (tu |t )?(es|vas|te sens|as l air|fais la tete|boudes)\b/.test(q) || /\bqu est[- ]?ce (qui (ne )?va pas|que tu as)\b/.test(q);
+}
+function reponseHumeur(humeur2, ressent, melange2 = null) {
   const nom = LIBELLES_HUMEURS[humeur2] ?? humeur2;
   const phrase = PHRASES_HUMEUR[humeur2] ?? "";
   const derriere = ressent.filter(([h, v]) => h !== humeur2 && v > 0.25 && LIBELLES_HUMEURS[h]).slice(0, 2).map(([h]) => LIBELLES_HUMEURS[h]);
-  const suite = derriere.length ? ` Juste derri\xE8re : ${derriere.join(" et ")}.` : "";
+  const suite = melange2 ? ` ${melange2}` : derriere.length ? ` Juste derri\xE8re : ${derriere.join(" et ")}.` : "";
   return `En ce moment, mon humeur est \xAB ${nom} \xBB. ${phrase}${suite}`.replace(/\s+/g, " ").trim();
 }
 
@@ -4366,13 +4451,13 @@ function mountLia(options = {}) {
   let derniereFocus = null;
   let activiteChat = 0;
   const trace = [];
-  const ajouterMsg = (texte, de, erreur = false, garder3 = !erreur) => {
+  const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur) => {
     activiteChat = t;
     if (garder3) {
-      trace.push({ de, texte });
+      trace.push({ de: de2, texte });
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
     }
-    const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
+    const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
     return m;
@@ -4450,8 +4535,16 @@ function mountLia(options = {}) {
       voix(dite);
       return;
     }
+    if (envoi === question && questionPourquoi(question)) {
+      const dite = teinter(reponsePourquoi(contextePensee(), Math.random), humeurNom, Math.random);
+      ajouterMsg(dite, "lia");
+      impulsion(reseau, "reponse");
+      voix(dite);
+      return;
+    }
     if (envoi === question && questionSurSonHumeur(question)) {
-      const dite = reponseHumeur(humeurNom, reseauActif ? top3(reseau) : []);
+      const actives = reseauActif ? top3(reseau) : [];
+      const dite = teinter(reponseHumeur(humeurNom, actives, ambivalence(actives)), humeurNom, Math.random);
       ajouterMsg(dite, "lia");
       impulsion(reseau, "reponse");
       voix(dite);
@@ -5306,10 +5399,14 @@ function mountLia(options = {}) {
   };
   let recentesParoles = [];
   const contexteParole = () => ({ heure: (/* @__PURE__ */ new Date()).getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles });
+  const contextePensee = () => {
+    const maintenant = Date.now();
+    return { humeur: humeurNom, actives: reseauActif ? top3(reseau) : [], envies, interieur, fond: humeurDeFond(souvenirs, maintenant), heure: new Date(maintenant).getHours(), faits, maintenant };
+  };
   const direPersonnel = () => {
     const p = choisirParole(contexteParole(), Math.random);
     recentesParoles = [...recentesParoles, p.id].slice(-6);
-    const dite = dire(p.text, p.chips ? { chips: p.chips } : void 0);
+    const dite = dire(teinter(p.text, humeurNom, Math.random), p.chips ? { chips: p.chips } : void 0);
     if (dite) {
       hoteDeSuite = 0;
       apresVoix = SILHOUETTE_PAROLE[p.id] ?? null;
@@ -5615,7 +5712,7 @@ function mountLia(options = {}) {
     entreesCourantes = { ...locales, ...habituer(entreesHote(), dt) };
     interieur = evoluer(interieur, dt, { horsLigne, ralenti: dtMoyen > 0.1, absentSec: document.hidden ? 0 : (now - dernierMarc) / 1e3 });
     const intr = versReseau(interieur);
-    entreesCourantes = { ...entreesCourantes, energie: (entreesCourantes["energie"] ?? 0) * intr.facteurEnergie };
+    entreesCourantes = { ...entreesCourantes, energie: (entreesCourantes["energie"] ?? 0) * intr.facteurEnergie * rythmeDuJour(new Date(now).getHours()) };
     if (intr.mauvais > 0.01) impulsion(reseau, "mauvais", intr.mauvais);
     if (intr.rejet > 0.01) impulsion(reseau, "rejet", intr.rejet);
     if (intr.bon > 0.01) impulsion(reseau, "bon", intr.bon);

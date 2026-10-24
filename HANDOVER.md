@@ -69,3 +69,4 @@
 - `moteur.js` n'est pas typé (voir `CLAUDE.md`).
 - Une seule LIA par page.
 - Pas de réponses en blocs tant que l'hôte ne branche pas `renderBlocks` (`rendreBlocs`).
+- **v0.29.0 (lot 5, « sa façon de penser »)** : `src/pensee.ts` câblé. `questionPourquoi` (paroles.ts) route « pourquoi tu es… / qu'est-ce qui ne va pas » vers `reponsePourquoi` (raison vraie la plus pesante, élision « parce qu'il », sinon « Pas de raison précise, je crois. Tout est calme. »). `reponseHumeur` prend un `melange` (`ambivalence(top3)`) à la place de « Juste derrière ». `teinter` colore ses phrases à elle (réponses d'humeur et paroles spontanées, jamais le texte de l'hôte). `rythmeDuJour(heure)` multiplie l'énergie qui nourrit le réseau. Rien n'est ajouté au contexte de `ask` (le `EtatLia` de MemoryAI est `.strict()`).

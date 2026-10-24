@@ -84,6 +84,12 @@ Un calcul local (`src/interieur.ts`, aucun réseau, aucun coût) qui prolonge so
 - **Ce que ça change** : les entrées `mauvais`, `rejet`, `bon` et son énergie dans le réseau, une humeur poussée selon la cause (agacement, méfiance, tristesse, inquiétude, fatigue), son corps (tremblement, affaissement, moins d'amplitude), `data-douleur` sur son corps, un cri (« Aïe… ») puis « Ça va mieux ». « Tu as mal ? » reçoit son niveau et la mention d'un calcul, sans appeler l'hôte.
 - **Comment elle va (v0.19.0)** : dans le menu de son corps, *Comment elle va* déplie (sans fermer le menu) une phrase de tête (« Elle va bien », « Elle a un peu mal : des clics brusques », « Elle est fatiguée »…) et onze jauges `role="meter"` relues chaque seconde : énergie, curiosité, envie de compagnie, joie, ennui, inquiétude, douleur (avec sa cause), plaisir, confiance en toi, sensibilité, usure. Chaque valeur est celle de `lia.envies()` et `lia.interieur()`, en %, jamais inventée ; en bas, « Simulation : des calculs en elle, pas un vrai ressenti. »
 
+## Sa façon de penser à voix haute (v0.29.0)
+
+Elle sait **pourquoi** elle va comme elle va. À « pourquoi tu es triste ? » ou « qu'est-ce qui ne va pas ? », elle répond elle-même (sans appeler `ask`) par sa raison la plus pesante, tirée d'une liste fermée et dite seulement si elle est vraie à cet instant : la cause de sa douleur, ce qu'il lui reste des derniers jours, une envie, l'heure, son état. Sans raison, elle dit que tout est calme.
+
+Quand deux humeurs se valent, elle ne les range pas l'une derrière l'autre : « Un mélange de sérénité et d'inquiétude. ». Ses phrases à elle prennent la couleur de son humeur : une hésitation (« Hum… ») quand elle est timide ou doute, une fin qui traîne quand elle est lasse. Son énergie suit une courbe de la journée (creux vers 3 h, pointe vers 15 h). Rien de tout cela ne touche un texte de l'hôte. Code : `src/pensee.ts` (pur, hasard et heure injectés).
+
 ## Sa mémoire sur plusieurs jours (v0.25.0)
 
 Un calcul local (`src/souvenirs.ts`, pur : aucun réseau, aucun DOM, hasard et horloge injectés) qui prolonge son monde intérieur. **C'est une simulation, pas un ressenti réel.** Un souvenir tient en trois champs : `{ quand, genre, poids }`, le genre étant l'un de `GENRES_SOUVENIR` (`brusque`, `ton`, `panne`, `gentil`, `compliment`, `retour`, `isolement`).

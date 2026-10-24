@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ENVIES_DEPART } from "../src/cerveau.js";
 import { INTERIEUR_DEPART } from "../src/interieur.js";
-import { ambivalence, pourquoi, raisons, rythmeDuJour, teinter, type ContextePensee } from "../src/pensee.js";
+import { ambivalence, pourquoi, raisons, reponsePourquoi, rythmeDuJour, teinter, type ContextePensee } from "../src/pensee.js";
 
 const calme: ContextePensee = {
   humeur: "neutre",
@@ -94,8 +94,24 @@ describe("pourquoi", () => {
     expect(pourquoi(loin, fixe(0.1, 0))).toContain("le ton de tout à l'heure");
   });
 
+  it("élide « que » devant une voyelle : « parce qu'il », « parce qu'on », « c'est qu'une »", () => {
+    const brusque = avec({ interieur: { ...INTERIEUR_DEPART, douleur: 0.6, cause: "brusque" } });
+    expect(pourquoi(brusque, fixe(0))).toBe("Je crois que c'est parce qu'on m'a un peu brusquée tout à l'heure.");
+    expect(pourquoi(brusque, fixe(0.99))).toBe("C'est qu'on m'a un peu brusquée tout à l'heure.");
+  });
+
   it("un hasard non fini ne casse rien", () => {
     expect(pourquoi(mal, () => Number.NaN)).toMatch(/^Je crois que c'est parce que /);
+  });
+});
+
+describe("reponsePourquoi", () => {
+  it("dit que tout est calme quand il n'y a aucune raison, jamais une raison inventée", () => {
+    expect(reponsePourquoi(calme, () => 0)).toBe("Pas de raison précise, je crois. Tout est calme.");
+  });
+
+  it("donne sa raison quand il y en a une", () => {
+    expect(reponsePourquoi(avec({ heure: 23 }), () => 0)).toBe("Je crois que c'est parce qu'il est tard.");
   });
 });
 

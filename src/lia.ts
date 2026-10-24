@@ -24,6 +24,7 @@ import { avancerEssaim, creerEssaim, eclat, rappeler as rappelerEssaim, surLaCib
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
+import { ambivalence, reponsePourquoi, rythmeDuJour, teinter, type ContextePensee } from "./pensee.js";
 import { ajouterSouvenir, humeurDeFond, phraseDeRetour, type GenreSouvenir, type Souvenir } from "./souvenirs.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
 import {
@@ -56,7 +57,7 @@ import {
   type ModeElement,
 } from "./ecran.js";
 import { GESTES, HUMEURS_MENU, dureeGeste, trouverGeste } from "./gestes.js";
-import { SILHOUETTE_PAROLE, choisirParole, estPuceLia, questionSurSonHumeur, reponseHumeur, suiteParole, type ContexteParole } from "./paroles.js";
+import { SILHOUETTE_PAROLE, choisirParole, estPuceLia, questionPourquoi, questionSurSonHumeur, reponseHumeur, suiteParole, type ContexteParole } from "./paroles.js";
 import { FAMILLES_ACTIONS, activiteElement, activiteQuestion, estAction, suiteReflexion } from "./activite.js";
 import {
   ecrireCerveau,
@@ -634,8 +635,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       return;
     }
     // Sa propre humeur, elle la dit elle-même : c'est son état, pas une question pour le modèle de l'hôte.
+    if (envoi === question && questionPourquoi(question)) {
+      const dite = teinter(reponsePourquoi(contextePensee(), Math.random), humeurNom, Math.random);
+      ajouterMsg(dite, "lia");
+      impulsion(reseau, "reponse");
+      voix(dite);
+      return;
+    }
     if (envoi === question && questionSurSonHumeur(question)) {
-      const dite = reponseHumeur(humeurNom, reseauActif ? top3(reseau) : []);
+      const actives = reseauActif ? top3(reseau) : [];
+      const dite = teinter(reponseHumeur(humeurNom, actives, ambivalence(actives)), humeurNom, Math.random);
       ajouterMsg(dite, "lia");
       impulsion(reseau, "reponse");
       voix(dite);
@@ -1583,10 +1592,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** Ce qu'elle dit d'elle-même (src/paroles.ts) : vrai par construction, jamais rien sur Marc ni sur ses apps. */
   let recentesParoles: string[] = [];
   const contexteParole = (): ContexteParole => ({ heure: new Date().getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles });
+  /** Ce qu'elle sait de pourquoi elle va comme elle va (src/pensee.ts) : son état seul, jamais ce que Marc a écrit. */
+  const contextePensee = (): ContextePensee => {
+    const maintenant = Date.now();
+    return { humeur: humeurNom, actives: reseauActif ? top3(reseau) : [], envies, interieur, fond: humeurDeFond(souvenirs, maintenant), heure: new Date(maintenant).getHours(), faits, maintenant };
+  };
   const direPersonnel = (): boolean => {
     const p = choisirParole(contexteParole(), Math.random);
     recentesParoles = [...recentesParoles, p.id].slice(-6);
-    const dite = dire(p.text, p.chips ? { chips: p.chips } : undefined);
+    const dite = dire(teinter(p.text, humeurNom, Math.random), p.chips ? { chips: p.chips } : undefined);
     if (dite) {
       hoteDeSuite = 0;
       apresVoix = SILHOUETTE_PAROLE[p.id] ?? null;
@@ -1938,7 +1952,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     // Son monde intérieur avance, puis nourrit le réseau (impulsions, énergie) et pousse une humeur de douleur.
     interieur = evoluer(interieur, dt, { horsLigne, ralenti: dtMoyen > 0.1, absentSec: document.hidden ? 0 : (now - dernierMarc) / 1000 });
     const intr = versReseau(interieur);
-    entreesCourantes = { ...entreesCourantes, energie: (entreesCourantes["energie"] ?? 0) * intr.facteurEnergie };
+    entreesCourantes = { ...entreesCourantes, energie: (entreesCourantes["energie"] ?? 0) * intr.facteurEnergie * rythmeDuJour(new Date(now).getHours()) };
     if (intr.mauvais > 0.01) impulsion(reseau, "mauvais", intr.mauvais);
     if (intr.rejet > 0.01) impulsion(reseau, "rejet", intr.rejet);
     if (intr.bon > 0.01) impulsion(reseau, "bon", intr.bon);
