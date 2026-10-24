@@ -56,6 +56,8 @@
 
 - **v0.28.0 (lia-ui#90)** : allure humaine. Marc, 24/10 01:27Z : « faut qu'elle bouge de façon humaine, pas régulier mais naturel ». `src/allure.ts` (pur, hasard injecté) : `planifierTrajet` (arc quadratique, vitesse de croisière lognormale, pause éventuelle, dépassement éventuel), `pointDuTrajet` (profil jerk minimal, temps gelé pendant la pause), `deriveAuRepos` (balancement non répétitif), `prochainPetitPas` (délais lognormaux, 1,6 à 70 s). Dans `lia.ts`, le ressort de promenade vise le point du trajet (ressort plus raide et amorti : k 34) au lieu du but ; les petits pas de côté partent d'un point d'attache et ne la font pas compter comme « elle a bougé ». 12 tests purs, 4 d'intégration.
 
+- **v0.28.1 (lia-ui#94)** : une image ou un graphique sans texte visible est décrit par son libellé (`aria-label`, puis `alt`, puis `<title>` d'un SVG, puis l'attribut `title`), au lieu d'un simple « Une image » (relevé à la preuve de #88). Le texte visible reste prioritaire ; le libellé est assaini comme le reste (`normaliser`). 3 tests dans `tests/ecran.test.ts`.
+
 ## À faire
 1. **Le fil PC pose le tag `v0.2.0`** après merge de lia-ui#5 (une session cloud ne peut pas pousser de tag ; le v0.1.0 a été posé ainsi, pas par Marc), puis le hub et les apps bumpent leur épingle.
 2. **« autorisé » de Marc** avant de passer le dépôt en public (sinon les apps publiques ne peuvent pas l'installer).

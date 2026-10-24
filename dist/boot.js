@@ -3329,8 +3329,13 @@ function decrireParDefaut(cible) {
   const genre = cible.getAttribute("data-lia-genre") ?? genreParDefaut(cible);
   const nom = cible.closest("[data-lia-app]")?.getAttribute("data-lia-app") ?? cible.parentElement?.closest("[data-lia-genre]")?.getAttribute("data-lia-genre") ?? void 0;
   const visible = cible.innerText;
-  const texte = typeof visible === "string" ? visible : cible.textContent ?? "";
+  const brut2 = typeof visible === "string" ? visible : cible.textContent ?? "";
+  const texte = brut2.trim() ? brut2 : libelleAccessible(cible);
   return normaliser({ genre, ...nom ? { nom } : {}, texte });
+}
+function libelleAccessible(cible) {
+  const titreSvg = cible.querySelector(":scope > title")?.textContent;
+  return [cible.getAttribute("aria-label"), cible.getAttribute("alt"), titreSvg, cible.getAttribute("title")].find((x) => x?.trim()) ?? "";
 }
 function estMarqueVide(cible) {
   return cible.children.length === 0 && !(cible.textContent ?? "").trim() && !cible.matches(MEDIAS);

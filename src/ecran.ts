@@ -143,8 +143,16 @@ export function decrireParDefaut(cible: Element): ElementDecrit {
     cible.parentElement?.closest("[data-lia-genre]")?.getAttribute("data-lia-genre") ??
     undefined;
   const visible = (cible as HTMLElement).innerText;
-  const texte = typeof visible === "string" ? visible : (cible.textContent ?? "");
+  const brut = typeof visible === "string" ? visible : (cible.textContent ?? "");
+  // Sans texte visible (image, graphique), le libellé que l'auteur lui a donné dit ce que c'est.
+  const texte = brut.trim() ? brut : libelleAccessible(cible);
   return normaliser({ genre, ...(nom ? { nom } : {}), texte });
+}
+
+/** `aria-label`, puis `alt`, puis le `<title>` d'un SVG, puis l'attribut `title` : ce que l'auteur a écrit pour qui ne voit pas l'élément. */
+function libelleAccessible(cible: Element): string {
+  const titreSvg = cible.querySelector(":scope > title")?.textContent;
+  return [cible.getAttribute("aria-label"), cible.getAttribute("alt"), titreSvg, cible.getAttribute("title")].find((x) => x?.trim()) ?? "";
 }
 
 /** Vrai quand l'élément n'a ni texte à lui, ni enfant, ni rôle de média : une marque (point, pastille, icône en CSS). */
