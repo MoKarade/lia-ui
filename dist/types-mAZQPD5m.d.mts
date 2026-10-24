@@ -485,6 +485,14 @@ interface OptionsLia {
     /** Plafond de relances par jour (mémorisé dans le navigateur). Défaut 2. */
     relancesParJour?: number;
     /**
+     * L'hôte la met en pause (lu à chaque pas et avant chaque `ask`) : elle ne parle plus seule, ne rappelle plus `onSpontane` ni
+     * `monde`, et n'appelle plus `ask` (elle répond qu'elle est en pause). Une `pause` qui lève une erreur vaut pause. Ce n'est que le
+     * côté client : le refus du modèle et l'état de la pause se vérifient côté serveur, chez l'hôte.
+     */
+    pause?: () => boolean;
+    /** Plafond de TOUTES ses paroles spontanées par jour local (mémorisé dans le navigateur), au-delà : plus rien jusqu'au lendemain. Défaut : aucun. */
+    plafondSpontaneesParJour?: number;
+    /**
      * Clic droit sur n'importe quel élément de la page : un menu à quatre entrées, LIA va près de
      * l'élément et pose la question par `ask` (le texte de l'élément y figure comme DONNÉE). Maj + clic
      * droit laisse le menu du navigateur. `false` : LIA ne prend que le clic droit sur son propre corps.

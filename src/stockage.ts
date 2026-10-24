@@ -42,15 +42,15 @@ export function ecrireMemoire(cle: string, m: MemoireLia): void {
   }
 }
 
-/** Relances du jour (plafond côté LIA, au cas où l'hôte l'oublierait). `jour` = date locale AAAA-MM-JJ. */
+/** Un compteur du jour (plafond côté LIA, au cas où l'hôte l'oublierait). `jour` = date locale AAAA-MM-JJ. */
 export interface RelancesLia {
   jour: string;
   n: number;
 }
 
-export function lireRelances(cle: string, jour: string): number {
+function lireCompteur(cle: string, nom: string, jour: string): number {
   try {
-    const brut = localStorage.getItem(`${PREFIXE}${cle}:relances`);
+    const brut = localStorage.getItem(`${PREFIXE}${cle}:${nom}`);
     if (brut === null) return 0;
     const j: unknown = JSON.parse(brut);
     if (typeof j !== "object" || j === null) return 0;
@@ -61,13 +61,21 @@ export function lireRelances(cle: string, jour: string): number {
   }
 }
 
-export function ecrireRelances(cle: string, r: RelancesLia): void {
+function ecrireCompteur(cle: string, nom: string, r: RelancesLia): void {
   try {
-    localStorage.setItem(`${PREFIXE}${cle}:relances`, JSON.stringify(r));
+    localStorage.setItem(`${PREFIXE}${cle}:${nom}`, JSON.stringify(r));
   } catch {
     /* sans stockage, le plafond ne vaut que pour cette page : mieux que rien */
   }
 }
+
+/** Relances du jour. */
+export const lireRelances = (cle: string, jour: string): number => lireCompteur(cle, "relances", jour);
+export const ecrireRelances = (cle: string, r: RelancesLia): void => ecrireCompteur(cle, "relances", r);
+
+/** Paroles spontanées du jour (toutes, pas seulement les relances), pour `plafondSpontaneesParJour`. */
+export const lireSpontanees = (cle: string, jour: string): number => lireCompteur(cle, "spontanees", jour);
+export const ecrireSpontanees = (cle: string, r: RelancesLia): void => ecrireCompteur(cle, "spontanees", r);
 
 /** Ce que le cerveau garde entre deux pages : ses envies et le journal de ce qu'elle a fait. */
 export interface CerveauLia {
