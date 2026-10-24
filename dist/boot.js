@@ -3490,6 +3490,7 @@ function mountLia(options = {}) {
   let douleurAvant = 0;
   let aSouffert = false;
   let dernierCri = 0;
+  let dernierAppui = 0;
   let horsLigne = typeof navigator !== "undefined" && navigator.onLine === false;
   let dtMoyen = 0.016;
   const rafale = [];
@@ -3739,6 +3740,14 @@ function mountLia(options = {}) {
     }
     verifierCri();
   };
+  const livrerCri = (texte, essais) => {
+    if (detruit) return;
+    if ((glisse || Date.now() - dernierAppui < 450) && essais < 55) {
+      setTimeout(() => livrerCri(texte, essais + 1), 150);
+      return;
+    }
+    exprimer(texte);
+  };
   const verifierCri = () => {
     const maintenant = Date.now();
     if (douleurAvant < 0.35 && interieur.douleur >= 0.35 && maintenant - dernierCri > 3e4) {
@@ -3747,7 +3756,7 @@ function mountLia(options = {}) {
       if (c && (!spontanee || peutParlerSeule())) {
         dernierCri = maintenant;
         aSouffert = true;
-        setTimeout(() => exprimer(c), 350);
+        livrerCri(c, 0);
       }
     }
     if (interieur.douleur >= 0.4) aSouffert = true;
@@ -4326,6 +4335,7 @@ function mountLia(options = {}) {
     if (e.button === 2) return;
     ajouterImpulsion(reseau, "touche", 0.45);
     const maintenant = Date.now();
+    dernierAppui = maintenant;
     rafale.push(maintenant);
     while (rafale.length && maintenant - (rafale[0] ?? 0) > 1500) rafale.shift();
     if (rafale.length >= 4) {

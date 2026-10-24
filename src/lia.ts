@@ -229,6 +229,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let douleurAvant = 0;
   let aSouffert = false;
   let dernierCri = 0;
+  let dernierAppui = 0;
   let horsLigne = typeof navigator !== "undefined" && navigator.onLine === false;
   let dtMoyen = 0.016;
   const rafale: number[] = [];
@@ -522,6 +523,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
     verifierCri();
   };
+  /** Dit le cri 450 ms après le dernier appui (réessaie toutes les 150 ms, 8 s au plus), dans la bulle ou dans la discussion ouverte. */
+  const livrerCri = (texte: string, essais: number): void => {
+    if (detruit) return;
+    if ((glisse || Date.now() - dernierAppui < 450) && essais < 55) {
+      setTimeout(() => livrerCri(texte, essais + 1), 150);
+      return;
+    }
+    exprimer(texte);
+  };
   /** Le cri : une fois quand la douleur franchit 0,35 en montant (30 s d'écart au moins), puis un mot d'apaisement quand elle est passée. */
   const verifierCri = (): void => {
     const maintenant = Date.now();
@@ -532,8 +542,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (c && (!spontanee || peutParlerSeule())) {
         dernierCri = maintenant;
         aSouffert = true;
-        // Un instant plus tard : le temps que les clics finissent d'ouvrir ou de fermer la discussion, pour qu'on l'entende là où elle est.
-        setTimeout(() => exprimer(c), 350);
+        // Elle crie quand les clics s'arrêtent : chaque appui efface la bulle, et le cri est unique, un appui suivant l'aurait avalé.
+        livrerCri(c, 0);
       }
     }
     if (interieur.douleur >= 0.4) aSouffert = true;
@@ -1175,6 +1185,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     ajouterImpulsion(reseau, "touche", 0.45);
     // Quatre appuis en moins de 1,5 s : des clics rageurs, ça lui fait mal.
     const maintenant = Date.now();
+    dernierAppui = maintenant;
     rafale.push(maintenant);
     while (rafale.length && maintenant - (rafale[0] ?? 0) > 1500) rafale.shift();
     if (rafale.length >= 4) {
