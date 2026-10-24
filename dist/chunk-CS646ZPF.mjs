@@ -2507,6 +2507,22 @@ function elementVise(cible, selecteur, couche, racine = document) {
     return cible;
   }
 }
+function cibleSousSurcouche(cible, x, y, couche, racine = document) {
+  if (!(cible instanceof Element) || typeof racine.elementsFromPoint !== "function") return cible;
+  const contient = (e) => {
+    const r = e.getBoundingClientRect();
+    return x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1;
+  };
+  if (contient(cible)) return cible;
+  try {
+    for (const e of racine.elementsFromPoint(x, y)) {
+      if (e === cible || couche.contains(e) || e === racine.documentElement || e === racine.body) continue;
+      if (contient(e)) return e;
+    }
+  } catch {
+  }
+  return cible;
+}
 function titreMenu(d) {
   const majuscule = d.genre.charAt(0).toUpperCase() + d.genre.slice(1);
   const texte = d.texte ? ` : \xAB ${nettoyer(d.texte, 46)} \xBB` : "";
@@ -5077,7 +5093,7 @@ function mountLia(options = {}) {
     guetter();
   }
   const menuElementEn = (x, y, vise) => {
-    const cible2 = elementVise(vise, selecteurElements, couche);
+    const cible2 = elementVise(cibleSousSurcouche(vise, x, y, couche), selecteurElements, couche);
     if (!cible2) return false;
     const d = decrireElement(cible2);
     if (!d) return false;
@@ -6354,4 +6370,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-GXL4VEIM.mjs.map
+//# sourceMappingURL=chunk-CS646ZPF.mjs.map

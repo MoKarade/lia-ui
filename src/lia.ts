@@ -48,6 +48,7 @@ import {
   SELECTEUR_ELEMENTS,
   composerQuestion,
   decrireParDefaut,
+  cibleSousSurcouche,
   elementVise,
   etiquetteMessage,
   nettoyer,
@@ -1284,7 +1285,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /** Ouvre le menu de l'élément visé en (x, y) ; faux quand LIA doit laisser faire le navigateur. */
   const menuElementEn = (x: number, y: number, vise: EventTarget | null): boolean => {
-    const cible = elementVise(vise, selecteurElements, couche);
+    const cible = elementVise(cibleSousSurcouche(vise, x, y, couche), selecteurElements, couche);
     if (!cible) return false;
     const d = decrireElement(cible);
     if (!d) return false;
