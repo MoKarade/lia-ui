@@ -1,5 +1,6 @@
 import { estRegarde, estVisible, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./attache.js";
 import { dansZone, enSilence, jourLocal, pointDansZone } from "./autonomie.js";
+import { placeSansRecouvrir, type Boite } from "./placement.js";
 import {
   ENVIES_DEPART,
   MOTIFS_MONDE,
@@ -737,10 +738,27 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       boite.style.top = `${limiter(y, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
       return;
     }
-    const x = aDroite ? pos.x + rayon * 0.9 : pos.x - rayon * 0.9 - w;
-    const y = limiter(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
-    boite.style.left = `${Math.max(z.x + 8, x)}px`;
-    boite.style.top = `${y}px`;
+    const yCentre = limiter(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
+    const xMax = Math.max(z.x + 8, z.x + z.w - w - 8);
+    const cotes: Boite[] = [];
+    if (aDroite) cotes.push({ x: Math.max(z.x + 8, pos.x + rayon * 0.9), y: yCentre, w, h });
+    if (aGauche) cotes.push({ x: Math.max(z.x + 8, pos.x - rayon * 0.9 - w), y: yCentre, w, h });
+    // Si elle parle d'un élément, la discussion ne le recouvre pas : à côté d'elle d'abord, puis en dessous, puis au-dessus.
+    const dessous = { x: limiter(pos.x - w / 2, z.x + 8, xMax), y: pos.y + rayon * 1.1 + 26, w, h };
+    const dessus = { x: limiter(pos.x - w / 2, z.x + 8, xMax), y: pos.y - rayon * 1.1 - h, w, h };
+    if (dessous.y + h <= z.y + z.h - 8) cotes.push(dessous);
+    if (dessus.y >= z.y + 8) cotes.push(dessus);
+    const choix = placeSansRecouvrir(cotes, reperee ? zoneElement(reperee) : null);
+    boite.style.left = `${choix.x}px`;
+    boite.style.top = `${choix.y}px`;
+  };
+
+  /** La boîte de l'élément dans les coordonnées de sa couche. */
+  const zoneElement = (e: Element): Boite | null => {
+    if (!e.isConnected) return null;
+    const r = e.getBoundingClientRect();
+    const c = couche.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 ? { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height } : null;
   };
 
   const ouvrirChat = (): void => {
@@ -1083,30 +1101,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   }
 
   /* ── clic droit sur un élément de la page ── */
-  /** Un cadre fin autour de l'élément dont elle parle ; dans sa couche, la page de l'hôte n'est jamais modifiée. */
-  const repere = el("div", "lia-ui__repere");
-  repere.hidden = true;
-  couche.appendChild(repere);
-
+  /** L'élément dont elle parle : rien n'est dessiné autour de lui (seuls ses nanobots analysent), la page n'est jamais modifiée. */
   function cesserDeReperer(): void {
     if (regarde && regarde === reperee && !(attention?.type === "element" && attention.el === regarde)) retirerRegard();
     reperee = null;
     analysePour = null;
-    repere.hidden = true;
   }
 
   const majRepere = (): void => {
-    if (!reperee) return;
-    if (!reperee.isConnected) return cesserDeReperer();
-    const r = reperee.getBoundingClientRect();
-    const c = couche.getBoundingClientRect();
-    // Tant que ses nanobots analysent cet élément, aucun cadre de plus autour de lui.
-    repere.hidden = !!essaim && !essaim.rentre && essaimSur === reperee;
-    if (repere.hidden) return;
-    repere.style.left = `${(r.left - c.left - 4).toFixed(1)}px`;
-    repere.style.top = `${(r.top - c.top - 4).toFixed(1)}px`;
-    repere.style.width = `${(r.width + 8).toFixed(1)}px`;
-    repere.style.height = `${(r.height + 8).toFixed(1)}px`;
+    if (reperee && !reperee.isConnected) cesserDeReperer();
   };
 
   /**
@@ -1546,7 +1549,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const peutBouger = (): boolean => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !balle.actif && !detruit;
 
   function finAttention(): void {
-    // Tant que la discussion est posée sur l'élément (cadre `reperee`), elle le regarde encore : le marqueur reste.
+    // Tant que la discussion est posée sur l'élément (`reperee`), elle le regarde encore : le marqueur reste.
     if (!reperee || reperee !== regarde) retirerRegard();
     if (!attention) return;
     attention = null;

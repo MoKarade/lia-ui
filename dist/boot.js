@@ -77,6 +77,29 @@ function dansZone(zone, x, y, marge) {
   return { x: Math.min(maxX, Math.max(minX, x)), y: Math.min(maxY, Math.max(minY, y)) };
 }
 
+// src/placement.ts
+function surfaceRecouverte(a, b, marge = 6) {
+  const l = Math.min(a.x + a.w, b.x + b.w + marge) - Math.max(a.x, b.x - marge);
+  const h = Math.min(a.y + a.h, b.y + b.h + marge) - Math.max(a.y, b.y - marge);
+  return l > 0 && h > 0 ? l * h : 0;
+}
+function placeSansRecouvrir(candidats2, element) {
+  const premier = candidats2[0];
+  if (!premier) throw new Error("placeSansRecouvrir : aucun candidat");
+  if (!element) return premier;
+  let meilleur = premier;
+  let surface = surfaceRecouverte(premier, element);
+  for (const c of candidats2) {
+    const s = surfaceRecouverte(c, element);
+    if (s === 0) return c;
+    if (s < surface) {
+      meilleur = c;
+      surface = s;
+    }
+  }
+  return meilleur;
+}
+
 // src/activite.ts
 var FAMILLES_ACTIONS = [
   {
@@ -4005,8 +4028,6 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__humeur[aria-checked=true]{border-color:var(--lia-point,var(--lia-accent));background:var(--lia-surface-2)}
 .lia-ui__geste{justify-content:center;padding:0;color:var(--lia-soft)}
 .lia-ui__geste:hover,.lia-ui__geste:focus-visible{color:var(--lia-text)}
-.lia-ui__repere{position:absolute;pointer-events:none;border:2px solid var(--lia-accent);border-radius:12px;box-shadow:0 0 0 4px rgba(147,160,255,.18)}
-.lia-ui__repere[hidden]{display:none}
 @keyframes lia-ui-entre{from{opacity:0;transform:translateY(6px)}}
 @media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__jauge-barre{transition:none}.lia-ui__ombre{transition:none}}
 `;
@@ -4559,15 +4580,29 @@ function mountLia(options = {}) {
       boite.style.maxHeight = `${place}px`;
       h = Math.min(boite.offsetHeight || h, place);
       w = boite.offsetWidth;
-      const y2 = enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h;
+      const y = enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h;
       boite.style.left = `${limiter3(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
-      boite.style.top = `${limiter3(y2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
+      boite.style.top = `${limiter3(y, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
       return;
     }
-    const x = aDroite ? pos.x + rayon * 0.9 : pos.x - rayon * 0.9 - w;
-    const y = limiter3(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
-    boite.style.left = `${Math.max(z.x + 8, x)}px`;
-    boite.style.top = `${y}px`;
+    const yCentre = limiter3(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
+    const xMax = Math.max(z.x + 8, z.x + z.w - w - 8);
+    const cotes = [];
+    if (aDroite) cotes.push({ x: Math.max(z.x + 8, pos.x + rayon * 0.9), y: yCentre, w, h });
+    if (aGauche) cotes.push({ x: Math.max(z.x + 8, pos.x - rayon * 0.9 - w), y: yCentre, w, h });
+    const dessous = { x: limiter3(pos.x - w / 2, z.x + 8, xMax), y: pos.y + rayon * 1.1 + 26, w, h };
+    const dessus = { x: limiter3(pos.x - w / 2, z.x + 8, xMax), y: pos.y - rayon * 1.1 - h, w, h };
+    if (dessous.y + h <= z.y + z.h - 8) cotes.push(dessous);
+    if (dessus.y >= z.y + 8) cotes.push(dessus);
+    const choix = placeSansRecouvrir(cotes, reperee ? zoneElement(reperee) : null);
+    boite.style.left = `${choix.x}px`;
+    boite.style.top = `${choix.y}px`;
+  };
+  const zoneElement = (e) => {
+    if (!e.isConnected) return null;
+    const r = e.getBoundingClientRect();
+    const c = couche.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 ? { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height } : null;
   };
   const ouvrirChat = () => {
     if (detruit || chatOuvert) return;
@@ -4885,26 +4920,13 @@ function mountLia(options = {}) {
     menuOuvert = false;
     majCommentVa = null;
   }
-  const repere = el("div", "lia-ui__repere");
-  repere.hidden = true;
-  couche.appendChild(repere);
   function cesserDeReperer() {
     if (regarde && regarde === reperee && !(attention?.type === "element" && attention.el === regarde)) retirerRegard();
     reperee = null;
     analysePour = null;
-    repere.hidden = true;
   }
   const majRepere = () => {
-    if (!reperee) return;
-    if (!reperee.isConnected) return cesserDeReperer();
-    const r = reperee.getBoundingClientRect();
-    const c = couche.getBoundingClientRect();
-    repere.hidden = !!essaim && !essaim.rentre && essaimSur === reperee;
-    if (repere.hidden) return;
-    repere.style.left = `${(r.left - c.left - 4).toFixed(1)}px`;
-    repere.style.top = `${(r.top - c.top - 4).toFixed(1)}px`;
-    repere.style.width = `${(r.width + 8).toFixed(1)}px`;
-    repere.style.height = `${(r.height + 8).toFixed(1)}px`;
+    if (reperee && !reperee.isConnected) cesserDeReperer();
   };
   const toileNano = el("canvas", "lia-ui__nano");
   toileNano.hidden = true;
