@@ -19,6 +19,7 @@ import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, vieillir, garder as garderInterieur, type Stimulus } from "./interieur.js";
 import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
 import { auRepos, avancerBalle, BALLE_DEFAUT, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Ecrasement } from "./physique.js";
+import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
@@ -259,6 +260,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const balle = { actif: false, depuis: 0, choc: false, fin: 0, but: { x: 0, y: 0 } };
   /** Un bond décidé par elle : elle s'accroupit un instant, puis part en arc vers `but` et y arrive à `t0 + duree`. Annulé comme un vol. */
   let bond: { t0: number; duree: number; but: { x: number; y: number }; vx: number; vy: number } | null = null;
+  /**
+   * Un perchoir : le bond vise le bord haut d'une carte de la page (`el`). Tant qu'il existe elle suit la carte ; `ref` est la place de la carte dans la PAGE
+   * (défilement compris) quand elle l'a choisie. `pose` : elle y est posée jusqu'à `jusqua`, `dx` est sa place sur la carte. Annulé comme le bond.
+   */
+  let perchage: { el: Element; ref: { x: number; y: number }; limite: number; atterri: boolean; pose: boolean; dx: number; jusqua: number } | null = null;
+  /** La hauteur (lissée) de l'ombre portée : sur la carte pendant un perchage, au sol sinon. */
+  let ombreY = Number.NaN;
   const ecr: Ecrasement = { s: 0, v: 0, angle: 0 };
   let rayon = rayonBase;
   /** Le rayon qu'elle rejoint en douceur (`setRayon`) : plus grande au centre d'un accueil, plus petite ailleurs. */
@@ -1249,6 +1257,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (!glisse) return;
     const aBouge = glisse.deplace;
     glisse = null;
+    annulerPerchage();
     // Lancée d'un geste sec (plus de 2 200 px/s) : un choc.
     if (aBouge && vitesseGlisse > 2200) stimulerInterieur("choc", Math.min(1, vitesseGlisse / 4000));
     vitesseGlisse = 0;
@@ -1367,6 +1376,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** `etatArrivee` : ce qu'elle fait une fois posée (par défaut, d'après l'élément : analyse, lit, calcule, surveille…) ; en route elle cherche. */
   function allerVoir(element: Element, secondes = 10, etatArrivee?: string): boolean {
     if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
+    annulerPerchage();
     const r = element.getBoundingClientRect();
     attention = {
       type: "element",
@@ -1383,6 +1393,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   function venirPres(): boolean {
     if (!peutBouger()) return false;
+    annulerPerchage();
     attention = null;
     const r = couche.getBoundingClientRect();
     const z = zoneVie();
@@ -1559,7 +1570,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
    * Faux (et rien n'est programmé) si le but est trop proche ou si l'arc sortirait par le haut de sa zone.
    */
   const programmerBond = (): boolean => {
-    if (sansMouvement || doux) return false;
+    if (sansMouvement || doux || perchage) return false;
     const z = zoneVie();
     const but = dansZone(z, cible.x, cible.y, rayon * 0.6);
     const d = Math.hypot(but.x - pos.x, but.y - pos.y);
@@ -1575,6 +1586,73 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return true;
   };
 
+  /** Le rectangle d'une carte dans le repère de sa zone de vie, et sa place dans la page (le défilement ne la déplace pas). */
+  const lireCarte = (el: Element): { rect: RectCarte; page: { x: number; y: number } } | null => {
+    if (!el.isConnected) return null;
+    const v = el.getBoundingClientRect();
+    const r = couche.getBoundingClientRect();
+    return { rect: { left: v.left - r.left, top: v.top - r.top, right: v.right - r.left, bottom: v.bottom - r.top }, page: { x: v.left + window.scrollX, y: v.top + window.scrollY } };
+  };
+
+  /**
+   * Parfois, au lieu d'un point du sol, elle vise le bord haut d'une carte de la page : même accroupissement, même bond, mais elle ATTERRIT sur la carte
+   * (rebond amorti, écrasement) et y reste. Faux (rien n'est programmé) si aucune carte visible n'est assez large et à portée du bond.
+   */
+  const programmerPerchage = (): boolean => {
+    if (sansMouvement || doux || perchage || bond) return false;
+    let liste: Element[];
+    try {
+      liste = [...document.querySelectorAll(selecteurCibles)];
+    } catch {
+      // Sélecteur invalide fourni par l'hôte : aucune carte où se poser.
+      return false;
+    }
+    const f = fenetre();
+    const vues: { el: Element; rect: RectCarte; page: { x: number; y: number } }[] = [];
+    for (const el of liste) {
+      if (couche.contains(el)) continue;
+      if (!estVisible(el.getBoundingClientRect(), f)) continue;
+      const c = lireCarte(el);
+      if (c) vues.push({ el, ...c });
+    }
+    if (vues.length === 0) return false;
+    const params = { ...BALLE_DEFAUT, marge: rayon * 0.6, rayon, choix: Math.random() };
+    const p = choisirPerchoir(
+      zoneVie(),
+      vues.map((v) => v.rect),
+      pos,
+      params,
+    );
+    const carte = p ? vues[p.index] : undefined;
+    if (!p || !carte) return false;
+    bond = { t0: t + 0.18, duree: p.duree, but: p.but, vx: p.vx, vy: p.vy };
+    perchage = { el: carte.el, ref: carte.page, limite: Number.POSITIVE_INFINITY, atterri: false, pose: false, dx: 0, jusqua: 0 };
+    cible = { x: pos.x, y: pos.y };
+    return true;
+  };
+
+  /** Plus de perchoir (appui, menu, discussion, demande de l'hôte, mouvement réduit, carte qui a bougé) : un bond qui n'est pas parti est annulé, un vol continue. */
+  function annulerPerchage(): void {
+    if (!perchage) return;
+    perchage = null;
+    if (bond) {
+      bond = null;
+      cible = { x: pos.x, y: pos.y };
+    }
+  }
+
+  /** Elle redescend de sa carte d'un petit saut et tombe jusqu'au sol de sa zone (sans se faire mal : ce n'est pas un choc). */
+  function descendre(): void {
+    perchage = null;
+    balle.actif = true;
+    balle.depuis = t;
+    balle.choc = true;
+    balle.fin = 0;
+    pos.vx = 0;
+    pos.vy = -260;
+    cible = { x: pos.x, y: pos.y };
+  }
+
   const lancer = (id: Comportement, vues: Element[]): void => {
     comportement = id;
     derniereDecision = t;
@@ -1588,7 +1666,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 5, 8));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
-      if (!(Math.random() < 0.3 && programmerBond())) anticiper();
+      if (!(Math.random() < 0.3 && ((Math.random() < 0.5 && programmerPerchage()) || programmerBond()))) anticiper();
       errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
       choisir("repos");
       calme(30);
@@ -1890,13 +1968,37 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       cible = { x: pos.x, y: pos.y };
       bond = null;
     }
+    // Le perchoir : elle suit sa carte (le défilement ne la déplace pas) ; elle la quitte si elle disparaît, bouge dans la page, ou quand son temps est passé.
+    const paramsPerchoir = { ...BALLE_DEFAUT, marge: rayon * 0.6, rayon };
+    let carte: { rect: RectCarte; page: { x: number; y: number } } | null = null;
+    let surface: Surface | null = null;
+    if (perchage) {
+      if (glisse || chatOuvert || menuOuvert || attention || sansMouvement || doux || still) annulerPerchage();
+      else {
+        carte = lireCarte(perchage.el);
+        const bonne = !!carte && carteToujoursPerchable(carte.rect, carte.page, perchage.ref, z, paramsPerchoir);
+        if (!carte || !bonne) {
+          if (perchage.pose) descendre();
+          else annulerPerchage();
+        } else if (perchage.pose && t >= perchage.jusqua) descendre();
+        // Le vol a fini sans qu'elle se pose (ou trop longtemps) : plus de perchoir, elle retombe comme après un lancer.
+        else if (!perchage.pose && (t > perchage.limite || (!bond && !balle.actif))) annulerPerchage();
+        else surface = surfaceDeCarte(carte.rect, paramsPerchoir.marge);
+      }
+      if (!perchage) {
+        carte = null;
+        surface = null;
+      }
+    }
     if (bond && !balle.actif) {
       if (t >= bond.t0) {
         // Le départ : l'accroupissement se détend (le ressort d'écrasement l'étire un instant dans le sens du saut).
         balle.actif = true;
         balle.depuis = t;
         balle.choc = true;
-        balle.fin = t + bond.duree;
+        // Vers une carte, il n'y a pas d'heure d'arrivée : c'est la carte qui la reçoit (atterrir), avec un délai de grâce.
+        balle.fin = perchage ? 0 : t + bond.duree;
+        if (perchage) perchage.limite = t + bond.duree + 1.6;
         balle.but = bond.but;
         pos.vx = bond.vx;
         pos.vy = bond.vy;
@@ -1917,6 +2019,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     } else if (balle.actif) {
       // Le vol : élan, gravité, frottement de l'air, rebonds sur les bords de sa zone. Un impact l'écrase ; un très fort lui fait mal, une fois.
       const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
+      const yAvant = pos.y;
       for (const imp of avancerBalle(pos, dt, z, params)) {
         frapper(ecr, imp.vitesse, normaleDe(imp.cote));
         if (imp.vitesse > 1400 && !balle.choc) {
@@ -1924,7 +2027,33 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
           stimulerInterieur("choc", Math.min(1, imp.vitesse / 3000));
         }
       }
-      if (balle.fin && t >= balle.fin) {
+      // Au-dessus d'une carte visée : elle s'y pose en tombant (sens unique), rebondit amorti, s'écrase, puis s'y tient.
+      let posee = false;
+      if (perchage && surface && carte && !perchage.pose) {
+        const imp = atterrir(pos, yAvant, surface, params);
+        if (imp) {
+          perchage.atterri = true;
+          if (imp.vitesse > 100) frapper(ecr, imp.vitesse, normaleDe("bas"));
+        }
+        if (perchage.atterri) {
+          pos.x = limiter(pos.x, surface.gauche, surface.droite);
+          if (poseeSurSurface(pos, surface)) {
+            posee = true;
+            balle.actif = false;
+            pos.vx = pos.vy = 0;
+            pos.y = surface.y;
+            perchage.pose = true;
+            perchage.dx = pos.x - carte.rect.left;
+            perchage.jusqua = t + entre(Math.random, 8, 15);
+            errance = { jusqua: perchage.jusqua };
+            cible = { x: pos.x, y: pos.y };
+            choisir(etatForce ?? "repos");
+          }
+        }
+      }
+      if (posee) {
+        // Posée sur sa carte : rien d'autre à faire ce tour-ci.
+      } else if (balle.fin && t >= balle.fin) {
         // Un bond arrivé : elle garde sa vitesse et le ressort de la balade la pose sur son but.
         balle.actif = false;
         balle.fin = 0;
@@ -1943,6 +2072,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       phys.ay = limiter(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
       phys.vxPrec = pos.vx;
       phys.vyPrec = pos.vy;
+    } else if (perchage?.pose && surface && carte) {
+      // Posée sur sa carte : exactement sur son bord haut, qui qu'il bouge avec le défilement ; plus de flottement (elle se tient debout).
+      pos.x = limiter(carte.rect.left + perchage.dx, surface.gauche, surface.droite);
+      pos.y = surface.y;
+      pos.vx = pos.vy = 0;
+      phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
+      phys.flotte = 0;
     } else {
       // Un corps qui a une masse : il accélère, file, freine et dépasse un peu sa cible avant de s'y poser (ressort un peu mou,
       // vitesse et accélération bornées). Une demande de Marc la fait courir ; la balade est une glissade lente de 2 à 3 s.
@@ -2018,7 +2154,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (!mobile) phys.incl = phys.vIncl = 0;
     // Flottement : même au repos elle n'est jamais figée (dérive douce, battement vertical quand elle file).
     const filante = limiter(vitesse / 700, 0, 1);
-    phys.flotte += ((mobile && vie && !glisse && !chatOuvert && !menuOuvert ? 1 : 0) - phys.flotte) * (still ? 1 : 1 - Math.exp(-dt * 2));
+    phys.flotte += ((mobile && vie && !glisse && !chatOuvert && !menuOuvert && !perchage ? 1 : 0) - phys.flotte) * (still ? 1 : 1 - Math.exp(-dt * (perchage ? 8 : 2)));
     const amp = rayon * 0.26 * phys.flotte * (1 - 0.7 * filante);
     const ox = amp * (Math.sin(t * 0.78 + 1.3) + 0.45 * Math.sin(t * 1.93));
     const oy = amp * 0.85 * (Math.cos(t * 0.61) + 0.4 * Math.sin(t * 1.51 + 0.7)) + rayon * 0.05 * filante * Math.sin(t * 8.2);
@@ -2051,12 +2187,17 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     else ecr.s = ecr.v = 0;
     const ecrase = Math.abs(ecr.s) > 0.004 ? ` rotate(${ecr.angle.toFixed(3)}rad) scale(${(1 - ecr.s).toFixed(3)},${(1 + ecr.s * 0.8).toFixed(3)}) rotate(${(-ecr.angle).toFixed(3)}rad)` : "";
     corpsEl.dataset["vol"] = balle.actif ? "1" : "0";
+    corpsEl.dataset["perche"] = perchage?.pose ? "1" : "0";
     // Son ombre sur le sol de sa zone : plus petite et plus pâle quand elle est haute ; elle ne se voit qu'en vol.
-    const solY = z.y + z.h - rayon * 0.6;
+    // En route vers une carte et au-dessus d'elle, l'ombre est portée sur la carte (son bord haut), pas sur le sol.
+    const surCarte = !!perchage && !perchage.pose && !!carte && !!surface && pos.x >= carte.rect.left && pos.x <= carte.rect.right;
+    const solY = surCarte && surface ? surface.y : z.y + z.h - rayon * 0.6;
+    const ombreVisee = surCarte && surface && carte ? Math.min(carte.rect.top + Math.min(rayon * 0.2, (carte.rect.bottom - carte.rect.top) / 2), surface.y + rayon * 0.6) : z.y + z.h - rayon * 0.3;
+    ombreY = still || !Number.isFinite(ombreY) ? ombreVisee : ombreY + (ombreVisee - ombreY) * (1 - Math.exp(-dt * 14));
     const haut = Math.max(0, solY - pos.y);
     const echelleOmbre = 1 / (1 + haut / 450);
     ombre.style.opacity = balle.actif && !still ? (0.95 * echelleOmbre).toFixed(2) : "0";
-    ombre.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${(z.y + z.h - rayon * 0.3).toFixed(1)}px) translate(-50%,-50%) scale(${((rayon * 2.2 * echelleOmbre) / 100).toFixed(3)},${((rayon * 0.5 * echelleOmbre) / 24).toFixed(3)})`;
+    ombre.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${ombreY.toFixed(1)}px) translate(-50%,-50%) scale(${((rayon * 2.2 * echelleOmbre) / 100).toFixed(3)},${((rayon * 0.5 * echelleOmbre) / 24).toFixed(3)})`;
     toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${ecrase}${etire > 0.004 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
       puceHumeur.hidden = chatOuvert;

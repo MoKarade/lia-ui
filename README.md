@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.23.1
+npm i github:MoKarade/lia-ui#v0.24.0
 ```
 
 ## Utiliser
@@ -91,6 +91,10 @@ Lâchée à plus de 450 px/s en plein geste, LIA garde son élan (`src/physique.
 ## Ses déplacements : elle bondit (v0.23.0)
 
 Dans 3 promenades sur 10, elle ne glisse pas : elle s'accroupit 0,18 s (écrasement de haut en bas), puis bondit en arc vers son but et y arrive à l'heure dite, entre 0,6 et 1 s (`vitessePourBond` calcule la vitesse de départ avec la gravité et le frottement du vol). Le ressort la pose ensuite. Pendant le vol, une ombre sur le sol de sa zone rapetisse et pâlit avec la hauteur ; sa couleur est `--lia-ombre`. Un appui, le menu, la discussion, une demande de l'hôte ou le mouvement réduit annulent l'accroupissement et le bond ; `data-vol="1"` sur le corps vaut aussi pour un bond.
+
+## Ses déplacements : elle se pose sur les cartes (v0.24.0)
+
+Dans la moitié de ses bonds, si une carte `[data-lia-cible]` visible et assez large (3,2 rayons au moins) est à sa portée, elle ne retombe pas au sol : elle s'accroupit, bondit et atterrit SUR le bord haut de la carte (rebond amorti, écrasement), pendant que l'ombre se pose sur la carte. Elle y reste 8 à 15 s, suit la carte au défilement, puis redescend d'un petit saut, ou plus tôt si la carte disparaît ou bouge de plus de 40 px dans la page. Un appui, le menu, la discussion, une demande de l'hôte (`envoyer`, `allerVoir`, `venirPres`, `suivreCurseur`) ou le mouvement réduit (« doux », « fixe ») l'annulent. `data-perche="1"` sur le corps vaut tant qu'elle est posée ; `choisirPerchoir` (module pur `src/perchoir.ts`) choisit la carte.
 
 ## Le menu de son corps
 
