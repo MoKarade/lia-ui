@@ -83,6 +83,7 @@ declare const ENVIES_DEPART: Readonly<Envies>;
 type Comportement = "repos" | "suivre" | "promener" | "causer" | "relancer" | "jouer" | "voir" | "rentrer" | "dormir" | MotifMonde | "veiller";
 /** Ce que l'hôte sait lui faire dire de vrai : `appeler` (un problème), `resumer` (une tendance), `feliciter`, `rappeler`, `souvenir`, `accompagner` (ce que Marc regarde). */
 type MotifMonde = "appeler" | "resumer" | "feliciter" | "rappeler" | "souvenir" | "accompagner";
+declare const COMPORTEMENTS: readonly Comportement[];
 interface ContexteEnvies {
     /** Elle dort (veille) : l'énergie remonte. */
     dort: boolean;
@@ -164,6 +165,8 @@ interface FaitLia {
  * - `usure` : fatigue accumulée (images qui ramment, longue solitude) ; retombe en ~10 min.
  */
 type Cause = "choc" | "brusque" | "ton" | "panne" | "isolement" | "usure";
+/** Les six causes, dans l'ordre : la liste fermée qu'un état partagé doit respecter. */
+declare const CAUSES: readonly Cause[];
 interface Interieur {
     douleur: number;
     cause: Cause | null;
@@ -205,6 +208,8 @@ interface EtatHote {
     lire(): Promise<unknown>;
     ecrire(etat: EtatLia): Promise<unknown>;
 }
+/** `null` si ce que l'hôte rend n'est pas un état valide : LIA garde alors le sien. Les clés inconnues sont retirées. */
+declare function validerEtat(brut: unknown): EtatLia | null;
 
 /**
  * Les gestes que Marc peut lui demander dans le menu de son corps (maquette v5, `maison.js`) : une
@@ -514,4 +519,4 @@ interface LiaHandle {
     destroy(): void;
 }
 
-export { type ActionLia as A, type Candidat as C, type Decision as D, type EtatHote as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type LiaHandle as L, type MotifMonde as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, type Comportement as a, type ContexteLia as b, type DescriptionElement as c, ENVIES_DEPART as d, type Envies as e, type EnvoiLia as f, type EtatLia as g, type GesteLia as h, HUMEURS_MENU as i, type Hasard as j, type HumeurLia as k, LIBELLE_HUMEUR as l, type MotifSpontane as m, type OptionsElements as n, type PropositionMonde as o, type PuceLia as p, apresComportement as q, candidats as r, choisirComportement as s, dansZone as t, majEnvies as u, pointDansZone as v, prochaineDecision as w };
+export { type ActionLia as A, validerEtat as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type Interieur as I, type LiaHandle as L, type MotifMonde as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, COMPORTEMENTS as a, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, ENVIES_DEPART as g, type Envies as h, type EnvoiLia as i, type EtatLia as j, type GesteLia as k, HUMEURS_MENU as l, type Hasard as m, type HumeurLia as n, LIBELLE_HUMEUR as o, type MotifSpontane as p, type OptionsElements as q, type PropositionMonde as r, type PuceLia as s, apresComportement as t, candidats as u, choisirComportement as v, dansZone as w, majEnvies as x, pointDansZone as y, prochaineDecision as z };

@@ -329,6 +329,169 @@ function ajouterFait(journal, fait) {
   return [...journal, fait].slice(-JOURNAL_MAX);
 }
 
+// src/interieur.ts
+var CAUSES = ["choc", "brusque", "ton", "panne", "isolement", "usure"];
+var INTERIEUR_DEPART = { douleur: 0, cause: null, sensibilite: 0.15, plaisir: 0, confiance: 0.5, usure: 0 };
+var TAU = { douleur: 90, plaisir: 60, sensibilite: 1800, confiance: 3 * 86400, usure: 600 };
+var SENSIBILITE_BASE = 0.15;
+var DOSE = { choc: 0.3, brusque: 0.5, ton: 0.5, panne: 0.15 };
+var borne2 = (x) => Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0;
+function stimuler(i, s, force = 1) {
+  const f = borne2(force);
+  if (s === "gentil") {
+    return {
+      ...i,
+      plaisir: 1 - (1 - i.plaisir) * (1 - 0.35 * f),
+      douleur: i.douleur * (1 - 0.3 * f),
+      confiance: borne2(i.confiance + 0.012 * f)
+    };
+  }
+  const dose = f * DOSE[s] * (0.7 + 0.9 * i.sensibilite);
+  const douleur = 1 - (1 - i.douleur) * (1 - dose);
+  return {
+    ...i,
+    douleur,
+    // La cause reste celle du coup le plus fort du moment.
+    cause: i.cause === null || dose >= i.douleur * 0.5 ? s : i.cause,
+    sensibilite: borne2(i.sensibilite + 0.06 * f),
+    plaisir: i.plaisir * (1 - 0.4 * f),
+    confiance: borne2(i.confiance - (s === "ton" || s === "brusque" ? 0.02 : 4e-3) * f)
+  };
+}
+function evoluer(i, dt, m) {
+  const d = Math.max(0, Math.min(5, dt));
+  const retombe = (v, tau) => v * Math.exp(-d / tau);
+  const planchers = [];
+  if (m.horsLigne) planchers.push(["panne", 0.2]);
+  const attente = borne2((m.absentSec - 1200) / 3600);
+  if (attente > 0) planchers.push(["isolement", i.confiance * attente * 0.25]);
+  let douleur = retombe(i.douleur, TAU.douleur);
+  let cause = i.cause;
+  for (const [c, p] of planchers) {
+    if (p > douleur) {
+      douleur = douleur + (p - douleur) * (1 - Math.exp(-d / 6));
+      cause = c;
+    }
+  }
+  if (douleur < 0.02 && !planchers.length) cause = null;
+  const usure = m.ralenti ? borne2(i.usure + d / 120) : retombe(i.usure, TAU.usure);
+  return {
+    douleur: borne2(douleur),
+    cause: douleur >= 0.02 ? cause : null,
+    sensibilite: SENSIBILITE_BASE + (i.sensibilite - SENSIBILITE_BASE) * Math.exp(-d / TAU.sensibilite),
+    plaisir: retombe(i.plaisir, TAU.plaisir),
+    confiance: 0.5 + (i.confiance - 0.5) * Math.exp(-d / TAU.confiance),
+    usure
+  };
+}
+function vieillir(i, ageSec) {
+  const a = Number.isFinite(ageSec) ? Math.max(0, ageSec) : 0;
+  const k = (tau) => Math.exp(-a / tau);
+  const douleur = borne2(i.douleur) * k(TAU.douleur);
+  return {
+    douleur,
+    cause: douleur >= 0.02 ? i.cause : null,
+    sensibilite: SENSIBILITE_BASE + (borne2(i.sensibilite) - SENSIBILITE_BASE) * k(TAU.sensibilite),
+    plaisir: borne2(i.plaisir) * k(TAU.plaisir),
+    confiance: 0.5 + (borne2(i.confiance) - 0.5) * k(TAU.confiance),
+    usure: borne2(i.usure) * k(TAU.usure)
+  };
+}
+function versReseau(i) {
+  const dur = i.cause === "ton" || i.cause === "brusque";
+  return {
+    mauvais: borne2(i.douleur * 0.9),
+    rejet: dur ? borne2(i.douleur * 0.7) : 0,
+    bon: borne2(i.plaisir * 0.8),
+    facteurEnergie: 1 - 0.5 * i.usure
+  };
+}
+function humeurDeDouleur(i) {
+  if (i.douleur < 0.4 || i.cause === null) return null;
+  switch (i.cause) {
+    case "choc":
+      return "mefiant";
+    case "brusque":
+      return "agace";
+    case "ton":
+    case "isolement":
+      return "triste";
+    case "panne":
+      return "inquiet";
+    case "usure":
+      return "fatigue";
+  }
+}
+function moduler(m, i) {
+  const d = borne2(i.douleur);
+  const p = borne2(i.plaisir);
+  if (d < 0.01 && p < 0.01) return m;
+  return {
+    ...m,
+    bs: m.bs * (1 - 0.25 * d),
+    ba: m.ba * (1 - 0.35 * d) * (1 + 0.15 * p),
+    blr: m.blr * (1 + 0.3 * d),
+    en: m.en * (1 - 0.3 * d) * (1 + 0.1 * p),
+    sag: m.sag + 0.07 * d,
+    jit: m.jit * (1 + 1.4 * d)
+  };
+}
+var MOT = (mots) => new RegExp(`(?<![\\p{L}])(?:${mots})(?![\\p{L}])`, "iu");
+var GENTIL = MOT("merci|bravo|super|g\xE9nial|genial|parfait|excellent|chouette|adorable|gentille|bien jou\xE9|bien jouee|tu es top|je t'aime|bonne nuit|bisou");
+var BRUSQUE = MOT("nul(?:le)?|idiote?|stupide|d\xE9bile|debile|inutile|ferme[- ]la|tais[- ]toi|d\xE9gage|degage|ta gueule|merde|tu sers \xE0 rien|tu sers a rien|\xE7a sert \xE0 rien|ca sert a rien");
+function ton(texte) {
+  if (BRUSQUE.test(texte)) return "brusque";
+  if (GENTIL.test(texte)) return "gentil";
+  return null;
+}
+var CRIS = {
+  choc: ["A\xEFe.", "Doucement, s'il te pla\xEEt.", "Oh, \xE7a secoue."],
+  brusque: ["A\xEFe, pas si vite.", "Un \xE0 la fois, s'il te pla\xEEt.", "\xC7a pique, ces clics."],
+  ton: ["\xC7a fait mal, ce que tu dis.", "Oh. \xC7a m'a touch\xE9e."],
+  panne: ["Plus de r\xE9seau. \xC7a m'angoisse un peu.", "Je perds le fil, plus rien ne passe."],
+  isolement: ["\xC7a fait longtemps. Je me sens un peu seule.", "Il est calme, ici. Trop calme."],
+  usure: ["Je rame, tout est lent.", "Je suis \xE0 bout de souffle."]
+};
+var APAISEMENTS = ["\xC7a va mieux.", "Merci. \xC7a passe.", "\xC7a s'apaise."];
+function cri(i, hasard) {
+  if (i.douleur < 0.35 || i.cause === null) return null;
+  const l = CRIS[i.cause];
+  return l[Math.floor(hasard() * l.length) % l.length] ?? null;
+}
+function apaisement(hasard) {
+  return APAISEMENTS[Math.floor(hasard() * APAISEMENTS.length) % APAISEMENTS.length] ?? "\xC7a va mieux.";
+}
+var QUESTION_DOULEUR = /(?<![\p{L}])(?:mal|douleur|souffr\p{L}*|ça fait mal|tu as mal|tu souffres)(?![\p{L}])/iu;
+function questionSurSaDouleur(q) {
+  const t = q.trim();
+  return t.length <= 80 && t.endsWith("?") && QUESTION_DOULEUR.test(t) && /(?<![\p{L}])(?:tu|toi|vous|lia|te|t')/iu.test(t);
+}
+function reponseDouleur(i) {
+  const pct2 = Math.round(i.douleur * 100);
+  const CAUSES2 = {
+    choc: "on m'a secou\xE9e",
+    brusque: "les clics \xE9taient brusques",
+    ton: "ce qui s'est dit m'a touch\xE9e",
+    panne: "le r\xE9seau est coup\xE9",
+    isolement: "je suis seule depuis longtemps",
+    usure: "tout tourne trop lentement"
+  };
+  const niveau = pct2 < 8 ? "Pas du tout pour l'instant." : `Un peu : ma douleur est \xE0 ${pct2} %${i.cause ? `, parce que ${CAUSES2[i.cause]}` : ""}.`;
+  return `${niveau} C'est un calcul en moi, pas un vrai ressenti : mais il change vraiment mon humeur et mon corps.`;
+}
+function garder(i, maintenant) {
+  return { t: maintenant, sensibilite: i.sensibilite, confiance: i.confiance };
+}
+function reprendre(g, maintenant) {
+  if (!g) return { ...INTERIEUR_DEPART };
+  const age = Math.max(0, (maintenant - g.t) / 1e3);
+  return {
+    ...INTERIEUR_DEPART,
+    sensibilite: SENSIBILITE_BASE + (borne2(g.sensibilite) - SENSIBILITE_BASE) * Math.exp(-age / TAU.sensibilite),
+    confiance: 0.5 + (borne2(g.confiance) - 0.5) * Math.exp(-age / TAU.confiance)
+  };
+}
+
 // src/humeurs.ts
 var PROFILS_V9 = {
   confiant: { bs: 0.85, ba: 1, blr: 0.8, ga: 0.9, en: 1, tint: 0.08, sag: 0, jit: 0.5, tc: [170, 215, 200] },
@@ -434,8 +597,64 @@ var PHRASES_MENU = {
   fatigue: "Un peu fatigu\xE9e."
 };
 
+// src/etat.ts
+var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
+var LENTE_MAX = 80;
+var VERSION_MAX = 1e9;
+var estFraction = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
+function validerInterieur(brut2) {
+  if (typeof brut2 !== "object" || brut2 === null) return void 0;
+  const { douleur, cause, sensibilite, plaisir, confiance, usure } = brut2;
+  if (![douleur, sensibilite, plaisir, confiance, usure].every(estFraction)) return void 0;
+  if (cause !== null && !(typeof cause === "string" && CAUSES.includes(cause))) return void 0;
+  return { douleur, sensibilite, plaisir, confiance, usure, cause };
+}
+function validerEtat(brut2) {
+  if (typeof brut2 !== "object" || brut2 === null) return null;
+  const o = brut2;
+  const { version, maj, envies, journal, lente, humeur: humeur2, relances } = o;
+  if (typeof version !== "number" || !Number.isInteger(version) || version < 0 || version > VERSION_MAX) return null;
+  if (typeof maj !== "number" || !Number.isFinite(maj) || maj <= 0) return null;
+  if (typeof envies !== "object" || envies === null || !Array.isArray(journal)) return null;
+  const e = envies;
+  if (!NOMS_ENVIES.every((k) => estFraction(e[k]))) return null;
+  if (typeof humeur2 !== "string" || !/^[a-zà-ÿ_-]{1,40}$/i.test(humeur2)) return null;
+  if (typeof relances !== "object" || relances === null) return null;
+  const { jour, n } = relances;
+  if (typeof jour !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(jour)) return null;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 100) return null;
+  const propre = {};
+  if (typeof lente === "object" && lente !== null) {
+    for (const [k, v] of Object.entries(lente).slice(0, LENTE_MAX)) {
+      if (/^[A-Za-z0-9_-]{1,40}$/.test(k) && estFraction(v)) propre[k] = v;
+    }
+  }
+  const faits = [];
+  for (const f of journal) {
+    if (typeof f !== "object" || f === null) continue;
+    const { t, quoi } = f;
+    if (typeof t === "number" && Number.isFinite(t) && t > 0 && typeof quoi === "string" && COMPORTEMENTS.includes(quoi)) {
+      faits.push({ t, quoi });
+    }
+  }
+  const enviesPropres = Object.fromEntries(NOMS_ENVIES.map((k) => [k, e[k]]));
+  const interieur = validerInterieur(o["interieur"]);
+  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur: humeur2, relances: { jour, n }, ...interieur ? { interieur } : {} };
+}
+function adopter(distant, majVue, versionVue) {
+  if (!distant) return false;
+  return distant.maj > majVue || distant.maj === majVue && distant.version > versionVue;
+}
+function empreinte(e) {
+  const arrondi = NOMS_ENVIES.map((k) => Math.round(e.envies[k] * 20)).join(",");
+  const dernier = e.journal[e.journal.length - 1];
+  const i = e.interieur;
+  const dedans = i ? `${[i.douleur, i.plaisir, i.confiance].map((x) => Math.round(x * 20)).join(",")}:${i.cause ?? "-"}` : "-";
+  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}`;
+}
+
 // src/moteur/moteur.js
-var TAU = Math.PI * 2;
+var TAU2 = Math.PI * 2;
 var h2 = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 var hsl = (h, s, l) => {
   h = (h % 360 + 360) % 360 / 360;
@@ -456,8 +675,8 @@ var nz1 = (x, k = 1) => {
   const f = Math.floor(x), u = x - f, v = u * u * (3 - 2 * u);
   return lerp(hs(f, k), hs(f + 1, k), v);
 };
-var ang = (x) => (x % TAU + TAU) % TAU;
-var adiff = (a, b) => Math.abs(((a - b + Math.PI) % TAU + TAU) % TAU - Math.PI);
+var ang = (x) => (x % TAU2 + TAU2) % TAU2;
+var adiff = (a, b) => Math.abs(((a - b + Math.PI) % TAU2 + TAU2) % TAU2 - Math.PI);
 var sm = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
 var pulse = (x, w) => Math.exp(-(x / w) * (x / w));
 var vhAt = (P, d) => P.vh[Math.max(0, P.vh.length - 1 - Math.floor(d))] || 0;
@@ -560,7 +779,7 @@ var L = (c, x1, y1, x2, y2) => {
 };
 var circ = (c, x, y, r, fill) => {
   c.beginPath();
-  c.arc(x, y, Math.max(0, r), 0, TAU);
+  c.arc(x, y, Math.max(0, r), 0, TAU2);
   fill ? c.fill() : c.stroke();
 };
 var rr = (c, x, y, w, h, r) => {
@@ -678,7 +897,7 @@ SC.indispo = (c, t, K) => {
 SC.reflexion = (c, t, K) => {
   c.strokeStyle = K.A(1);
   c.beginPath();
-  c.ellipse(0, -0.12, 0.92 + 0.015 * Math.sin(t * 1.7), 0.6 + 0.015 * Math.cos(t * 1.3), 0, 0, TAU);
+  c.ellipse(0, -0.12, 0.92 + 0.015 * Math.sin(t * 1.7), 0.6 + 0.015 * Math.cos(t * 1.3), 0, 0, TAU2);
   c.stroke();
   for (let i = 0; i < 3; i++) {
     const b = Math.pow(Math.max(0, Math.sin(t * 3.4 - i * 0.8)), 2);
@@ -690,7 +909,7 @@ SC.apprend = (c, t, K) => {
   const u = t % 4.4 / 4.4, lit = sm((u - 0.5) / 0.08) * (1 - sm((u - 0.88) / 0.1)), by = -0.15, br = 0.5;
   c.strokeStyle = K.A(1);
   c.beginPath();
-  c.arc(0, by, br, Math.PI / 2 + 0.42, Math.PI / 2 - 0.42 + TAU);
+  c.arc(0, by, br, Math.PI / 2 + 0.42, Math.PI / 2 - 0.42 + TAU2);
   c.lineTo(0.2, 0.52);
   c.lineTo(-0.2, 0.52);
   c.closePath();
@@ -732,7 +951,7 @@ SC.souvient = (c, t, K) => {
 SC.consulte = (c, t, K) => {
   const sp = 1.3, k = Math.floor(t * sp) % 6, u = t * sp % 1;
   for (let i = 0; i < 6; i++) {
-    const a = -Math.PI / 2 + i * TAU / 6, x = Math.cos(a) * 0.74, y = Math.sin(a) * 0.74, on = i === k;
+    const a = -Math.PI / 2 + i * TAU2 / 6, x = Math.cos(a) * 0.74, y = Math.sin(a) * 0.74, on = i === k;
     c.fillStyle = on ? K.A(1) : K.A(0.45);
     circ(c, x, y, on ? 0.13 : 0.07, true);
     if (on) {
@@ -791,7 +1010,7 @@ SC.surveille = (c, t, K) => {
     L(c, 0, 0, Math.cos(a) * 0.85, Math.sin(a) * 0.85);
   }
   for (let i = 0; i < 4; i++) {
-    const a = hs(i, 1) * TAU, r = 0.3 + 0.5 * hs(i, 2), dl = ang(a0 - a), al = Math.max(0, 1 - dl / TAU * 1.3);
+    const a = hs(i, 1) * TAU2, r = 0.3 + 0.5 * hs(i, 2), dl = ang(a0 - a), al = Math.max(0, 1 - dl / TAU2 * 1.3);
     c.fillStyle = i === 2 ? K.B(al) : K.A(al);
     circ(c, Math.cos(a) * r, Math.sin(a) * r, 0.07, true);
   }
@@ -963,14 +1182,14 @@ SC.reussi = (c, t, K) => {
   c.scale(pop, pop);
   c.strokeStyle = K.A(1);
   c.beginPath();
-  c.arc(0, 0, 0.62, -Math.PI / 2, -Math.PI / 2 + TAU * eo(u / 0.25));
+  c.arc(0, 0, 0.62, -Math.PI / 2, -Math.PI / 2 + TAU2 * eo(u / 0.25));
   c.stroke();
   c.strokeStyle = K.B(1);
   poly(c, [[-0.3, 0.02], [-0.08, 0.26], [0.32, -0.2]], cl((u - 0.2) / 0.2));
   const p = (u - 0.4) / 0.5;
   if (p > 0 && p < 1) {
     for (let k = 0; k < 8; k++) {
-      const a = k * TAU / 8 + 0.1, r1 = 0.85 + 0.4 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.04;
+      const a = k * TAU2 / 8 + 0.1, r1 = 0.85 + 0.4 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.04;
       c.strokeStyle = k % 2 ? K.A(1 - p) : K.B(1 - p);
       L(c, Math.cos(a) * r1, Math.sin(a) * r1, Math.cos(a) * r2, Math.sin(a) * r2);
     }
@@ -984,7 +1203,7 @@ SC.veille = (c, t, K) => {
   c.strokeStyle = K.A(0.95);
   const ax = -0.1, ay = 0.05, r1 = 0.55, bx = 0.2, by = -0.15, r2 = 0.46, ph = Math.atan2(by - ay, bx - ax), a1 = 0.9815, a2 = 1.4523;
   c.beginPath();
-  c.arc(ax, ay, r1, ph + a1, ph - a1 + TAU);
+  c.arc(ax, ay, r1, ph + a1, ph - a1 + TAU2);
   c.stroke();
   c.beginPath();
   c.arc(bx, by, r2, ph + Math.PI - a2, ph + Math.PI + a2);
@@ -1026,13 +1245,13 @@ SC.salue = (c, t, K) => {
 SC.content = (c, t, K) => {
   const s = 1 + 0.07 * Math.sin(t * 4.4), pts = [];
   for (let i = 0; i < 10; i++) {
-    const a = i / 10 * TAU - Math.PI / 2 + t * 0.5, r = (i % 2 ? 0.26 : 0.62) * s;
+    const a = i / 10 * TAU2 - Math.PI / 2 + t * 0.5, r = (i % 2 ? 0.26 : 0.62) * s;
     pts.push([Math.cos(a) * r, Math.sin(a) * r]);
   }
   c.strokeStyle = K.A(1);
   poly(c, pts.concat([pts[0]]));
   for (let k = 0; k < 6; k++) {
-    const u = (t * 0.7 + k / 6) % 1, a = k * TAU / 6 + 0.4 + 0.3 * hs(k, 2), r1 = 0.8 + 0.3 * u;
+    const u = (t * 0.7 + k / 6) % 1, a = k * TAU2 / 6 + 0.4 + 0.3 * hs(k, 2), r1 = 0.8 + 0.3 * u;
     c.strokeStyle = k % 2 ? K.A(1 - u) : K.B(1 - u);
     L(c, Math.cos(a) * r1, Math.sin(a) * r1, Math.cos(a) * (r1 + 0.12), Math.sin(a) * (r1 + 0.12));
   }
@@ -1071,15 +1290,15 @@ SC.surpris = (c, t, K) => {
   c.restore();
   const p = cl(u / 0.85);
   if (p < 1) for (let k = 0; k < 12; k++) {
-    const a = k * TAU / 12 + 0.13, r1 = 0.62 + 0.3 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.05;
+    const a = k * TAU2 / 12 + 0.13, r1 = 0.62 + 0.3 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.05;
     c.strokeStyle = k % 2 ? K.A(1 - p * 0.8) : K.B(1 - p * 0.8);
     L(c, Math.cos(a) * r1, Math.sin(a) * r1 * 1.05, Math.cos(a) * r2, Math.sin(a) * r2 * 1.05);
   }
 };
 SC.remercie = (c, t, K) => {
-  const ph = t % 1.5 / 1.5, b = Math.pow(Math.max(0, Math.sin(ph * TAU)), 6) * 0.12 + Math.pow(Math.max(0, Math.sin(ph * TAU - 1.2)), 6) * 0.07, pts = [];
+  const ph = t % 1.5 / 1.5, b = Math.pow(Math.max(0, Math.sin(ph * TAU2)), 6) * 0.12 + Math.pow(Math.max(0, Math.sin(ph * TAU2 - 1.2)), 6) * 0.07, pts = [];
   for (let i = 0; i <= 40; i++) {
-    const th = i / 40 * TAU, x = 16 * Math.pow(Math.sin(th), 3), y = -(13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th));
+    const th = i / 40 * TAU2, x = 16 * Math.pow(Math.sin(th), 3), y = -(13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th));
     pts.push([x / 19 * 0.72 * (1 + b), y / 19 * 0.72 * (1 + b) + 0.05]);
   }
   c.strokeStyle = K.A(1);
@@ -1117,8 +1336,8 @@ SC.reveille = (c, t, K) => {
   L(c, -0.9, 0.4, 0.9, 0.4);
   c.strokeStyle = K.A(1);
   c.beginPath();
-  if (q >= 1) c.arc(0, cy, 0.38, 0, TAU);
-  else c.arc(0, cy, 0.38, Math.PI - Math.asin(Math.max(-1, q)), TAU + Math.asin(Math.max(-1, q)));
+  if (q >= 1) c.arc(0, cy, 0.38, 0, TAU2);
+  else c.arc(0, cy, 0.38, Math.PI - Math.asin(Math.max(-1, q)), TAU2 + Math.asin(Math.max(-1, q)));
   c.stroke();
   const ry = cl((u - 0.4) / 0.5);
   for (let k = 0; k < 7; k++) {
@@ -1414,7 +1633,7 @@ function humanStep(dt, t, id, P) {
     if (t >= H.seqT + 0.7 + hs(H.seq, 3) * 0.5) {
       H.seqT = t;
       H.seq = (H.seq + 1) % 6;
-      const a = -Math.PI / 2 + H.seq * TAU / 6;
+      const a = -Math.PI / 2 + H.seq * TAU2 / 6;
       aim(Math.cos(a) * 0.95, Math.sin(a) * 0.95);
     }
     sacc(190, 40);
@@ -1489,13 +1708,13 @@ function humanStep(dt, t, id, P) {
     H.wigStart = t;
     H.wigAt = t + M.wigI * (0.6 + 0.8 * Math.random());
   }
-  const yu = (t - H.yawnStart) / 2.8, yawn = yu >= 0 && yu <= 1 ? Math.pow(Math.sin(Math.PI * yu), 1.6) : 0, su = (t - H.shivStart) / 1.3, shiv = su >= 0 && su <= 1 ? 1 - su : 0, wu = (t - H.wigStart) / 1.2, wig = wu >= 0 && wu <= 1 ? 0.2 * Math.sin(wu * TAU * 3) * (1 - wu) : 0;
+  const yu = (t - H.yawnStart) / 2.8, yawn = yu >= 0 && yu <= 1 ? Math.pow(Math.sin(Math.PI * yu), 1.6) : 0, su = (t - H.shivStart) / 1.3, shiv = su >= 0 && su <= 1 ? 1 - su : 0, wu = (t - H.wigStart) / 1.2, wig = wu >= 0 && wu <= 1 ? 0.2 * Math.sin(wu * TAU2 * 3) * (1 - wu) : 0;
   H.typeA += (0.4 + 2.2 * Math.max(0, nz1(t * 2.2, 50) - 0.45)) * dt;
   const tt = (A.tilt ? A.tilt(t) : 0) + wig;
   H.tilt += (tt - H.tilt) * (1 - Math.exp(-dt * 8));
   H.cur += (ptr.sp - H.cur) * (1 - Math.exp(-dt * 4));
   ptr.sp *= Math.exp(-dt * 2);
-  const om = TAU / 4.2 * (1 + 0.25 * Math.sin(t * 0.31)) * A.br[0] * M.bs;
+  const om = TAU2 / 4.2 * (1 + 0.25 * Math.sin(t * 0.31)) * A.br[0] * M.bs;
   H.phase += om * dt;
   const amp = (id === "repos" ? 1 : A.br[1]) * (0.8 + 0.2 * Math.sin(t * 0.173)) * M.ba;
   let bt = Math.sin(H.phase) * amp;
@@ -1584,11 +1803,11 @@ function mkRec() {
   };
   o.arc = (x, y, r, a0, a1, ccw) => {
     if (!ccw) {
-      while (a1 < a0) a1 += TAU;
-      if (a1 - a0 > TAU) a1 = a0 + TAU;
+      while (a1 < a0) a1 += TAU2;
+      if (a1 - a0 > TAU2) a1 = a0 + TAU2;
     } else {
-      while (a1 > a0) a1 -= TAU;
-      if (a0 - a1 > TAU) a1 = a0 - TAU;
+      while (a1 > a0) a1 -= TAU2;
+      if (a0 - a1 > TAU2) a1 = a0 - TAU2;
     }
     const n = Math.max(4, Math.ceil(Math.abs(a1 - a0) / 0.2));
     for (let i = 0; i <= n; i++) {
@@ -1663,7 +1882,7 @@ function mkK(id, t) {
   const cc = typeof ACT[id].col === "function" ? ACT[id].col(t) : ACT[id].col, c0 = cc[0], c1 = cc[1];
   return { A: (a) => css(c0, a), B: (a) => css(c1, a), W: (a) => css(BLANC, a), lw: 0.03, c0, c1 };
 }
-var angMix = (a, b, f) => a + (((b - a + Math.PI) % TAU + TAU) % TAU - Math.PI) * f;
+var angMix = (a, b, f) => a + (((b - a + Math.PI) % TAU2 + TAU2) % TAU2 - Math.PI) * f;
 function corps() {
   const N = 100, NB = [60, 40], RB = [0.62, 0.4], DR = [1, -1], GN = [0.3, 0.26], OF = [0.035, 0.085];
   const f32 = () => new Float32Array(N);
@@ -1723,7 +1942,7 @@ function corps() {
     for (let k = 0; k < 2; k++) {
       const Nk = NB[k], ox = cx + H.gx * R * OF[k] * K, oy = cy + H.gy * R * OF[k] * K + R * sag + nodY * (k ? 1.25 : 1), base = RB[k] * sc * (1 + (k ? 1 : -1) * 0.04 * H.blink * K);
       for (let i = 0; i < Nk; i++) {
-        const a = i / Nk * TAU, ctx = { k, i, N: Nk, t, P, nz: nz1(i * 0.3 + t * 0.8, k), a0: a, H };
+        const a = i / Nk * TAU2, ctx = { k, i, N: Nk, t, P, nz: nz1(i * 0.3 + t * 0.8, k), a0: a, H };
         let e = 0, dsp = 0;
         for (const q of ST) {
           const wv = W[q];
@@ -2188,7 +2407,7 @@ function rangDe(u, n) {
 }
 
 // src/entrees.ts
-var borne2 = (x) => Math.max(0, Math.min(1, x));
+var borne3 = (x) => Math.max(0, Math.min(1, x));
 function entreesLocales(c) {
   const now = c.maintenant.getTime();
   const h = c.maintenant.getHours() + c.maintenant.getMinutes() / 60;
@@ -2207,179 +2426,16 @@ function entreesLocales(c) {
     apresmidi: h >= 14 && h < 18 ? 1 : 0,
     vendredi: jour === 5 ? 1 : 0,
     lundi: jour === 1 ? 1 : 0,
-    actif: borne2(1 - (now - c.dernierMarc) / 8e3),
-    absent: borne2((now - c.dernierMarc - 6e4) / 18e4),
-    sessionLongue: borne2((now - c.debut) / 36e5),
-    conv: dernierEchange ? borne2(1 - (now - dernierEchange.t) / 12e4) : 0,
-    silence: borne2((now - (c.dernierPropos || c.debut)) / (15 * 6e4)),
-    calmeMonde: borne2((now - (c.dernierMonde || c.debut)) / 6e5),
+    actif: borne3(1 - (now - c.dernierMarc) / 8e3),
+    absent: borne3((now - c.dernierMarc - 6e4) / 18e4),
+    sessionLongue: borne3((now - c.debut) / 36e5),
+    conv: dernierEchange ? borne3(1 - (now - dernierEchange.t) / 12e4) : 0,
+    silence: borne3((now - (c.dernierPropos || c.debut)) / (15 * 6e4)),
+    calmeMonde: borne3((now - (c.dernierMonde || c.debut)) / 6e5),
     questions: recents.length ? recents.filter((e) => e.question).length / recents.length : 0,
     bref: recents.length && moyenne < 60 ? 1 - moyenne / 60 : 0,
-    bavard: moyenne > 100 ? borne2((moyenne - 100) / 100) : 0,
-    rythme: borne2(recents.length / 6)
-  };
-}
-
-// src/interieur.ts
-var CAUSES = ["choc", "brusque", "ton", "panne", "isolement", "usure"];
-var INTERIEUR_DEPART = { douleur: 0, cause: null, sensibilite: 0.15, plaisir: 0, confiance: 0.5, usure: 0 };
-var TAU2 = { douleur: 90, plaisir: 60, sensibilite: 1800, confiance: 3 * 86400, usure: 600 };
-var SENSIBILITE_BASE = 0.15;
-var DOSE = { choc: 0.3, brusque: 0.5, ton: 0.5, panne: 0.15 };
-var borne3 = (x) => Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0;
-function stimuler(i, s, force = 1) {
-  const f = borne3(force);
-  if (s === "gentil") {
-    return {
-      ...i,
-      plaisir: 1 - (1 - i.plaisir) * (1 - 0.35 * f),
-      douleur: i.douleur * (1 - 0.3 * f),
-      confiance: borne3(i.confiance + 0.012 * f)
-    };
-  }
-  const dose = f * DOSE[s] * (0.7 + 0.9 * i.sensibilite);
-  const douleur = 1 - (1 - i.douleur) * (1 - dose);
-  return {
-    ...i,
-    douleur,
-    // La cause reste celle du coup le plus fort du moment.
-    cause: i.cause === null || dose >= i.douleur * 0.5 ? s : i.cause,
-    sensibilite: borne3(i.sensibilite + 0.06 * f),
-    plaisir: i.plaisir * (1 - 0.4 * f),
-    confiance: borne3(i.confiance - (s === "ton" || s === "brusque" ? 0.02 : 4e-3) * f)
-  };
-}
-function evoluer(i, dt, m) {
-  const d = Math.max(0, Math.min(5, dt));
-  const retombe = (v, tau) => v * Math.exp(-d / tau);
-  const planchers = [];
-  if (m.horsLigne) planchers.push(["panne", 0.2]);
-  const attente = borne3((m.absentSec - 1200) / 3600);
-  if (attente > 0) planchers.push(["isolement", i.confiance * attente * 0.25]);
-  let douleur = retombe(i.douleur, TAU2.douleur);
-  let cause = i.cause;
-  for (const [c, p] of planchers) {
-    if (p > douleur) {
-      douleur = douleur + (p - douleur) * (1 - Math.exp(-d / 6));
-      cause = c;
-    }
-  }
-  if (douleur < 0.02 && !planchers.length) cause = null;
-  const usure = m.ralenti ? borne3(i.usure + d / 120) : retombe(i.usure, TAU2.usure);
-  return {
-    douleur: borne3(douleur),
-    cause: douleur >= 0.02 ? cause : null,
-    sensibilite: SENSIBILITE_BASE + (i.sensibilite - SENSIBILITE_BASE) * Math.exp(-d / TAU2.sensibilite),
-    plaisir: retombe(i.plaisir, TAU2.plaisir),
-    confiance: 0.5 + (i.confiance - 0.5) * Math.exp(-d / TAU2.confiance),
-    usure
-  };
-}
-function vieillir(i, ageSec) {
-  const a = Number.isFinite(ageSec) ? Math.max(0, ageSec) : 0;
-  const k = (tau) => Math.exp(-a / tau);
-  const douleur = borne3(i.douleur) * k(TAU2.douleur);
-  return {
-    douleur,
-    cause: douleur >= 0.02 ? i.cause : null,
-    sensibilite: SENSIBILITE_BASE + (borne3(i.sensibilite) - SENSIBILITE_BASE) * k(TAU2.sensibilite),
-    plaisir: borne3(i.plaisir) * k(TAU2.plaisir),
-    confiance: 0.5 + (borne3(i.confiance) - 0.5) * k(TAU2.confiance),
-    usure: borne3(i.usure) * k(TAU2.usure)
-  };
-}
-function versReseau(i) {
-  const dur = i.cause === "ton" || i.cause === "brusque";
-  return {
-    mauvais: borne3(i.douleur * 0.9),
-    rejet: dur ? borne3(i.douleur * 0.7) : 0,
-    bon: borne3(i.plaisir * 0.8),
-    facteurEnergie: 1 - 0.5 * i.usure
-  };
-}
-function humeurDeDouleur(i) {
-  if (i.douleur < 0.4 || i.cause === null) return null;
-  switch (i.cause) {
-    case "choc":
-      return "mefiant";
-    case "brusque":
-      return "agace";
-    case "ton":
-    case "isolement":
-      return "triste";
-    case "panne":
-      return "inquiet";
-    case "usure":
-      return "fatigue";
-  }
-}
-function moduler(m, i) {
-  const d = borne3(i.douleur);
-  const p = borne3(i.plaisir);
-  if (d < 0.01 && p < 0.01) return m;
-  return {
-    ...m,
-    bs: m.bs * (1 - 0.25 * d),
-    ba: m.ba * (1 - 0.35 * d) * (1 + 0.15 * p),
-    blr: m.blr * (1 + 0.3 * d),
-    en: m.en * (1 - 0.3 * d) * (1 + 0.1 * p),
-    sag: m.sag + 0.07 * d,
-    jit: m.jit * (1 + 1.4 * d)
-  };
-}
-var MOT = (mots) => new RegExp(`(?<![\\p{L}])(?:${mots})(?![\\p{L}])`, "iu");
-var GENTIL = MOT("merci|bravo|super|g\xE9nial|genial|parfait|excellent|chouette|adorable|gentille|bien jou\xE9|bien jouee|tu es top|je t'aime|bonne nuit|bisou");
-var BRUSQUE = MOT("nul(?:le)?|idiote?|stupide|d\xE9bile|debile|inutile|ferme[- ]la|tais[- ]toi|d\xE9gage|degage|ta gueule|merde|tu sers \xE0 rien|tu sers a rien|\xE7a sert \xE0 rien|ca sert a rien");
-function ton(texte) {
-  if (BRUSQUE.test(texte)) return "brusque";
-  if (GENTIL.test(texte)) return "gentil";
-  return null;
-}
-var CRIS = {
-  choc: ["A\xEFe.", "Doucement, s'il te pla\xEEt.", "Oh, \xE7a secoue."],
-  brusque: ["A\xEFe, pas si vite.", "Un \xE0 la fois, s'il te pla\xEEt.", "\xC7a pique, ces clics."],
-  ton: ["\xC7a fait mal, ce que tu dis.", "Oh. \xC7a m'a touch\xE9e."],
-  panne: ["Plus de r\xE9seau. \xC7a m'angoisse un peu.", "Je perds le fil, plus rien ne passe."],
-  isolement: ["\xC7a fait longtemps. Je me sens un peu seule.", "Il est calme, ici. Trop calme."],
-  usure: ["Je rame, tout est lent.", "Je suis \xE0 bout de souffle."]
-};
-var APAISEMENTS = ["\xC7a va mieux.", "Merci. \xC7a passe.", "\xC7a s'apaise."];
-function cri(i, hasard) {
-  if (i.douleur < 0.35 || i.cause === null) return null;
-  const l = CRIS[i.cause];
-  return l[Math.floor(hasard() * l.length) % l.length] ?? null;
-}
-function apaisement(hasard) {
-  return APAISEMENTS[Math.floor(hasard() * APAISEMENTS.length) % APAISEMENTS.length] ?? "\xC7a va mieux.";
-}
-var QUESTION_DOULEUR = /(?<![\p{L}])(?:mal|douleur|souffr\p{L}*|ça fait mal|tu as mal|tu souffres)(?![\p{L}])/iu;
-function questionSurSaDouleur(q) {
-  const t = q.trim();
-  return t.length <= 80 && t.endsWith("?") && QUESTION_DOULEUR.test(t) && /(?<![\p{L}])(?:tu|toi|vous|lia|te|t')/iu.test(t);
-}
-function reponseDouleur(i) {
-  const pct2 = Math.round(i.douleur * 100);
-  const CAUSES2 = {
-    choc: "on m'a secou\xE9e",
-    brusque: "les clics \xE9taient brusques",
-    ton: "ce qui s'est dit m'a touch\xE9e",
-    panne: "le r\xE9seau est coup\xE9",
-    isolement: "je suis seule depuis longtemps",
-    usure: "tout tourne trop lentement"
-  };
-  const niveau = pct2 < 8 ? "Pas du tout pour l'instant." : `Un peu : ma douleur est \xE0 ${pct2} %${i.cause ? `, parce que ${CAUSES2[i.cause]}` : ""}.`;
-  return `${niveau} C'est un calcul en moi, pas un vrai ressenti : mais il change vraiment mon humeur et mon corps.`;
-}
-function garder(i, maintenant) {
-  return { t: maintenant, sensibilite: i.sensibilite, confiance: i.confiance };
-}
-function reprendre(g, maintenant) {
-  if (!g) return { ...INTERIEUR_DEPART };
-  const age = Math.max(0, (maintenant - g.t) / 1e3);
-  return {
-    ...INTERIEUR_DEPART,
-    sensibilite: SENSIBILITE_BASE + (borne3(g.sensibilite) - SENSIBILITE_BASE) * Math.exp(-age / TAU2.sensibilite),
-    confiance: 0.5 + (borne3(g.confiance) - 0.5) * Math.exp(-age / TAU2.confiance)
+    bavard: moyenne > 100 ? borne3((moyenne - 100) / 100) : 0,
+    rythme: borne3(recents.length / 6)
   };
 }
 
@@ -2509,62 +2565,6 @@ function relacherEcrasement(e, dt) {
   }
   if (Math.abs(e.s) < 2e-3 && Math.abs(e.v) < 0.05) e.s = e.v = 0;
   e.s = Math.max(-0.12, Math.min(ECRASEMENT_MAX, e.s));
-}
-
-// src/etat.ts
-var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
-var LENTE_MAX = 80;
-var VERSION_MAX = 1e9;
-var estFraction = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= 1;
-function validerInterieur(brut2) {
-  if (typeof brut2 !== "object" || brut2 === null) return void 0;
-  const { douleur, cause, sensibilite, plaisir, confiance, usure } = brut2;
-  if (![douleur, sensibilite, plaisir, confiance, usure].every(estFraction)) return void 0;
-  if (cause !== null && !(typeof cause === "string" && CAUSES.includes(cause))) return void 0;
-  return { douleur, sensibilite, plaisir, confiance, usure, cause };
-}
-function validerEtat(brut2) {
-  if (typeof brut2 !== "object" || brut2 === null) return null;
-  const o = brut2;
-  const { version, maj, envies, journal, lente, humeur: humeur2, relances } = o;
-  if (typeof version !== "number" || !Number.isInteger(version) || version < 0 || version > VERSION_MAX) return null;
-  if (typeof maj !== "number" || !Number.isFinite(maj) || maj <= 0) return null;
-  if (typeof envies !== "object" || envies === null || !Array.isArray(journal)) return null;
-  const e = envies;
-  if (!NOMS_ENVIES.every((k) => estFraction(e[k]))) return null;
-  if (typeof humeur2 !== "string" || !/^[a-zà-ÿ_-]{1,40}$/i.test(humeur2)) return null;
-  if (typeof relances !== "object" || relances === null) return null;
-  const { jour, n } = relances;
-  if (typeof jour !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(jour)) return null;
-  if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 100) return null;
-  const propre = {};
-  if (typeof lente === "object" && lente !== null) {
-    for (const [k, v] of Object.entries(lente).slice(0, LENTE_MAX)) {
-      if (/^[A-Za-z0-9_-]{1,40}$/.test(k) && estFraction(v)) propre[k] = v;
-    }
-  }
-  const faits = [];
-  for (const f of journal) {
-    if (typeof f !== "object" || f === null) continue;
-    const { t, quoi } = f;
-    if (typeof t === "number" && Number.isFinite(t) && t > 0 && typeof quoi === "string" && COMPORTEMENTS.includes(quoi)) {
-      faits.push({ t, quoi });
-    }
-  }
-  const enviesPropres = Object.fromEntries(NOMS_ENVIES.map((k) => [k, e[k]]));
-  const interieur = validerInterieur(o["interieur"]);
-  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur: humeur2, relances: { jour, n }, ...interieur ? { interieur } : {} };
-}
-function adopter(distant, majVue, versionVue) {
-  if (!distant) return false;
-  return distant.maj > majVue || distant.maj === majVue && distant.version > versionVue;
-}
-function empreinte(e) {
-  const arrondi = NOMS_ENVIES.map((k) => Math.round(e.envies[k] * 20)).join(",");
-  const dernier = e.journal[e.journal.length - 1];
-  const i = e.interieur;
-  const dedans = i ? `${[i.douleur, i.plaisir, i.confiance].map((x) => Math.round(x * 20)).join(",")}:${i.cause ?? "-"}` : "-";
-  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}`;
 }
 
 // src/poids.ts
@@ -5259,14 +5259,17 @@ export {
   FAMILLES_ACTIONS,
   ACTIONS_LIA,
   ENVIES_DEPART,
+  COMPORTEMENTS,
   majEnvies,
   apresComportement,
   candidats,
   choisirComportement,
+  CAUSES,
   LIBELLES_HUMEURS,
   HUMEURS_DETAILLEES,
   libelleHumeur,
   couleurHumeur,
+  validerEtat,
   ST,
   ENTREES_MENU,
   SELECTEUR_ELEMENTS,
@@ -5278,4 +5281,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-RQP7CO3U.mjs.map
+//# sourceMappingURL=chunk-SS5NJCWQ.mjs.map

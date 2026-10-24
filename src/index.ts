@@ -23,10 +23,13 @@ export { composerQuestion, decrireParDefaut, ENTREES_MENU, SELECTEUR_ELEMENTS } 
 export { GESTES, HUMEURS_MENU } from "./gestes.js";
 export { ACTIONS_LIA, FAMILLES_ACTIONS } from "./activite.js";
 export type { FamilleActions } from "./activite.js";
+export { validerEtat } from "./etat.js";
 export type { EtatHote, EtatLia } from "./etat.js";
+export { CAUSES } from "./interieur.js";
+export type { Cause, Interieur } from "./interieur.js";
 export { HUMEURS_DETAILLEES, LIBELLES_HUMEURS, couleurHumeur, libelleHumeur } from "./humeurs.js";
 export { ST as SILHOUETTES_LIA } from "./moteur/moteur.js";
-export { ENVIES_DEPART, apresComportement, candidats, choisirComportement, majEnvies } from "./cerveau.js";
+export { COMPORTEMENTS, ENVIES_DEPART, apresComportement, candidats, choisirComportement, majEnvies } from "./cerveau.js";
 export type { Candidat, Comportement, Envies, FaitLia } from "./cerveau.js";
 export type { ModeElement } from "./ecran.js";
 export type { GesteLia } from "./gestes.js";
