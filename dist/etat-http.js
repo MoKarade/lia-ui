@@ -23,21 +23,26 @@ __export(etat_http_exports, {
   etatHttp: () => etatHttp
 });
 module.exports = __toCommonJS(etat_http_exports);
-function etatHttp(url, options = {}) {
+function resoudre(url) {
   const cible = new URL(url, window.location.href);
   if (cible.origin !== window.location.origin) {
     throw new Error("etatHttp : l'adresse doit \xEAtre de la m\xEAme origine que la page (LIA n'envoie son \xE9tat \xE0 aucun autre site)");
   }
+  return cible;
+}
+function etatHttp(url, options = {}) {
+  let resolue = typeof window === "undefined" ? null : resoudre(url);
+  const adresse = () => (resolue ??= resoudre(url)).href;
   const appeler = options.fetch ?? ((...a) => fetch(...a));
   return {
     async lire() {
-      const r = await appeler(cible.href, { credentials: "same-origin", cache: "no-store", headers: { accept: "application/json" } });
+      const r = await appeler(adresse(), { credentials: "same-origin", cache: "no-store", headers: { accept: "application/json" } });
       if (r.status === 204 || r.status === 404) return null;
       if (!r.ok) throw new Error(`\xE9tat de LIA : lecture refus\xE9e (HTTP ${r.status})`);
       return await r.json();
     },
     async ecrire(etat) {
-      const r = await appeler(cible.href, {
+      const r = await appeler(adresse(), {
         method: "PUT",
         credentials: "same-origin",
         keepalive: true,
