@@ -1,7 +1,7 @@
 "use client";
 import {
   mountLia
-} from "./chunk-NYQE6AL2.mjs";
+} from "./chunk-CWTVDCBD.mjs";
 
 // src/react.tsx
 import { useEffect, useRef } from "react";

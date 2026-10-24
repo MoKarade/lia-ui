@@ -3543,6 +3543,7 @@ function mountLia(options = {}) {
   const selecteurElements = optElements?.selecteur ?? SELECTEUR_ELEMENTS;
   let contexteQuestion = null;
   let reperee = null;
+  let analysePour = null;
   let attenteElement;
   let relache = 0;
   let glisse = null;
@@ -4203,6 +4204,7 @@ function mountLia(options = {}) {
   function cesserDeReperer() {
     if (regarde && regarde === reperee && !(attention?.type === "element" && attention.el === regarde)) retirerRegard();
     reperee = null;
+    analysePour = null;
     repere.hidden = true;
   }
   const majRepere = () => {
@@ -4229,7 +4231,8 @@ function mountLia(options = {}) {
     cadreSur = null;
   };
   const majCadre = () => {
-    const cible2 = etat === "analyse" ? reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde : null;
+    const cible2 = analysePour ?? (etat === "analyse" ? reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde : null);
+    if (analysePour && !analysePour.isConnected) analysePour = null;
     if (!cible2 || !cible2.isConnected || couche.contains(cible2)) return masquerCadre();
     const r = cible2.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return masquerCadre();
@@ -4256,6 +4259,8 @@ function mountLia(options = {}) {
     if (detruit) return;
     clearTimeout(attenteElement);
     const baseMode = { expliquer: "analyse", changer: "planifie", regarder: "lit", question: "reflexion" }[mode];
+    analysePour = baseMode === "analyse" ? cible2 : null;
+    if (analysePour) majCadre();
     const demarrer = () => {
       if (detruit || !cible2.isConnected) return;
       reperee = cible2;
@@ -4266,7 +4271,12 @@ function mountLia(options = {}) {
         return;
       }
       impulsion(reseau, "demande");
-      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d), baseMode);
+      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d), baseMode).finally(() => {
+        const fini = cible2;
+        setTimeout(() => {
+          if (analysePour === fini) analysePour = null;
+        }, 1200);
+      });
     };
     if (!allerVoir(cible2, 8, baseMode)) return demarrer();
     let essais = 0;
