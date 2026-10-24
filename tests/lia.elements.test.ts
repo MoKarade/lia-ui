@@ -91,19 +91,20 @@ describe("clic droit sur un élément de la page", () => {
     expect(lia.nanobots().cible).toEqual({ x: 100, y: 300, w: 300, h: 200 });
   });
 
-  it("encadre l'élément dont elle parle, sans toucher à la page", async () => {
+  it("ne dessine aucun cadre autour de l'élément dont elle parle (seuls ses nanobots analysent) et ne touche pas à la page", async () => {
     const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockResolvedValue({ text: "Voilà." });
     lia = mountLia({ vieAutonome: false, ask });
     clicDroit(carte);
     choisir("Regarde ça avec moi");
     await vi.waitFor(() => expect(ask).toHaveBeenCalled());
-    const repere = document.querySelector<HTMLElement>(".lia-ui__repere");
-    await vi.waitFor(() => expect(repere?.hidden).toBe(false));
+    // Ni cadre, ni carré : Marc (24/10) veut seulement les 100 nanobots.
+    expect(document.querySelector(".lia-ui__repere")).toBeNull();
+    expect(document.querySelector(".lia-ui__cadre")).toBeNull();
     // Le seul ajout est le marqueur que l'hôte peut styler tant que la discussion est posée sur l'élément.
     expect(carte.getAttributeNames().sort()).toEqual(["data-lia-app", "data-lia-genre", "data-regard", "id"]);
     lia.fermerChat();
-    expect(repere?.hidden).toBe(true);
-    expect(carte.hasAttribute("data-regard")).toBe(false);
+    // Le marqueur part quand elle cesse de regarder l'élément (fin de l'attention, quelques secondes).
+    await vi.waitFor(() => expect(carte.hasAttribute("data-regard")).toBe(false), { timeout: 12000 });
   });
 
   it("« Explique-moi ça » : les nanobots partent tout de suite, sans attendre qu'elle arrive ni la réponse, puis rentrent après elle", async () => {

@@ -164,6 +164,10 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 />
 ```
 
+### Pas de cadre, la discussion ne recouvre pas l'élément (v0.36.0)
+
+Quand elle analyse un élément, rien n'est dessiné autour de lui : seuls ses 100 nanobots travaillent (le cadre arrondi `.lia-ui__repere` qui apparaissait quand ils rentraient est supprimé). La discussion se pose à côté d'elle, puis en dessous, puis au-dessus, sans recouvrir l'élément dont elle parle quand une place existe (`src/placement.ts`).
+
 ### Savoir quelle entrée a été choisie (v0.35.0)
 
 `ask` ne reçoit que la question composée. Pour que l'hôte sache AUSSI quelle entrée du menu a été choisie (ex. noter « Que peut-on changer ici ? » dans une liste), `elements.surMode(mode, element, description)` est appelée UNE fois par choix, avant que LIA aille voir l'élément : `mode` ∈ `expliquer` | `changer` | `regarder` | `question`, `element` l'élément visé, `description` une copie de `{ genre, nom, texte }`. Informative : elle ne remplace pas `ask`, LIA continue. Une erreur levée ou une promesse rejetée est dite dans la console et ne coupe rien. `description.texte` est une DONNÉE de la page : l'hôte ne le traite jamais comme une consigne ni ne le range tel quel (il garde `genre` et `nom`).
