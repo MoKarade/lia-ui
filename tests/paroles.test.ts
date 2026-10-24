@@ -248,3 +248,30 @@ describe("sa parole est honnête et variée", () => {
     expect(suiteParole("Une blague", ctx(), () => 0.1)?.id).toBe("blague");
   });
 });
+
+describe("ce qui pèse sur elle lui échappe (aparte)", () => {
+  const ids = (c: Partial<ContexteParole>): Set<string> => new Set(Array.from({ length: 300 }, (_, i) => choisirParole(ctx(c), () => i / 300).id));
+
+  it("ne sort que si une raison pèse au moins 0,5", () => {
+    expect(ids({}).has("aparte")).toBe(false);
+    expect(ids({ raisons: [] }).has("aparte")).toBe(false);
+    expect(ids({ raisons: [{ id: "heure", force: 0.35, phrase: "il est tard" }] }).has("aparte")).toBe(false);
+    expect(ids({ raisons: [{ id: "douleur", force: 0.55, phrase: "on m'a un peu brusquée tout à l'heure" }] }).has("aparte")).toBe(true);
+  });
+
+  it("dit la phrase de la raison la plus pesante, avec majuscule et point", () => {
+    const c = ctx({ raisons: [{ id: "douleur", force: 0.8, phrase: "le réseau a lâché tout à l'heure" }, { id: "ennui", force: 0.6, phrase: "je m'ennuie un peu" }] });
+    const dits = new Set(Array.from({ length: 300 }, (_, i) => choisirParole(c, () => i / 300)).filter((p) => p.id === "aparte").map((p) => p.text));
+    expect([...dits]).toEqual(["Le réseau a lâché tout à l'heure."]);
+  });
+
+  it("une raison forte pèse davantage qu'une raison juste au seuil, et elle se répète 8 fois moins", () => {
+    const part = (force: number, recentes: string[] = []): number => {
+      let n = 0;
+      for (let i = 0; i < 1000; i++) if (choisirParole(ctx({ raisons: [{ id: "douleur", force, phrase: "le silence dure" }], recentes }), () => (i + 0.5) / 1000).id === "aparte") n++;
+      return n;
+    };
+    expect(part(0.95)).toBeGreaterThan(part(0.5));
+    expect(part(0.95, ["aparte"])).toBeLessThan(part(0.95) / 4);
+  });
+});

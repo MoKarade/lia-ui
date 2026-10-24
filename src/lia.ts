@@ -24,7 +24,7 @@ import { avancerEssaim, creerEssaim, eclat, rappeler as rappelerEssaim, surLaCib
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
-import { ambivalence, reponsePourquoi, rythmeDuJour, teinter, type ContextePensee } from "./pensee.js";
+import { ambivalence, raisons as raisonsDeSonEtat, reponsePourquoi, rythmeDuJour, teinter, type ContextePensee } from "./pensee.js";
 import { ajouterSouvenir, humeurDeFond, phraseDeRetour, type GenreSouvenir, type Souvenir } from "./souvenirs.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
 import {
@@ -1591,7 +1591,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /** Ce qu'elle dit d'elle-même (src/paroles.ts) : vrai par construction, jamais rien sur Marc ni sur ses apps. */
   let recentesParoles: string[] = [];
-  const contexteParole = (): ContexteParole => ({ heure: new Date().getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles });
+  const contexteParole = (): ContexteParole => ({ heure: new Date().getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles, raisons: raisonsDeSonEtat(contextePensee()) });
   /** Ce qu'elle sait de pourquoi elle va comme elle va (src/pensee.ts) : son état seul, jamais ce que Marc a écrit. */
   const contextePensee = (): ContextePensee => {
     const maintenant = Date.now();
