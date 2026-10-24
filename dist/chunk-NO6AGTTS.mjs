@@ -2793,6 +2793,80 @@ function vitessePourBond(depart, but, duree, p) {
   return { vx, vy };
 }
 
+// src/allure.ts
+var limiter2 = (v, a, b) => Math.max(a, Math.min(b, v));
+var entre2 = (h, a, b) => a + (b - a) * h();
+function jerkMinimal(u) {
+  const x = limiter2(u, 0, 1);
+  return x * x * x * (10 - 15 * x + 6 * x * x);
+}
+function planifierTrajet(depart, but, hasard, p) {
+  const dx = but.x - depart.x;
+  const dy = but.y - depart.y;
+  const d = Math.hypot(dx, dy);
+  const energie = limiter2(Number.isFinite(p.energie) ? p.energie : 0.5, 0, 1);
+  const nerv = limiter2(Number.isFinite(p.nervosite) ? p.nervosite : 0.2, 0, 1);
+  if (d < 1) {
+    return { depart, but, ctrl: { ...depart }, fin: { ...but }, duree: 0.01, pause: null, correction: 0, total: 0.01 };
+  }
+  const nx = -dy / d;
+  const ny = dx / d;
+  const ecart = d < 40 ? 0 : (hasard() < 0.5 ? -1 : 1) * Math.min(60, d * entre2(hasard, 0.04, 0.16));
+  const ctrl = { x: (depart.x + but.x) / 2 + nx * ecart, y: (depart.y + but.y) / 2 + ny * ecart };
+  const croisiere = 230 * (0.65 + 0.7 * energie) * Math.exp((hasard() + hasard() + hasard() - 1.5) * 0.45);
+  const duree = limiter2(d / croisiere, 0.55, 4.2);
+  const pHesite = d < 90 ? 0 : 0.12 + 0.3 * nerv + 0.1 * (1 - energie);
+  const pause = hasard() < pHesite ? { a: entre2(hasard, 0.25, 0.65), duree: entre2(hasard, 0.18, 0.6) } : null;
+  const pDepasse = d < 120 ? 0 : 0.14 + 0.25 * nerv;
+  const depasse = hasard() < pDepasse;
+  const amp = depasse ? Math.min(30, d * entre2(hasard, 0.04, 0.09)) : 0;
+  const fin = amp > 0 ? { x: but.x + dx / d * amp, y: but.y + dy / d * amp } : { ...but };
+  const correction = amp > 0 ? entre2(hasard, 0.35, 0.65) : 0;
+  return { depart, but, ctrl, fin, duree, pause, correction, total: duree + (pause?.duree ?? 0) + correction };
+}
+function sur(a, c, b, u) {
+  const v = 1 - u;
+  return { x: v * v * a.x + 2 * v * u * c.x + u * u * b.x, y: v * v * a.y + 2 * v * u * c.y + u * u * b.y };
+}
+function pointDuTrajet(tr, ecoule) {
+  if (tr.total <= 0.011) return { x: tr.but.x, y: tr.but.y, fini: true };
+  const e = Number.isFinite(ecoule) ? Math.max(0, ecoule) : 0;
+  const pause = tr.pause;
+  const debutPause = pause ? pause.a * tr.duree : Infinity;
+  let tp = e;
+  if (pause && e > debutPause) tp = e <= debutPause + pause.duree ? debutPause : e - pause.duree;
+  const u = tp / tr.duree;
+  if (u < 1) {
+    const p = sur(tr.depart, tr.ctrl, tr.fin, jerkMinimal(u));
+    return { ...p, fini: false };
+  }
+  if (tr.correction > 0) {
+    const reste = tp - tr.duree;
+    if (reste < tr.correction) {
+      const s = jerkMinimal(reste / tr.correction);
+      return { x: tr.fin.x + (tr.but.x - tr.fin.x) * s, y: tr.fin.y + (tr.but.y - tr.fin.y) * s, fini: false };
+    }
+  }
+  return { x: tr.but.x, y: tr.but.y, fini: true };
+}
+function deriveAuRepos(t, graine, amplitude) {
+  const a = limiter2(amplitude, 0, 20);
+  const g = Number.isFinite(graine) ? graine : 0;
+  const s = (f, ph) => Math.sin(t * f + g * ph);
+  return {
+    x: a * (0.55 * s(0.37, 1.3) + 0.3 * s(0.91, 2.9) + 0.15 * s(2.3, 4.1)),
+    y: a * 0.8 * (0.55 * s(0.29, 5.7) + 0.3 * s(0.73, 3.3) + 0.15 * s(1.9, 7.9))
+  };
+}
+function prochainPetitPas(hasard, energie) {
+  const e = limiter2(Number.isFinite(energie) ? energie : 0.5, 0, 1);
+  const mediane = 11 - 7 * e;
+  const delai = limiter2(mediane * Math.exp((hasard() + hasard() + hasard() - 1.5) * 1.1), 1.6, 70);
+  const a = hasard() * Math.PI * 2;
+  const r = entre2(hasard, 7, 22);
+  return { delai, dx: Math.cos(a) * r, dy: Math.sin(a) * r * 0.6 };
+}
+
 // src/nano.ts
 var MARGE = 5;
 var MIN = 18;
@@ -3907,7 +3981,7 @@ function injecterStyles() {
   s.textContent = CSS;
   document.head.appendChild(s);
 }
-var limiter2 = (x, a, b) => Math.max(a, Math.min(b, x));
+var limiter3 = (x, a, b) => Math.max(a, Math.min(b, x));
 var DELAI_CHAT_OUBLIE = 120;
 var DELAI_PAROLE_PROPRE = 28;
 var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
@@ -4025,6 +4099,11 @@ function mountLia(options = {}) {
   let dernierDeplacement = 0;
   let ancreDeplacement = { x: 0, y: 0 };
   let errance = { jusqua: 0 };
+  let trajet2 = null;
+  let prochainPetit = false;
+  let attache = null;
+  let petitPas = null;
+  const graineAllure = Math.random() * 100;
   let attention = null;
   const pointeur = { x: 0, y: 0, ms: -1e9, fin: false };
   const selecteurCibles = options.cibles ?? "[data-lia-cible]";
@@ -4134,8 +4213,8 @@ function mountLia(options = {}) {
     const lw = Math.max(1, z.w - 2 * marge);
     const lh = Math.max(1, z.h - 2 * marge);
     ecrireMemoire(cle, {
-      u: limiter2((pos.x - z.x - marge) / lw, 0, 1),
-      v: limiter2((pos.y - z.y - marge) / lh, 0, 1),
+      u: limiter3((pos.x - z.x - marge) / lw, 0, 1),
+      v: limiter3((pos.y - z.y - marge) / lh, 0, 1),
       ...choixVie === void 0 ? {} : { choixVie }
     });
   };
@@ -4385,12 +4464,12 @@ function mountLia(options = {}) {
       h = Math.min(boite.offsetHeight || h, place);
       w = boite.offsetWidth;
       const y2 = enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h;
-      boite.style.left = `${limiter2(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
-      boite.style.top = `${limiter2(y2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
+      boite.style.left = `${limiter3(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
+      boite.style.top = `${limiter3(y2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
       return;
     }
     const x = aDroite ? pos.x + rayon * 0.9 : pos.x - rayon * 0.9 - w;
-    const y = limiter2(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
+    const y = limiter3(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
     boite.style.left = `${Math.max(z.x + 8, x)}px`;
     boite.style.top = `${y}px`;
   };
@@ -4625,8 +4704,8 @@ function mountLia(options = {}) {
       if (!menu) return;
       const z = zoneVie();
       const r = couche.getBoundingClientRect();
-      menu.style.left = `${limiter2(x - r.left, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
-      menu.style.top = `${limiter2(y - r.top, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
+      menu.style.left = `${limiter3(x - r.left, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
+      menu.style.top = `${limiter3(y - r.top, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
     };
     menu = el("div", "lia-ui__menu");
     menu.setAttribute("role", "menu");
@@ -5002,8 +5081,8 @@ function mountLia(options = {}) {
         balle.choc = false;
         balle.fin = 0;
         balle.libre = true;
-        pos.vx = limiter2(pos.vx, -2600, 2600);
-        pos.vy = limiter2(pos.vy, -2600, 2600);
+        pos.vx = limiter3(pos.vx, -2600, 2600);
+        pos.vy = limiter3(pos.vy, -2600, 2600);
       }
       choisir3(lancee ? "surpris" : "content");
       memoriser();
@@ -5041,7 +5120,7 @@ function mountLia(options = {}) {
     pointeur.ms = performance.now();
     pointeur.fin = e.pointerType !== "touch";
     const r = couche.getBoundingClientRect();
-    regarder(limiter2((e.clientX - r.left - pos.x) / 400, -1, 1), limiter2((e.clientY - r.top - pos.y) / 400, -1, 1), t);
+    regarder(limiter3((e.clientX - r.left - pos.x) / 400, -1, 1), limiter3((e.clientY - r.top - pos.y) / 400, -1, 1), t);
   };
   window.addEventListener("pointermove", surCurseur, { passive: true });
   window.addEventListener("pointerdown", surCurseur, { passive: true });
@@ -5049,7 +5128,7 @@ function mountLia(options = {}) {
     if (!(e.target instanceof Element) || couche.contains(e.target)) return;
     const r = couche.getBoundingClientRect();
     const f = e.target.getBoundingClientRect();
-    regarder(limiter2((f.left + f.width / 2 - r.left - pos.x) / 400, -1, 1), limiter2((f.top + f.height / 2 - r.top - pos.y) / 400, -1, 1), t);
+    regarder(limiter3((f.left + f.width / 2 - r.left - pos.x) / 400, -1, 1), limiter3((f.top + f.height / 2 - r.top - pos.y) / 400, -1, 1), t);
   };
   window.addEventListener("focusin", surFocus, { passive: true });
   const surClicHors = (e) => {
@@ -5259,7 +5338,7 @@ function mountLia(options = {}) {
     const but = dansZone(z, cible.x, cible.y, rayon * 0.6);
     const d = Math.hypot(but.x - pos.x, but.y - pos.y);
     if (d < rayon * 4) return false;
-    const duree = limiter2(0.55 + d / 1500, 0.6, 1);
+    const duree = limiter3(0.55 + d / 1500, 0.6, 1);
     const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
     const v = vitessePourBond(pos, but, duree, params);
     const sommet = pos.y - (v.vy < 0 ? v.vy * v.vy / (2 * params.gravite) : 0);
@@ -5467,7 +5546,7 @@ function mountLia(options = {}) {
   };
   const penserReseau = () => {
     const now = Date.now();
-    const dt = limiter2((now - dernierPas) / 1e3, 0.05, 1);
+    const dt = limiter3((now - dernierPas) / 1e3, 0.05, 1);
     dernierPas = now;
     const locales = entreesLocales({ maintenant: new Date(now), envies, dernierMarc, debut: debutPage, echanges, dernierPropos, dernierMonde });
     entreesCourantes = { ...locales, ...habituer(entreesHote(), dt) };
@@ -5677,7 +5756,7 @@ function mountLia(options = {}) {
         bond = null;
       } else {
         ecr.angle = Math.PI / 2;
-        ecr.s = 0.2 * limiter2(1 - (bond.t0 - t) / 0.18, 0, 1);
+        ecr.s = 0.2 * limiter3(1 - (bond.t0 - t) / 0.18, 0, 1);
         ecr.v = 0;
         pos.vx = pos.vy = 0;
       }
@@ -5705,7 +5784,7 @@ function mountLia(options = {}) {
           if (imp.vitesse > 100) frapper(ecr, imp.vitesse, normaleDe("bas"));
         }
         if (perchage.atterri) {
-          pos.x = limiter2(pos.x, surface.gauche, surface.droite);
+          pos.x = limiter3(pos.x, surface.gauche, surface.droite);
           if (poseeSurSurface(pos, surface)) {
             posee = true;
             balle.actif = false;
@@ -5734,12 +5813,12 @@ function mountLia(options = {}) {
       }
       const pas = Math.max(dt, 8e-3);
       const lisse = 1 - Math.exp(-dt * 18);
-      phys.ax = limiter2(phys.ax + ((pos.vx - phys.vxPrec) / pas - phys.ax) * lisse, -2600, 2600);
-      phys.ay = limiter2(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
+      phys.ax = limiter3(phys.ax + ((pos.vx - phys.vxPrec) / pas - phys.ax) * lisse, -2600, 2600);
+      phys.ay = limiter3(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
       phys.vxPrec = pos.vx;
       phys.vyPrec = pos.vy;
     } else if (perchage?.pose && surface && carte) {
-      pos.x = limiter2(carte.rect.left + perchage.dx, surface.gauche, surface.droite);
+      pos.x = limiter3(carte.rect.left + perchage.dx, surface.gauche, surface.droite);
       pos.y = surface.y;
       pos.vx = pos.vy = 0;
       phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
@@ -5748,15 +5827,55 @@ function mountLia(options = {}) {
       const demande = attention?.type === "element" && !attention.colle;
       const suit = attention?.type === "curseur";
       const balade = !glisse && !demande && !suit && !colle;
-      const k = colle ? 1600 : glisse ? 260 : demande ? 70 : suit ? 30 : 8;
-      const zeta = 2 * Math.sqrt(k) * (colle ? 1 : glisse ? 0.9 : demande ? 0.8 : suit ? 0.7 : 0.62);
-      const vmax = colle ? 2500 : balade ? 520 : demande ? 1100 : 900;
-      const amax = colle ? 2e4 : glisse ? 9e3 : balade ? 1500 : 3500;
+      let visee = cc;
+      if (balade && !still && vie) {
+        const reste = Math.hypot(cc.x - pos.x, cc.y - pos.y);
+        if (trajet2 ? Math.hypot(trajet2.but.x - cc.x, trajet2.but.y - cc.y) > 3 : reste > 14 || prochainPetit) {
+          const petit = prochainPetit;
+          prochainPetit = false;
+          if (!petit) attache = null;
+          trajet2 = reste > 14 || petit ? {
+            tr: planifierTrajet({ x: pos.x, y: pos.y }, cc, Math.random, { energie: envies.energie, nervosite: Math.max(interieur.sensibilite, interieur.douleur) }),
+            t0: t,
+            but: { x: cc.x, y: cc.y },
+            petit
+          } : null;
+        }
+        if (trajet2) {
+          const p = pointDuTrajet(trajet2.tr, t - trajet2.t0);
+          visee = { x: p.x, y: p.y };
+          if (p.fini && t - trajet2.t0 > trajet2.tr.total + 0.4) {
+            trajet2 = null;
+            petitPas = null;
+          }
+        } else {
+          const d = deriveAuRepos(t, graineAllure, 2.5 + 2.5 * envies.energie);
+          visee = { x: cc.x + d.x, y: cc.y + d.y };
+          if (!chatOuvert && !menuOuvert && !parle && !perchage && !dort) {
+            if (!petitPas) {
+              const n2 = prochainPetitPas(Math.random, envies.energie);
+              petitPas = { quand: t + n2.delai, dx: n2.dx, dy: n2.dy };
+            } else if (t >= petitPas.quand) {
+              attache ??= { x: pos.x, y: pos.y };
+              cible = dansZone(z, attache.x + petitPas.dx, attache.y + petitPas.dy, rayon * 0.6);
+              prochainPetit = true;
+              petitPas = null;
+            }
+          }
+        }
+      } else if (!balade) {
+        trajet2 = null;
+      }
+      const marche = !!trajet2;
+      const k = colle ? 1600 : glisse ? 260 : demande ? 70 : suit ? 30 : marche ? 34 : 8;
+      const zeta = 2 * Math.sqrt(k) * (colle ? 1 : glisse ? 0.9 : demande ? 0.8 : suit ? 0.7 : marche ? 0.85 : 0.62);
+      const vmax = colle ? 2500 : balade ? marche ? 700 : 520 : demande ? 1100 : 900;
+      const amax = colle ? 2e4 : glisse ? 9e3 : balade ? marche ? 2200 : 1500 : 3500;
       const n = Math.max(1, Math.ceil(dt / 8e-3));
       const h = dt / n;
       for (let q = 0; q < n; q++) {
-        let ax = k * (cc.x - pos.x) - zeta * pos.vx;
-        let ay = k * (cc.y - pos.y) - zeta * pos.vy;
+        let ax = k * (visee.x - pos.x) - zeta * pos.vx;
+        let ay = k * (visee.y - pos.y) - zeta * pos.vy;
         const a = Math.hypot(ax, ay);
         if (a > amax) {
           ax *= amax / a;
@@ -5774,17 +5893,18 @@ function mountLia(options = {}) {
       }
       const pas = Math.max(dt, 8e-3);
       const lisse = 1 - Math.exp(-dt * 18);
-      phys.ax = limiter2(phys.ax + ((pos.vx - phys.vxPrec) / pas - phys.ax) * lisse, -2600, 2600);
-      phys.ay = limiter2(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
+      phys.ax = limiter3(phys.ax + ((pos.vx - phys.vxPrec) / pas - phys.ax) * lisse, -2600, 2600);
+      phys.ay = limiter3(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
       phys.vxPrec = pos.vx;
       phys.vyPrec = pos.vy;
     }
+    if (trajet2?.petit) ancreDeplacement = { x: pos.x, y: pos.y };
     if (Math.hypot(pos.x - ancreDeplacement.x, pos.y - ancreDeplacement.y) > rayon * 0.5) {
       ancreDeplacement = { x: pos.x, y: pos.y };
       dernierDeplacement = t;
     }
     const vitesse = Math.hypot(pos.vx, pos.vy);
-    const v = limiter2(vitesse / (Math.max(60, rayon) * 5), 0, 1);
+    const v = limiter3(vitesse / (Math.max(60, rayon) * 5), 0, 1);
     const k2 = still ? 1 : 1 - Math.exp(-dt * 3.5);
     for (const id of ST) {
       const w = etatMoteur.W[id] ?? 0;
@@ -5802,14 +5922,14 @@ function mountLia(options = {}) {
     for (const id of ST) lts[id] = sansMouvement ? 1.6 : t - (debut[id] ?? t);
     etatMoteur.lts = lts;
     const mobile = !sansMouvement && !doux && !still;
-    const penche = mobile ? limiter2(pos.vx / 700, -1, 1) * 0.17 : 0;
+    const penche = mobile ? limiter3(pos.vx / 700, -1, 1) * 0.17 : 0;
     const nb = Math.max(1, Math.ceil(dt / 0.01));
     for (let q = 0; q < nb; q++) {
       phys.vIncl += (55 * (penche - phys.incl) - 2 * 0.38 * Math.sqrt(55) * phys.vIncl) * (dt / nb);
       phys.incl += phys.vIncl * (dt / nb);
     }
     if (!mobile) phys.incl = phys.vIncl = 0;
-    const filante = limiter2(vitesse / 700, 0, 1);
+    const filante = limiter3(vitesse / 700, 0, 1);
     phys.flotte += ((mobile && vie && !glisse && !chatOuvert && !menuOuvert && !perchage ? 1 : 0) - phys.flotte) * (still ? 1 : 1 - Math.exp(-dt * (perchage ? 8 : 2)));
     const amp = rayon * 0.26 * phys.flotte * (1 - 0.7 * filante);
     const ox = amp * (Math.sin(t * 0.78 + 1.3) + 0.45 * Math.sin(t * 1.93));
@@ -5862,7 +5982,7 @@ function mountLia(options = {}) {
     if (!bulle.hidden) {
       const w = bulle.offsetWidth;
       const h = bulle.offsetHeight;
-      bulle.style.left = `${limiter2(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
+      bulle.style.left = `${limiter3(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
     if (chat) placerAutour(chat);
@@ -5949,7 +6069,7 @@ function mountLia(options = {}) {
     },
     setVieAutonome,
     setRayon(px) {
-      if (Number.isFinite(px)) rayonCible = limiter2(px, 24, 400);
+      if (Number.isFinite(px)) rayonCible = limiter3(px, 24, 400);
       if (sansMouvement) dessinerUneFois();
     },
     suivreCurseur,
@@ -6064,4 +6184,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-FNJSYX4M.mjs.map
+//# sourceMappingURL=chunk-NO6AGTTS.mjs.map
