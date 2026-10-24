@@ -5251,6 +5251,20 @@ function mountLia(options = {}) {
       clearTimeout(appui);
     }
   });
+  const toucher = () => {
+    if (chatOuvert) {
+      fermerChat();
+      return;
+    }
+    if (options.surToucher) {
+      try {
+        if (options.surToucher() === true) return;
+      } catch (e) {
+        console.error("LIA : surToucher a \xE9chou\xE9, sa discussion s'ouvre", e);
+      }
+    }
+    ouvrirChat();
+  };
   const finGlisse = () => {
     clearTimeout(appui);
     if (!glisse) return;
@@ -5281,8 +5295,7 @@ function mountLia(options = {}) {
       }, 1800);
     } else {
       poke();
-      if (chatOuvert) fermerChat();
-      else ouvrirChat();
+      toucher();
     }
   };
   hit.addEventListener("pointerup", finGlisse);
@@ -5296,8 +5309,7 @@ function mountLia(options = {}) {
   hit.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (chatOuvert) fermerChat();
-      else ouvrirChat();
+      toucher();
     } else if (e.key === "ContextMenu" || e.shiftKey && e.key === "F10") {
       e.preventDefault();
       const r = hit.getBoundingClientRect();

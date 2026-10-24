@@ -96,6 +96,10 @@ L'hôte peut la couper d'un geste : `pause: () => boolean`, relue à chaque pas 
 
 **Le geste de la personne (v0.32.0)** : `basculerPause: (enPause: boolean) => Promise<void>`. Si l'hôte la fournit, le menu du corps (clic droit, appui long, touche Menu) a une entrée « Mets-toi en pause », qui devient « Reviens » quand `pause()` est vrai. Elle appelle `basculerPause` avec la valeur voulue ; la promesse doit se résoudre une fois la pause écrite, de sorte que `pause()` rende alors cette valeur (l'hôte écrit côté serveur, par exemple un PUT sur `/api/lia/pause`). Elle dit « Je me mets en pause. » ou « Me revoilà. » seulement si `pause()` a suivi ; un rejet, une erreur levée ou une `pause()` qui n'a pas suivi laissent l'état tel quel et elle dit « Je n'ai pas pu changer ma pause. ». L'état affiché vient toujours de `pause()`, jamais d'un état local. Sans l'option, pas d'entrée ; le menu d'un élément de la page ne l'a jamais.
 
+## Le toucher que l'hôte peut prendre (v0.33.0)
+
+`surToucher: () => boolean`. Quand la discussion de LIA est fermée, un toucher de son corps (clic sans glissement, Entrée, Espace) appelle l'hôte une fois ; s'il rend `true`, l'hôte l'a pris (il ouvre sa propre conversation, comme dans la maquette) et la discussion de lia-ui ne s'ouvre pas. Elle réagit quand même au toucher. Toute autre valeur, ou une erreur levée (dite dans la console), ouvre sa discussion comme avant. Discussion ouverte : le toucher la ferme, sans appeler l'hôte. `ouvrirChat()` de la poignée n'appelle jamais `surToucher`. Le menu (clic droit, appui long, touche Menu) n'est pas concerné. Sans l'option, rien ne change.
+
 ## Sa mémoire sur plusieurs jours (v0.25.0)
 
 Un calcul local (`src/souvenirs.ts`, pur : aucun réseau, aucun DOM, hasard et horloge injectés) qui prolonge son monde intérieur. **C'est une simulation, pas un ressenti réel.** Un souvenir tient en trois champs : `{ quand, genre, poids }`, le genre étant l'un de `GENRES_SOUVENIR` (`brusque`, `ton`, `panne`, `gentil`, `compliment`, `retour`, `isolement`).
