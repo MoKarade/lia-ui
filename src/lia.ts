@@ -729,7 +729,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const haut = Math.max(0, pos.y - rayon * 1.1 - (z.y + 8));
       const bas = Math.max(0, z.y + z.h - 8 - (pos.y + rayon * 1.1 + 26));
       const enBas = bas >= haut;
-      const place = Math.max(120, Math.floor(enBas ? bas : haut));
+      const place = Math.max(240, Math.floor(enBas ? bas : haut));
       boite.style.maxHeight = `${place}px`;
       h = Math.min(boite.offsetHeight || h, place);
       w = boite.offsetWidth;
@@ -776,6 +776,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     journal = el("div", "lia-ui__journal");
     journal.setAttribute("role", "log");
     journal.setAttribute("aria-live", "polite");
+    // Focusable : les flèches et Page haut/bas font défiler l'historique au clavier.
+    journal.tabIndex = 0;
+    journal.setAttribute("aria-label", "Historique de la discussion");
     const form = el("form", "lia-ui__form");
     champ = el("input", "lia-ui__champ");
     champ.type = "text";

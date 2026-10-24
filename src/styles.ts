@@ -21,13 +21,13 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__puce{min-height:44px;padding:0 .9rem;border-radius:22px;border:1px solid var(--lia-border);background:var(--lia-surface-2);color:var(--lia-text);font:inherit;font-size:.9rem;cursor:pointer}
 .lia-ui__puce:hover{border-color:var(--lia-accent)}
 .lia-ui__puce:focus-visible,.lia-ui__btn:focus-visible,.lia-ui__item:focus-visible,.lia-ui__champ:focus-visible{outline:2px solid var(--lia-accent);outline-offset:2px}
-.lia-ui__chat{width:min(340px,calc(100% - 16px));display:flex;flex-direction:column;max-height:min(420px,calc(100% - 16px));overflow:hidden}
+.lia-ui__chat{width:min(440px,calc(100% - 16px));display:flex;flex-direction:column;max-height:min(720px,calc(100% - 16px));overflow:hidden}
 .lia-ui__btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--lia-border);background:transparent;color:var(--lia-text);display:grid;place-items:center;cursor:pointer;font:inherit;padding:0}
 .lia-ui__btn--accent{background:var(--lia-accent);border-color:var(--lia-accent);color:#0B0D12}
 .lia-ui__btn[disabled]{opacity:.5;cursor:default}
 .lia-ui__btn--doux{border-color:transparent;color:var(--lia-soft)}
 .lia-ui__btn--doux:hover{color:var(--lia-text);background:rgba(255,255,255,.06)}
-.lia-ui__journal{flex:1 1 auto;min-height:0;max-height:min(40vh,300px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:.9rem .8rem .3rem;display:flex;flex-direction:column;gap:.4rem;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 16px);mask-image:linear-gradient(to bottom,transparent 0,#000 16px)}
+.lia-ui__journal{flex:1 1 auto;min-height:0;max-height:min(62vh,540px);overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding:.9rem .8rem .3rem;display:flex;flex-direction:column;gap:.4rem;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 16px);mask-image:linear-gradient(to bottom,transparent 0,#000 16px)}
 .lia-ui__journal:empty{display:none}
 .lia-ui__msg{max-width:90%;padding:.45rem .75rem;border-radius:16px;font-size:.9rem;line-height:1.38;overflow-wrap:anywhere;white-space:pre-wrap;animation:lia-ui-entre .2s ease both}
 .lia-ui__msg--lia{align-self:flex-start;border-bottom-left-radius:6px;background:color-mix(in srgb,var(--lia-surface-2) 82%,transparent)}
