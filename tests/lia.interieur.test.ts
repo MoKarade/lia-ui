@@ -60,6 +60,19 @@ describe("son monde intérieur dans la page", () => {
     expect(lia.interieur().cause).toBeNull();
   });
 
+  it("une longue rafale (8 clics) ne lui fait pas avaler son cri : elle le dit quand les clics s'arrêtent", () => {
+    lia = mountLia({ vieAutonome: false, quandMouvementReduit: "complet", ask: () => Promise.resolve({ text: "ok" }) });
+    seconde(2);
+    for (let k = 0; k < 8; k++) {
+      bas();
+      seconde(0.26);
+    }
+    seconde(1.5);
+    expect(lia.interieur().douleur).toBeGreaterThan(0.35);
+    const dit = [document.querySelector(".lia-ui__bulle")?.textContent ?? "", ...messages()].join(" | ");
+    expect(dit).toMatch(/Aïe|Un à la fois|Ça pique/);
+  });
+
   it("trois clics lents ne lui font pas mal", () => {
     lia = mountLia({ vieAutonome: false, quandMouvementReduit: "complet" });
     seconde(2);
