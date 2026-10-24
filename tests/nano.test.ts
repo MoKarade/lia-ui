@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accueil, avancerEssaim, creerEssaim, eclat, MARGE, nombreDeNano, positionOnde, rappeler, surLaCible, termine, type Zone } from "../src/nano.js";
+import { accueil, avancerEssaim, COINS, creerEssaim, eclat, LIGNE, longueurCoin, MARGE, nombreDeNano, place, positionOnde, rappeler, roleDe, surLaCible, termine, type Zone } from "../src/nano.js";
 
 /** Un hasard déterministe (mulberry32). */
 const graine = (s: number): (() => number) => () => {
@@ -59,30 +59,55 @@ describe("nanobots : l'essaim qui analyse", () => {
     expect(surLaCible(e, petit)).toBeGreaterThanOrEqual(0.9);
   });
 
-  it("l'onde de lecture passe sur l'élément : l'éclat se déplace d'un bord à l'autre", () => {
+  it("le balayage descend de haut en bas puis remonte : la ligne et les points qu'elle croise s'allument", () => {
     const e = creerEssaim(carte, corps, graine(5), "doux");
-    const eclatPres = (u: number): number => {
-      e.age = 0;
-      // Âge qui place l'onde en u (de -0,25 à 1,25).
-      e.age = ((u + 0.25) / 1.5) * 1.9;
-      const proche = e.bots.reduce((m, _b, i) => Math.max(m, eclat(e, i, carte)), 0);
-      return proche;
-    };
-    expect(positionOnde(0)).toBeCloseTo(-0.25, 6);
-    expect(eclatPres(0.5)).toBeGreaterThan(0.5);
-    // Les nanobots les plus éclairés changent de côté avec l'onde.
-    const moyenneX = (u: number): number => {
-      e.age = ((u + 0.25) / 1.5) * 1.9;
+    expect(positionOnde(0)).toBe(0);
+    expect(positionOnde(1 / 0.45 / 2)).toBeCloseTo(0.5, 6);
+    expect(positionOnde(1 / 0.45)).toBeCloseTo(1, 6);
+    // Il remonte ensuite sans sauter : jamais plus de 3 % d'écart entre deux images à 60 Hz.
+    for (let t = 0; t < 10; t += 0.016) expect(Math.abs(positionOnde(t + 0.016) - positionOnde(t))).toBeLessThan(0.03);
+    const centreY = (u: number): number => {
+      e.age = (Math.acos(1 - 2 * u) * (2 / 0.45)) / (2 * Math.PI);
       let s = 0;
       let w = 0;
       e.bots.forEach((b, i) => {
         const l = eclat(e, i, carte);
-        s += b.x * l;
+        if (b.role !== "point") return;
+        s += b.y * l;
         w += l;
       });
       return s / Math.max(w, 1e-9);
     };
-    expect(moyenneX(0.2)).toBeLessThan(moyenneX(0.8));
+    expect(centreY(0.2)).toBeLessThan(centreY(0.5));
+    expect(centreY(0.5)).toBeLessThan(centreY(0.8));
+    // À mi-course, les points proches de la ligne sont éclairés, ceux qui en sont loin non.
+    e.age = 1 / 0.45 / 2;
+    const lumiere = e.bots.map((b, i) => ({ b, l: eclat(e, i, carte) })).filter((x) => x.b.role === "point");
+    expect(lumiere.some((x) => x.l > 0.6)).toBe(true);
+    expect(lumiere.some((x) => x.l === 0)).toBe(true);
+  });
+
+  it("ils dessinent l'animation d'analyse : 24 tiennent les quatre coins, 28 forment la ligne, les autres sont des points de lecture", () => {
+    expect(roleDe(0)).toBe("coin");
+    expect(roleDe(COINS - 1)).toBe("coin");
+    expect(roleDe(COINS)).toBe("ligne");
+    expect(roleDe(COINS + LIGNE)).toBe("point");
+    const e = creerEssaim(carte, corps, graine(11), "doux");
+    courir(e, 3);
+    const l = longueurCoin(carte) + 2;
+    // Chaque coin de l'élément a six nanobots collés à lui, sur ses deux branches.
+    for (const [cx, cy] of [[carte.x - MARGE, carte.y - MARGE], [carte.x + carte.w + MARGE, carte.y - MARGE], [carte.x + carte.w + MARGE, carte.y + carte.h + MARGE], [carte.x - MARGE, carte.y + carte.h + MARGE]] as const) {
+      const proches = e.bots.filter((b) => b.role === "coin" && Math.abs(b.x - cx) <= l && Math.abs(b.y - cy) <= l);
+      expect(proches.length, `coin ${cx},${cy}`).toBe(6);
+    }
+    // La ligne court sur toute la largeur, à une même hauteur.
+    const ligne = e.bots.filter((b) => b.role === "ligne");
+    expect(ligne).toHaveLength(LIGNE);
+    const ys = ligne.map((b) => b.y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(10);
+    const xs = ligne.map((b) => b.x);
+    expect(Math.min(...xs)).toBeLessThan(carte.x + carte.w * 0.1);
+    expect(Math.max(...xs)).toBeGreaterThan(carte.x + carte.w * 0.9);
   });
 
   it("« doux » : ils naissent sur l'élément, sans traverser l'écran ; « fixe » : ils ne bougent plus", () => {
@@ -119,17 +144,27 @@ describe("nanobots : l'essaim qui analyse", () => {
     }
   });
 
-  it("les places d'accueil restent dans l'élément élargi de sa marge, et un sur cinq est sur le bord", () => {
+  it("les places restent sur l'élément élargi de sa marge : coins au contour, ligne dans la largeur, points dedans", () => {
     const e = creerEssaim(carte, corps, graine(10), "doux");
-    let bord = 0;
     e.bots.forEach((b, i) => {
-      const a = accueil(i, e.bots.length, carte, b);
+      const a = place(i, e.bots.length, carte, b, 0.5);
       expect(a.x).toBeGreaterThanOrEqual(carte.x - MARGE - 0.001);
       expect(a.x).toBeLessThanOrEqual(carte.x + carte.w + MARGE + 0.001);
       expect(a.y).toBeGreaterThanOrEqual(carte.y - MARGE - 0.001);
       expect(a.y).toBeLessThanOrEqual(carte.y + carte.h + MARGE + 0.001);
-      if (i % 5 === 0 && (Math.abs(a.x - (carte.x - MARGE)) < 0.01 || Math.abs(a.x - (carte.x + carte.w + MARGE)) < 0.01 || Math.abs(a.y - (carte.y - MARGE)) < 0.01 || Math.abs(a.y - (carte.y + carte.h + MARGE)) < 0.01)) bord++;
+      if (b.role === "point") {
+        const p = accueil(i, e.bots.length, carte, b);
+        expect(p.x).toBeGreaterThanOrEqual(carte.x);
+        expect(p.x).toBeLessThanOrEqual(carte.x + carte.w);
+        expect(p.y).toBeGreaterThanOrEqual(carte.y);
+        expect(p.y).toBeLessThanOrEqual(carte.y + carte.h);
+      }
     });
-    expect(bord).toBe(Math.ceil(e.bots.length / 5));
+  });
+
+  it("un très petit élément garde ses quatre coins distincts et une longueur de branche bornée", () => {
+    const petit: Zone = { x: 500, y: 300, w: 20, h: 14 };
+    expect(longueurCoin(petit)).toBe(5);
+    expect(longueurCoin({ x: 0, y: 0, w: 4000, h: 3000 })).toBe(28);
   });
 });

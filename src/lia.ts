@@ -21,7 +21,7 @@ import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleu
 import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
 import { auRepos, avancerBalle, BALLE_DEFAUT, BALLE_LIBRE, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Ecrasement } from "./physique.js";
 import { deriveAuRepos, planifierTrajet, pointDuTrajet, prochainPetitPas, type Trajet } from "./allure.js";
-import { avancerEssaim, creerEssaim, eclat, rappeler as rappelerEssaim, surLaCible, termine as essaimTermine, type Essaim } from "./nano.js";
+import { avancerEssaim, COINS, creerEssaim, eclat, LIGNE, PAR_COIN, rappeler as rappelerEssaim, surLaCible, termine as essaimTermine, type Essaim } from "./nano.js";
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
@@ -1178,12 +1178,38 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     ctx.lineCap = "round";
     const lumiere: number[] = [];
     for (let i = 0; i < e.bots.length; i++) lumiere.push(eclat(e, i, zone));
-    // Les liens : deux nanobots voisins que l'onde éclaire se tiennent par un fil (le réseau qui lit).
+    const vivant = (i: number): boolean => {
+      const b = e.bots[i];
+      return !!b && b.sorti && !b.rentre;
+    };
+    const relier = (i: number, j: number, couleur: [number, number, number], alpha: number, epaisseur: number): void => {
+      const a = e.bots[i];
+      const b = e.bots[j];
+      if (!a || !b || !vivant(i) || !vivant(j)) return;
+      ctx.strokeStyle = `rgba(${couleur[0]},${couleur[1]},${couleur[2]},${alpha.toFixed(2)})`;
+      ctx.lineWidth = epaisseur;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    };
+    // Les quatre coins : chaque branche est un fil tendu entre ses nanobots.
+    for (let c = 0; c < 4; c++) {
+      const d = c * PAR_COIN;
+      relier(d, d + 1, [r1, g1, b1], 0.8, 1.4);
+      relier(d + 1, d + 2, [r1, g1, b1], 0.8, 1.4);
+      relier(d, d + 3, [r1, g1, b1], 0.8, 1.4);
+      relier(d + 3, d + 4, [r1, g1, b1], 0.8, 1.4);
+      relier(d + 4, d + 5, [r1, g1, b1], 0.8, 1.4);
+    }
+    // La ligne de balayage : un fil entre ses nanobots voisins.
+    for (let k = 0; k < LIGNE - 1; k++) relier(COINS + k, COINS + k + 1, [r2, g2, b2], 0.7, 1.6);
+    // Les points de lecture : deux voisins que la ligne éclaire se tiennent par un fil (le réseau qui lit).
     ctx.lineWidth = 0.8;
-    for (let i = 1; i < e.bots.length; i++) {
+    for (let i = COINS + LIGNE + 1; i < e.bots.length; i++) {
       const a = e.bots[i - 1];
       const b = e.bots[i];
-      if (!a || !b || !a.sorti || !b.sorti || a.rentre || b.rentre) continue;
+      if (!a || !b || !vivant(i - 1) || !vivant(i)) continue;
       const l = Math.min(lumiere[i] ?? 0, lumiere[i - 1] ?? 0);
       if (l < 0.12 || Math.hypot(a.x - b.x, a.y - b.y) > 64) continue;
       ctx.strokeStyle = `rgba(${r2},${g2},${b2},${(0.25 + 0.5 * l).toFixed(2)})`;
@@ -1198,7 +1224,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const l = lumiere[i] ?? 0;
       const vite = Math.hypot(b.vx, b.vy);
       const queue = Math.min(0.06, 0.02 + vite * 0.00008);
-      ctx.strokeStyle = `rgba(${l > 0.5 ? r2 : r1},${l > 0.5 ? g2 : g1},${l > 0.5 ? b2 : b1},${(0.72 + 0.28 * l).toFixed(2)})`;
+      const clair = b.role === "ligne" || l > 0.5;
+      const opacite = b.role === "ligne" ? 0.9 : 0.72 + 0.28 * l;
+      ctx.strokeStyle = `rgba(${clair ? r2 : r1},${clair ? g2 : g1},${clair ? b2 : b1},${opacite.toFixed(2)})`;
       ctx.lineWidth = 1.6 + 1.4 * l;
       ctx.beginPath();
       ctx.moveTo(b.x - b.vx * queue, b.y - b.vy * queue);
@@ -1243,6 +1271,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (essaimTermine(essaim)) return arreterEssaim();
     toileNano.hidden = false;
     dessinerNano(essaim, essaimZone, c);
+  };
+
+  /** Ce que dessinent ses nanobots sur l'élément (pour la preuve) : combien tiennent les coins, la ligne et les points, et où est la ligne. */
+  const formeEssaim = (): { coins: number; ligne: number; points: number; ligneY: number | null } => {
+    const vus = (essaim?.bots ?? []).filter((b) => b.sorti && !b.rentre);
+    const ligne = vus.filter((b) => b.role === "ligne");
+    const z = essaimZone;
+    const ligneY = z && ligne.length > 0 ? (ligne.reduce((s, b) => s + b.y, 0) / ligne.length - z.y) / Math.max(1, z.h) : null;
+    return { coins: vus.filter((b) => b.role === "coin").length, ligne: ligne.length, points: vus.filter((b) => b.role === "point").length, ligneY };
   };
 
   const decrireElement = (cible: Element): ElementDecrit | null => {
@@ -2646,6 +2683,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       cible: essaimZone ? { ...essaimZone } : null,
       corps: idCorps,
       vide: videCorps,
+      forme: formeEssaim(),
     }),
     envoyer: envoyerVers,
     geste,
