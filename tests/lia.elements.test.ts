@@ -73,6 +73,24 @@ describe("clic droit sur un élément de la page", () => {
     });
   });
 
+  it("« Explique-moi ça » sur le texte d'une carte : ses nanobots analysent CE texte, pas la carte (Marc : « ça analyse pas forcément ce que je clique »)", () => {
+    lia = mountLia({ vieAutonome: false, ask: vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockReturnValue(new Promise(() => undefined)) });
+    clicDroit(document.getElementById("dedans") as Element);
+    choisir("Explique-moi ça");
+    // Dès le clic, avant même qu'elle soit arrivée : la cible est le texte (120..300 × 320..340), jamais la carte (100..400 × 300..500).
+    expect(lia.nanobots().cible).toEqual({ x: 120, y: 320, w: 180, h: 20 });
+    expect(lia.nanobots().total).toBeGreaterThanOrEqual(18);
+    // Le titre du menu et la question disent la même chose : ce texte.
+    expect(document.querySelector(".lia-ui__cadre")).toBeNull();
+  });
+
+  it("« Explique-moi ça » sur la carte elle-même (son fond) : la cible est la carte", () => {
+    lia = mountLia({ vieAutonome: false, ask: vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockReturnValue(new Promise(() => undefined)) });
+    clicDroit(carte);
+    choisir("Explique-moi ça");
+    expect(lia.nanobots().cible).toEqual({ x: 100, y: 300, w: 300, h: 200 });
+  });
+
   it("encadre l'élément dont elle parle, sans toucher à la page", async () => {
     const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockResolvedValue({ text: "Voilà." });
     lia = mountLia({ vieAutonome: false, ask });
@@ -88,26 +106,24 @@ describe("clic droit sur un élément de la page", () => {
     expect(carte.hasAttribute("data-regard")).toBe(false);
   });
 
-  it("« Explique-moi ça » : le cadre d'analyse se dessine tout de suite, sans attendre qu'elle arrive ni la réponse, puis se retire après elle", async () => {
+  it("« Explique-moi ça » : les nanobots partent tout de suite, sans attendre qu'elle arrive ni la réponse, puis rentrent après elle", async () => {
     let repondre: (r: ReponseLia) => void = () => undefined;
     const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockReturnValue(new Promise((ok) => (repondre = ok)));
     lia = mountLia({ vieAutonome: false, ask });
-    const cadre = document.querySelector<HTMLElement>(".lia-ui__cadre") as HTMLElement;
-    expect(cadre.hidden).toBe(true);
+    expect(lia.nanobots().actif).toBe(false);
     clicDroit(carte);
     choisir("Explique-moi ça");
-    // Dès le clic : le cadre est posé autour de la carte (100..400 × 300..500, 6 px de marge), alors que la question n'est même pas partie.
-    expect(cadre.hidden).toBe(false);
-    expect(cadre.style.left).toBe("94px");
-    expect(cadre.style.width).toBe("312px");
+    // Dès le clic : l'essaim existe autour de la carte (100..400 × 300..500), alors que la question n'est même pas partie.
+    expect(lia.nanobots().actif).toBe(true);
+    expect(lia.nanobots().cible).toEqual({ x: 100, y: 300, w: 300, h: 200 });
     expect(ask).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(ask).toHaveBeenCalled(), { timeout: 8000 });
-    // Pendant qu'elle attend le modèle, il reste là, posé.
-    await vi.waitFor(() => expect(cadre.classList.contains("lia-ui__cadre--pose")).toBe(true), { timeout: 2000 });
-    expect(cadre.hidden).toBe(false);
+    // Pendant qu'elle attend le modèle, ils travaillent encore sur la carte.
+    await vi.waitFor(() => expect(lia?.nanobots().surCible).toBeGreaterThanOrEqual(0.9), { timeout: 4000 });
+    expect(lia.nanobots().actif).toBe(true);
     repondre({ text: "Voilà." });
-    await vi.waitFor(() => expect(cadre.hidden).toBe(true), { timeout: 4000 });
-  }, 20000);
+    await vi.waitFor(() => expect(lia?.nanobots().actif).toBe(false), { timeout: 8000 });
+  }, 30000);
 
   it("pendant qu'elle réfléchit à l'élément, elle garde l'air de lire et son marqueur reste posé", async () => {
     const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockReturnValue(new Promise(() => undefined));
