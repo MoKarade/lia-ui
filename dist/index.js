@@ -856,9 +856,16 @@ function prochainPetitPas(hasard, energie) {
 // src/nano.ts
 var MARGE = 5;
 var NOMBRE = 100;
-var PERIODE_ONDE = 1.9;
+var PAR_COIN = 6;
+var COINS = PAR_COIN * 4;
+var LIGNE = 28;
+var PERIODE_ONDE = 2 / 0.45;
+var PORTEE = 0.26;
 function nombreDeNano() {
   return NOMBRE;
+}
+function roleDe(i) {
+  return i < COINS ? "coin" : i < COINS + LIGNE ? "ligne" : "point";
 }
 function creerEssaim(zone, source, hasard, mode = "complet") {
   const n = nombreDeNano();
@@ -876,10 +883,11 @@ function creerEssaim(zone, source, hasard, mode = "complet") {
       jy: hasard(),
       ph: hasard() * Math.PI * 2,
       om: (hasard() < 0.5 ? -1 : 1) * (1.6 + hasard() * 2.4),
-      rr: 1.5 + hasard() * 4
+      rr: 1.5 + hasard() * 4,
+      role: roleDe(i)
     };
     if (mode !== "complet") {
-      const a = accueil(i, n, zone, b);
+      const a = place(i, n, zone, b, mode === "fixe" ? 0.5 : 0);
       b.x = a.x;
       b.y = a.y;
     }
@@ -890,34 +898,58 @@ function creerEssaim(zone, source, hasard, mode = "complet") {
 function accueil(i, n, zone, b) {
   const w = Math.max(1, zone.w);
   const h = Math.max(1, zone.h);
-  const colonnes = Math.max(1, Math.round(Math.sqrt(n * w / h)));
-  const lignes = Math.max(1, Math.ceil(n / colonnes));
-  let u = (i % colonnes + 0.15 + b.jx * 0.7) / colonnes;
-  let v = (Math.floor(i / colonnes) + 0.15 + b.jy * 0.7) / lignes;
-  if (i % 5 === 0) {
-    const d = [u, 1 - u, v, 1 - v];
-    const m = Math.min(...d);
-    if (m === d[0]) u = 0;
-    else if (m === d[1]) u = 1;
-    else if (m === d[2]) v = 0;
-    else v = 1;
+  const pts = Math.max(1, n - COINS - LIGNE);
+  const k = Math.max(0, i - COINS - LIGNE);
+  const colonnes = Math.max(1, Math.round(Math.sqrt(pts * w / h)));
+  const lignes = Math.max(1, Math.ceil(pts / colonnes));
+  const u = (k % colonnes + 0.15 + b.jx * 0.7) / colonnes;
+  const v = (Math.floor(k / colonnes) + 0.15 + b.jy * 0.7) / lignes;
+  return { x: zone.x + u * w, y: zone.y + v * h };
+}
+function longueurCoin(zone) {
+  return Math.max(5, Math.min(28, 0.2 * Math.min(zone.w, zone.h)));
+}
+var BRANCHE_H = [0, 0.5, 1];
+var BRANCHE_V = [0.35, 0.7, 1];
+function place(i, n, zone, b, u) {
+  const x0 = zone.x - MARGE;
+  const y0 = zone.y - MARGE;
+  const w = Math.max(1, zone.w) + 2 * MARGE;
+  const h = Math.max(1, zone.h) + 2 * MARGE;
+  const r = roleDe(i);
+  if (r === "coin") {
+    const coin = Math.floor(i / PAR_COIN);
+    const j = i % PAR_COIN;
+    const sx = coin === 0 || coin === 3 ? 1 : -1;
+    const sy = coin === 0 || coin === 1 ? 1 : -1;
+    const cx = sx === 1 ? x0 : x0 + w;
+    const cy = sy === 1 ? y0 : y0 + h;
+    const l = longueurCoin(zone);
+    return j < 3 ? { x: cx + sx * BRANCHE_H[j] * l, y: cy } : { x: cx, y: cy + sy * BRANCHE_V[j - 3] * l };
   }
-  return { x: zone.x - MARGE + u * (w + 2 * MARGE), y: zone.y - MARGE + v * (h + 2 * MARGE) };
+  if (r === "ligne") {
+    const k = i - COINS;
+    return { x: x0 + w * (0.04 + 0.92 * (k + 0.5 + (b.jx - 0.5) * 0.3) / LIGNE), y: y0 + h * Math.max(0, Math.min(1, u)) };
+  }
+  return accueil(i, n, zone, b);
 }
 function positionOnde(age) {
-  return age % PERIODE_ONDE / PERIODE_ONDE * 1.5 - 0.25;
+  return 0.5 - 0.5 * Math.cos(2 * Math.PI * age / PERIODE_ONDE);
 }
 function eclat(e, i, zone) {
   const b = e.bots[i];
   if (!b) return 0;
-  const w = Math.max(1, zone.w + 2 * MARGE);
+  const u = e.mode === "fixe" ? 0.5 : positionOnde(e.age);
+  if (b.role === "ligne") return 1;
+  if (b.role === "coin") return 0.35;
   const h = Math.max(1, zone.h + 2 * MARGE);
-  const d = ((b.x - (zone.x - MARGE)) / w + (b.y - (zone.y - MARGE)) / h) / 2;
-  const x = (d - positionOnde(e.age)) / 0.14;
-  return Math.exp(-x * x);
+  const ly = zone.y - MARGE + h * u;
+  return Math.max(0, 1 - Math.abs(b.y - ly) / (PORTEE * h));
 }
 var K = 70;
 var C = 2 * Math.sqrt(K) * 0.42;
+var KL = K * 8;
+var CL = 2 * Math.sqrt(KL) * 0.9;
 function avancerEssaim(e, dt, zone, source) {
   const total = Number.isFinite(dt) ? Math.max(0, Math.min(0.25, dt)) : 0;
   const n = e.bots.length;
@@ -946,7 +978,7 @@ function avancerEssaim(e, dt, zone, source) {
         b.y = source.y;
         if (e.age >= b.retard) {
           b.sorti = true;
-          const a2 = accueil(i, n, zone, b);
+          const a2 = place(i, n, zone, b, positionOnde(e.age));
           const dx = a2.x - source.x;
           const dy = a2.y - source.y;
           const d = Math.max(1, Math.hypot(dx, dy));
@@ -957,13 +989,15 @@ function avancerEssaim(e, dt, zone, source) {
         continue;
       }
       if (e.mode === "fixe") continue;
-      const a = accueil(i, n, zone, b);
+      const a = place(i, n, zone, b, positionOnde(e.age));
       const l = eclat(e, i, zone);
-      const r = b.rr * (1 + 1.6 * l);
+      const r = b.role === "point" ? b.rr * (1 + 1.6 * l) : b.rr * 0.25;
       const tx = a.x + Math.cos(b.ph) * r;
       const ty = a.y + Math.sin(b.ph) * r;
-      b.vx += (K * (tx - b.x) - C * b.vx) * h;
-      b.vy += (K * (ty - b.y) - C * b.vy) * h;
+      const k = b.role === "ligne" ? KL : K;
+      const c = b.role === "ligne" ? CL : C;
+      b.vx += (k * (tx - b.x) - c * b.vx) * h;
+      b.vy += (k * (ty - b.y) - c * b.vy) * h;
       b.x += b.vx * h;
       b.y += b.vy * h;
     }
@@ -4670,9 +4704,9 @@ function mountLia(options = {}) {
       const haut = Math.max(0, pos.y - rayon * 1.1 - (z.y + 8));
       const bas = Math.max(0, z.y + z.h - 8 - (pos.y + rayon * 1.1 + 26));
       const enBas = bas >= haut;
-      const place = Math.max(240, Math.floor(enBas ? bas : haut));
-      boite.style.maxHeight = `${place}px`;
-      h = Math.min(boite.offsetHeight || h, place);
+      const place2 = Math.max(240, Math.floor(enBas ? bas : haut));
+      boite.style.maxHeight = `${place2}px`;
+      h = Math.min(boite.offsetHeight || h, place2);
       w = boite.offsetWidth;
       const y = enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h;
       boite.style.left = `${limiter3(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
@@ -5075,11 +5109,35 @@ function mountLia(options = {}) {
     ctx2.lineCap = "round";
     const lumiere = [];
     for (let i = 0; i < e.bots.length; i++) lumiere.push(eclat(e, i, zone));
+    const vivant = (i) => {
+      const b = e.bots[i];
+      return !!b && b.sorti && !b.rentre;
+    };
+    const relier = (i, j, couleur, alpha, epaisseur) => {
+      const a = e.bots[i];
+      const b = e.bots[j];
+      if (!a || !b || !vivant(i) || !vivant(j)) return;
+      ctx2.strokeStyle = `rgba(${couleur[0]},${couleur[1]},${couleur[2]},${alpha.toFixed(2)})`;
+      ctx2.lineWidth = epaisseur;
+      ctx2.beginPath();
+      ctx2.moveTo(a.x, a.y);
+      ctx2.lineTo(b.x, b.y);
+      ctx2.stroke();
+    };
+    for (let c2 = 0; c2 < 4; c2++) {
+      const d = c2 * PAR_COIN;
+      relier(d, d + 1, [r1, g1, b1], 0.8, 1.4);
+      relier(d + 1, d + 2, [r1, g1, b1], 0.8, 1.4);
+      relier(d, d + 3, [r1, g1, b1], 0.8, 1.4);
+      relier(d + 3, d + 4, [r1, g1, b1], 0.8, 1.4);
+      relier(d + 4, d + 5, [r1, g1, b1], 0.8, 1.4);
+    }
+    for (let k = 0; k < LIGNE - 1; k++) relier(COINS + k, COINS + k + 1, [r2, g2, b2], 0.7, 1.6);
     ctx2.lineWidth = 0.8;
-    for (let i = 1; i < e.bots.length; i++) {
+    for (let i = COINS + LIGNE + 1; i < e.bots.length; i++) {
       const a = e.bots[i - 1];
       const b = e.bots[i];
-      if (!a || !b || !a.sorti || !b.sorti || a.rentre || b.rentre) continue;
+      if (!a || !b || !vivant(i - 1) || !vivant(i)) continue;
       const l = Math.min(lumiere[i] ?? 0, lumiere[i - 1] ?? 0);
       if (l < 0.12 || Math.hypot(a.x - b.x, a.y - b.y) > 64) continue;
       ctx2.strokeStyle = `rgba(${r2},${g2},${b2},${(0.25 + 0.5 * l).toFixed(2)})`;
@@ -5094,7 +5152,9 @@ function mountLia(options = {}) {
       const l = lumiere[i] ?? 0;
       const vite = Math.hypot(b.vx, b.vy);
       const queue = Math.min(0.06, 0.02 + vite * 8e-5);
-      ctx2.strokeStyle = `rgba(${l > 0.5 ? r2 : r1},${l > 0.5 ? g2 : g1},${l > 0.5 ? b2 : b1},${(0.72 + 0.28 * l).toFixed(2)})`;
+      const clair = b.role === "ligne" || l > 0.5;
+      const opacite = b.role === "ligne" ? 0.9 : 0.72 + 0.28 * l;
+      ctx2.strokeStyle = `rgba(${clair ? r2 : r1},${clair ? g2 : g1},${clair ? b2 : b1},${opacite.toFixed(2)})`;
       ctx2.lineWidth = 1.6 + 1.4 * l;
       ctx2.beginPath();
       ctx2.moveTo(b.x - b.vx * queue, b.y - b.vy * queue);
@@ -5136,6 +5196,13 @@ function mountLia(options = {}) {
     if (termine(essaim)) return arreterEssaim();
     toileNano.hidden = false;
     dessinerNano(essaim, essaimZone, c);
+  };
+  const formeEssaim = () => {
+    const vus = (essaim?.bots ?? []).filter((b) => b.sorti && !b.rentre);
+    const ligne = vus.filter((b) => b.role === "ligne");
+    const z = essaimZone;
+    const ligneY = z && ligne.length > 0 ? (ligne.reduce((s, b) => s + b.y, 0) / ligne.length - z.y) / Math.max(1, z.h) : null;
+    return { coins: vus.filter((b) => b.role === "coin").length, ligne: ligne.length, points: vus.filter((b) => b.role === "point").length, ligneY };
   };
   const decrireElement = (cible2) => {
     try {
@@ -6382,7 +6449,8 @@ function mountLia(options = {}) {
       surCible: essaim && essaimZone ? surLaCible(essaim, essaimZone) : 0,
       cible: essaimZone ? { ...essaimZone } : null,
       corps: idCorps,
-      vide: videCorps
+      vide: videCorps,
+      forme: formeEssaim()
     }),
     envoyer: envoyerVers,
     geste,

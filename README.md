@@ -164,6 +164,10 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 />
 ```
 
+### L'animation d'analyse, dessinée par les nanobots sur l'élément (v0.38.0)
+
+Marc, 24/10 21:09Z : « L'analyse carré, je veux genre l'animation, mais là où il faut ». Les 100 nanobots reprennent l'animation « analyse » du corps (quatre coins, une ligne qui balaie, des points qui s'allument à son passage) et la posent sur l'élément analysé, pas à côté d'elle : 24 tiennent les quatre coins (trois par branche, branche de 5 à 28 px), 28 forment la ligne de balayage (qui descend et remonte à 0,45 passage par seconde, sans saut), 48 sont des points de lecture qui s'allument quand la ligne les croise. Des fils relient les nanobots d'une même branche, de la ligne et les points éclairés. Rien n'est dessiné dans la page. `nanobots()` rend en plus `forme` (`coins`, `ligne`, `points`, `ligneY`).
+
 ### Seuls les 100 nanobots analysent (v0.37.2)
 
 Pendant que ses nanobots travaillent sur un élément (les trois entrées du menu : explique, que changer, regarde), son corps ne dessine plus aucune scène à côté d'elle (ni les quatre coins et le balayage de « analyse », ni la loupe de « cherche », ni la page de « lit ») : il garde sa forme de repos et s'efface presque (opacité 0,15), vidé de ses traits partis avec eux. Ils sont toujours cent. Quand ils rentrent, le corps se remplit. `nanobots()` rend en plus `corps` (l'action que le moteur dessine) et `vide` (0 à 1).

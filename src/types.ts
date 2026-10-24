@@ -311,9 +311,11 @@ export interface LiaHandle {
   /**
    * Ses nanobots quand elle analyse un élément (v0.27.0) : `actif` tant qu'ils travaillent, `total` leur nombre, `sortis` ceux qui ont quitté
    * son corps, `surCible` la part (0 à 1) qui est sur l'élément, `cible` le rectangle analysé (dans sa couche), `corps` l'action que le moteur
-   * dessine (« repos » tant qu'ils travaillent : aucune scène à côté d'elle), `vide` la part (0 à 1) de son corps partie avec eux. Pour la preuve et l'hôte.
+   * dessine (« repos » tant qu'ils travaillent : aucune scène à côté d'elle), `vide` la part (0 à 1) de son corps partie avec eux,
+   * `forme` leur animation sur l'élément (v0.38.0) : `coins` ceux qui tiennent les quatre coins, `ligne` ceux de la ligne de balayage, `points` ceux qui lisent,
+   * `ligneY` la hauteur de la ligne dans l'élément (0 haut, 1 bas ; `null` sans ligne). Pour la preuve et l'hôte.
    */
-  nanobots(): { actif: boolean; total: number; sortis: number; surCible: number; cible: { x: number; y: number; w: number; h: number } | null; corps: string; vide: number };
+  nanobots(): { actif: boolean; total: number; sortis: number; surCible: number; cible: { x: number; y: number; w: number; h: number } | null; corps: string; vide: number; forme: { coins: number; ligne: number; points: number; ligneY: number | null } };
   /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
   venirPres(): boolean;
   /** Arrête de suivre ou de regarder : elle reste où elle est. */

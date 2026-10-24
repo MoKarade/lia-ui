@@ -57,6 +57,28 @@ describe("ses nanobots analysent eux-mêmes ce qu'elle regarde, plus de carré",
     expect(carte().getAttribute("style")).toBeNull();
   });
 
+  it("ils dessinent eux-mêmes l'animation d'analyse sur la carte : quatre coins, une ligne qui balaie de haut en bas, des points qui lisent", () => {
+    lia = mountLia({ vieAutonome: false, quandMouvementReduit: "complet" });
+    expect(lia.envoyer(carte(), { etat: "analyse", secondes: 30 })).toBe(true);
+    seconde(4);
+    const a = lia.nanobots().forme;
+    expect(a.coins).toBe(24);
+    expect(a.ligne).toBe(28);
+    expect(a.points).toBe(48);
+    expect(a.ligneY).not.toBeNull();
+    // La ligne se déplace sur la hauteur de la carte (jamais hors d'elle, marge comprise).
+    const hauteurs: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      seconde(0.4);
+      hauteurs.push(lia.nanobots().forme.ligneY as number);
+    }
+    expect(Math.max(...hauteurs) - Math.min(...hauteurs)).toBeGreaterThan(0.5);
+    for (const y of hauteurs) {
+      expect(y).toBeGreaterThan(-0.1);
+      expect(y).toBeLessThan(1.1);
+    }
+  });
+
   it("pendant qu'ils travaillent, son corps ne dessine aucune scène (ni quatre coins ni balayage) et se vide ; il se remplit quand ils rentrent", () => {
     lia = mountLia({ vieAutonome: false, quandMouvementReduit: "complet" });
     const corps = document.querySelector<HTMLCanvasElement>(".lia-ui__corps canvas, canvas.lia-ui__toile, .lia-ui__corps > canvas") ?? document.querySelector<HTMLCanvasElement>("canvas:not(.lia-ui__nano)");
