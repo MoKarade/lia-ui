@@ -3,10 +3,11 @@
  * (palette du hub) ; l'hôte les surcharge sur `.lia-ui` s'il le faut. Cibles ≥ 44 px, champs à 16 px.
  */
 export const CSS = `
-.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-verre:rgba(16,19,26,.78);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;--lia-h-curieux:#93A0FF;--lia-h-calme:#5CC8B6;--lia-h-joyeux:#E3A23B;--lia-h-concentre:#9B7BE0;--lia-h-espiegle:#E5809F;--lia-h-fatigue:#8A8F98;
+.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-verre:rgba(16,19,26,.78);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;--lia-ombre:rgba(125,135,205,.6);--lia-h-curieux:#93A0FF;--lia-h-calme:#5CC8B6;--lia-h-joyeux:#E3A23B;--lia-h-concentre:#9B7BE0;--lia-h-espiegle:#E5809F;--lia-h-fatigue:#8A8F98;
 position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inherit;color:var(--lia-text)}
 .lia-ui--conteneur{position:absolute;z-index:5}
 .lia-ui *{box-sizing:border-box}
+.lia-ui__ombre{position:absolute;left:0;top:0;width:100px;height:24px;border-radius:50%;background:radial-gradient(ellipse at center,var(--lia-ombre) 0%,transparent 70%);opacity:0;pointer-events:none;transition:opacity .25s;will-change:transform,opacity}
 .lia-ui__corps{position:absolute;left:0;top:0;width:0;height:0;will-change:transform}
 .lia-ui__toile{position:absolute;pointer-events:none;transform:translate(-50%,-50%)}
 .lia-ui__hit{position:absolute;transform:translate(-50%,-50%);border-radius:50%;border:0;background:transparent;padding:0;margin:0;cursor:grab;pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent}
@@ -93,5 +94,5 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__repere{position:absolute;pointer-events:none;border:2px solid var(--lia-accent);border-radius:12px;box-shadow:0 0 0 4px rgba(147,160,255,.18)}
 .lia-ui__repere[hidden]{display:none}
 @keyframes lia-ui-entre{from{opacity:0;transform:translateY(6px)}}
-@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__jauge-barre{transition:none}}
+@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__jauge-barre{transition:none}.lia-ui__ombre{transition:none}}
 `;

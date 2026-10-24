@@ -154,3 +154,21 @@ export function relacherEcrasement(e: Ecrasement, dt: number): void {
   if (Math.abs(e.s) < 0.002 && Math.abs(e.v) < 0.05) e.s = e.v = 0;
   e.s = Math.max(-0.12, Math.min(ECRASEMENT_MAX, e.s));
 }
+
+/**
+ * La vitesse de départ d'un bond : de `depart` à `but` en `duree` secondes sous la même gravité et le même frottement que le vol.
+ * On part de la solution sans frottement et on corrige trois fois par l'écart mesuré en simulant (sans bords).
+ */
+export function vitessePourBond(depart: Readonly<{ x: number; y: number }>, but: Readonly<{ x: number; y: number }>, duree: number, p: ParamsBalle): { vx: number; vy: number } {
+  const T = Math.max(0.2, duree);
+  let vx = (but.x - depart.x) / T;
+  let vy = (but.y - depart.y) / T - 0.5 * p.gravite * T;
+  const libre: Zone = { x: -1e7, y: -1e7, w: 2e7, h: 2e7 };
+  for (let i = 0; i < 4; i++) {
+    const c: Corps = { x: depart.x, y: depart.y, vx, vy };
+    for (let t = 0; t < T - 1e-9; t += 0.1) avancerBalle(c, Math.min(0.1, T - t), libre, { ...p, marge: 0 });
+    vx += (but.x - c.x) / T;
+    vy += (but.y - c.y) / T;
+  }
+  return { vx, vy };
+}

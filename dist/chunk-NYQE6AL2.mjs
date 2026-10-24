@@ -2566,6 +2566,19 @@ function relacherEcrasement(e, dt) {
   if (Math.abs(e.s) < 2e-3 && Math.abs(e.v) < 0.05) e.s = e.v = 0;
   e.s = Math.max(-0.12, Math.min(ECRASEMENT_MAX, e.s));
 }
+function vitessePourBond(depart, but, duree, p) {
+  const T = Math.max(0.2, duree);
+  let vx = (but.x - depart.x) / T;
+  let vy = (but.y - depart.y) / T - 0.5 * p.gravite * T;
+  const libre = { x: -1e7, y: -1e7, w: 2e7, h: 2e7 };
+  for (let i = 0; i < 4; i++) {
+    const c = { x: depart.x, y: depart.y, vx, vy };
+    for (let t = 0; t < T - 1e-9; t += 0.1) avancerBalle(c, Math.min(0.1, T - t), libre, { ...p, marge: 0 });
+    vx += (but.x - c.x) / T;
+    vy += (but.y - c.y) / T;
+  }
+  return { vx, vy };
+}
 
 // src/poids.ts
 var APP_IDS = ["financeai", "batchchef", "jobai", "driveai", "carai", "memoryai"];
@@ -3324,10 +3337,11 @@ function ecrireInterieur(cle, m) {
 
 // src/styles.ts
 var CSS = `
-.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-verre:rgba(16,19,26,.78);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;--lia-h-curieux:#93A0FF;--lia-h-calme:#5CC8B6;--lia-h-joyeux:#E3A23B;--lia-h-concentre:#9B7BE0;--lia-h-espiegle:#E5809F;--lia-h-fatigue:#8A8F98;
+.lia-ui{--lia-bg:#0B0D12;--lia-surface:#12151C;--lia-glass:rgba(18,21,28,.94);--lia-verre:rgba(16,19,26,.78);--lia-surface-2:#181C25;--lia-border:rgba(255,255,255,.12);--lia-text:#E9EDF5;--lia-soft:#A7AEBD;--lia-accent:#93A0FF;--lia-danger:#E5675B;--lia-ombre:rgba(125,135,205,.6);--lia-h-curieux:#93A0FF;--lia-h-calme:#5CC8B6;--lia-h-joyeux:#E3A23B;--lia-h-concentre:#9B7BE0;--lia-h-espiegle:#E5809F;--lia-h-fatigue:#8A8F98;
 position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inherit;color:var(--lia-text)}
 .lia-ui--conteneur{position:absolute;z-index:5}
 .lia-ui *{box-sizing:border-box}
+.lia-ui__ombre{position:absolute;left:0;top:0;width:100px;height:24px;border-radius:50%;background:radial-gradient(ellipse at center,var(--lia-ombre) 0%,transparent 70%);opacity:0;pointer-events:none;transition:opacity .25s;will-change:transform,opacity}
 .lia-ui__corps{position:absolute;left:0;top:0;width:0;height:0;will-change:transform}
 .lia-ui__toile{position:absolute;pointer-events:none;transform:translate(-50%,-50%)}
 .lia-ui__hit{position:absolute;transform:translate(-50%,-50%);border-radius:50%;border:0;background:transparent;padding:0;margin:0;cursor:grab;pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent}
@@ -3414,7 +3428,7 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__repere{position:absolute;pointer-events:none;border:2px solid var(--lia-accent);border-radius:12px;box-shadow:0 0 0 4px rgba(147,160,255,.18)}
 .lia-ui__repere[hidden]{display:none}
 @keyframes lia-ui-entre{from{opacity:0;transform:translateY(6px)}}
-@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__jauge-barre{transition:none}}
+@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__jauge-barre{transition:none}.lia-ui__ombre{transition:none}}
 `;
 
 // src/lia.ts
@@ -3482,6 +3496,7 @@ function mountLia(options = {}) {
   const couche = el("div", conteneur ? "lia-ui lia-ui--conteneur" : "lia-ui");
   (conteneur ?? document.body).appendChild(couche);
   const corpsEl = el("div", "lia-ui__corps");
+  const ombre = el("div", "lia-ui__ombre");
   const toile = el("canvas", "lia-ui__toile");
   toile.setAttribute("aria-hidden", "true");
   const ctx = toile.getContext("2d");
@@ -3498,6 +3513,7 @@ function mountLia(options = {}) {
     puceHumeur.append(pointHumeur, texteHumeur);
     corpsEl.appendChild(puceHumeur);
   }
+  couche.appendChild(ombre);
   couche.appendChild(corpsEl);
   const bulle = el("div", "lia-ui__bulle");
   bulle.hidden = true;
@@ -3546,7 +3562,8 @@ function mountLia(options = {}) {
   let dernierMonde = 0;
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
-  const balle = { actif: false, depuis: 0, choc: false };
+  const balle = { actif: false, depuis: 0, choc: false, fin: 0, but: { x: 0, y: 0 } };
+  let bond = null;
   const ecr = { s: 0, v: 0, angle: 0 };
   let rayon = rayonBase;
   let rayonCible = rayonBase;
@@ -4430,6 +4447,7 @@ function mountLia(options = {}) {
         balle.actif = true;
         balle.depuis = t;
         balle.choc = false;
+        balle.fin = 0;
         pos.vx = limiter2(pos.vx, -2600, 2600);
         pos.vy = limiter2(pos.vy, -2600, 2600);
       }
@@ -4679,6 +4697,21 @@ function mountLia(options = {}) {
     pos.vx -= dx / d * 70;
     pos.vy -= dy / d * 70;
   };
+  const programmerBond = () => {
+    if (sansMouvement || doux) return false;
+    const z = zoneVie();
+    const but = dansZone(z, cible.x, cible.y, rayon * 0.6);
+    const d = Math.hypot(but.x - pos.x, but.y - pos.y);
+    if (d < rayon * 4) return false;
+    const duree = limiter2(0.55 + d / 1500, 0.6, 1);
+    const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
+    const v = vitessePourBond(pos, but, duree, params);
+    const sommet = pos.y - (v.vy < 0 ? v.vy * v.vy / (2 * params.gravite) : 0);
+    if (sommet < z.y + params.marge || Math.hypot(v.vx, v.vy) > 2600) return false;
+    bond = { t0: t + 0.18, duree, but, vx: v.vx, vy: v.vy };
+    cible = { x: pos.x, y: pos.y };
+    return true;
+  };
   const lancer = (id, vues) => {
     comportement = id;
     derniereDecision = t;
@@ -4692,7 +4725,7 @@ function mountLia(options = {}) {
       passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 5, 8));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
-      anticiper();
+      if (!(Math.random() < 0.3 && programmerBond())) anticiper();
       errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
       choisir3("repos");
       calme(30);
@@ -4971,6 +5004,27 @@ function mountLia(options = {}) {
       balle.actif = false;
       cible = { x: pos.x, y: pos.y };
     }
+    if (bond && (glisse || chatOuvert || menuOuvert || attention || sansMouvement || doux || still)) {
+      cible = { x: pos.x, y: pos.y };
+      bond = null;
+    }
+    if (bond && !balle.actif) {
+      if (t >= bond.t0) {
+        balle.actif = true;
+        balle.depuis = t;
+        balle.choc = true;
+        balle.fin = t + bond.duree;
+        balle.but = bond.but;
+        pos.vx = bond.vx;
+        pos.vy = bond.vy;
+        bond = null;
+      } else {
+        ecr.angle = Math.PI / 2;
+        ecr.s = 0.2 * limiter2(1 - (bond.t0 - t) / 0.18, 0, 1);
+        ecr.v = 0;
+        pos.vx = pos.vy = 0;
+      }
+    }
     if (sansMouvement || doux || still) {
       pos.x = cc.x;
       pos.y = cc.y;
@@ -4985,7 +5039,12 @@ function mountLia(options = {}) {
           stimulerInterieur("choc", Math.min(1, imp.vitesse / 3e3));
         }
       }
-      if (auRepos(pos, z, params) || t - balle.depuis > 9) {
+      if (balle.fin && t >= balle.fin) {
+        balle.actif = false;
+        balle.fin = 0;
+        cible = { x: balle.but.x, y: balle.but.y };
+        choisir3(etatForce ?? "repos");
+      } else if (auRepos(pos, z, params) || t - balle.depuis > 9) {
         balle.actif = false;
         pos.vx = pos.vy = 0;
         cible = dansZone(z, pos.x, pos.y - rayon * 2, rayon * 0.6);
@@ -5095,6 +5154,11 @@ function mountLia(options = {}) {
     else ecr.s = ecr.v = 0;
     const ecrase = Math.abs(ecr.s) > 4e-3 ? ` rotate(${ecr.angle.toFixed(3)}rad) scale(${(1 - ecr.s).toFixed(3)},${(1 + ecr.s * 0.8).toFixed(3)}) rotate(${(-ecr.angle).toFixed(3)}rad)` : "";
     corpsEl.dataset["vol"] = balle.actif ? "1" : "0";
+    const solY = z.y + z.h - rayon * 0.6;
+    const haut = Math.max(0, solY - pos.y);
+    const echelleOmbre = 1 / (1 + haut / 450);
+    ombre.style.opacity = balle.actif && !still ? (0.95 * echelleOmbre).toFixed(2) : "0";
+    ombre.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${(z.y + z.h - rayon * 0.3).toFixed(1)}px) translate(-50%,-50%) scale(${(rayon * 2.2 * echelleOmbre / 100).toFixed(3)},${(rayon * 0.5 * echelleOmbre / 24).toFixed(3)})`;
     toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${ecrase}${etire > 4e-3 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
       puceHumeur.hidden = chatOuvert;
@@ -5291,4 +5355,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-BINPQVBM.mjs.map
+//# sourceMappingURL=chunk-NYQE6AL2.mjs.map
