@@ -27,6 +27,8 @@ export { validerEtat } from "./etat.js";
 export type { EtatHote, EtatLia } from "./etat.js";
 export { CAUSES } from "./interieur.js";
 export type { Cause, Interieur } from "./interieur.js";
+export { GENRES_SOUVENIR, ajouterSouvenir, humeurDeFond, phraseDeRetour, poidsActuel, SOUVENIR_DEMI_VIE_JOURS } from "./souvenirs.js";
+export type { GenreSouvenir, HumeurDeFond, Souvenir } from "./souvenirs.js";
 export { HUMEURS_DETAILLEES, LIBELLES_HUMEURS, couleurHumeur, libelleHumeur } from "./humeurs.js";
 export { ST as SILHOUETTES_LIA } from "./moteur/moteur.js";
 export { COMPORTEMENTS, ENVIES_DEPART, apresComportement, candidats, choisirComportement, majEnvies } from "./cerveau.js";

@@ -1,5 +1,6 @@
 /** Mémoire locale de LIA (position, vie autonome, envies). Jamais indispensable : tout est en try/catch. */
 import { COMPORTEMENTS, JOURNAL_MAX, type Envies, type FaitLia } from "./cerveau.js";
+import { validerSouvenirs, type Souvenir } from "./souvenirs.js";
 
 export interface MemoireLia {
   /** Position en fractions (0..1) de la zone de vie. */
@@ -223,5 +224,35 @@ export function ecrireInterieur(cle: string, m: MemoireInterieure): void {
     localStorage.setItem(`${PREFIXE}${cle}:interieur`, JSON.stringify(m));
   } catch {
     /* sans stockage, sa sensibilité et sa confiance repartent du départ à chaque page */
+  }
+}
+
+/** Ses souvenirs sur plusieurs jours (voir `souvenirs.ts`) et combien de phrases de retour elle a déjà dites aujourd'hui. */
+export interface MemoireSouvenirs {
+  souvenirs: Souvenir[];
+  retour: { jour: string; n: number };
+}
+
+export function lireSouvenirs(cle: string): MemoireSouvenirs {
+  const vide: MemoireSouvenirs = { souvenirs: [], retour: { jour: "", n: 0 } };
+  try {
+    const brut = localStorage.getItem(`${PREFIXE}${cle}:souvenirs`);
+    if (brut === null) return vide;
+    const j: unknown = JSON.parse(brut);
+    if (typeof j !== "object" || j === null) return vide;
+    const { souvenirs, retour } = j as Record<string, unknown>;
+    const r = typeof retour === "object" && retour !== null ? (retour as Record<string, unknown>) : {};
+    const n = typeof r["n"] === "number" && Number.isInteger(r["n"]) && r["n"] >= 0 && r["n"] <= 1000 ? r["n"] : 0;
+    return { souvenirs: validerSouvenirs(souvenirs), retour: { jour: typeof r["jour"] === "string" ? r["jour"].slice(0, 10) : "", n } };
+  } catch {
+    return vide;
+  }
+}
+
+export function ecrireSouvenirs(cle: string, m: MemoireSouvenirs): void {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:souvenirs`, JSON.stringify(m));
+  } catch {
+    /* sans stockage, elle ne se souvient pas d'une page à l'autre (l'état partagé de l'hôte, s'il existe, les garde) */
   }
 }
