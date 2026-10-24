@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.21.0
+npm i github:MoKarade/lia-ui#v0.22.0
 ```
 
 ## Utiliser
@@ -135,6 +135,8 @@ Depuis v0.11.0 le paquet dessine lui-même une pastille sous son corps : un poin
 Pour que LIA soit la MÊME dans le hub, MemoryAI et les apps, l'hôte lui donne `etat` : `{ lire(), ecrire(e) }`. Elle lit l'état (envies, journal, mémoire lente, humeur, relances du jour) au montage puis chaque minute et prend le plus récent ; elle l'écrit toutes les 20 s si quelque chose a changé et à la fermeture de la page. Pour une route de même origine : `import { etatHttp } from "@mokarade/lia-ui/etat-http"` puis `<Lia etat={etatHttp("/api/lia/etat")} />`. Contrat de la route : GET → 200 + l'état en JSON, ou 204/404 s'il n'y en a aucun ; PUT → 200 + l'état gardé, ou 409 + l'état plus récent de l'hôte si la version envoyée ne dépasse pas la sienne (voir `validerEtat` pour la forme). Sans `etat`, ou si l'hôte échoue, elle garde son état local et vit quand même. Sa position à l'écran et « Animations complètes » restent propres à l'appareil.
 
 **Son monde intérieur voyage avec (v0.20.0).** `EtatLia.interieur` (optionnel) porte sa douleur et sa cause, son plaisir, sa sensibilité, sa confiance et son usure SIMULÉES : une douleur prise sur le hub est encore là dans une app ouverte 30 s plus tard, retombée du temps écoulé (`vieillir`), sans cri (le coup a été reçu ailleurs). Un `interieur` non conforme est retiré sans faire tomber l'état ; un hôte qui ne le garde pas reste compatible. L'écriture repart dès que la douleur, le plaisir ou la confiance bougent d'un vingtième.
+
+**Valider côté serveur avec la même fonction (v0.22.0).** L'entrée du paquet exporte `validerEtat` (la fonction que LIA applique à ce que l'hôte rend), `COMPORTEMENTS`, `CAUSES` et les types `Cause` et `Interieur` : une route d'hôte (MemoryAI, hub) peut donc valider l'état avec le contrat réel au lieu d'un schéma recopié qui diverge.
 
 ## Garanties
 

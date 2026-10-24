@@ -1,4 +1,4 @@
-import { E as EtatHote } from './types-Y6uDoRv5.js';
+import { E as EtatHote } from './types-_30-1Lfp.js';
 
 /**
  * Le seul module du paquet qui appelle le réseau : un `fetch` vers la MÊME origine que la page (GET pour lire, PUT pour écrire),
