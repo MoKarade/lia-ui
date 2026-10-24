@@ -91,6 +91,23 @@ describe("clic droit sur un élément de la page", () => {
     expect(lia.nanobots().cible).toEqual({ x: 100, y: 300, w: 300, h: 200 });
   });
 
+  it("les trois entrées font travailler les 100 nanobots, sans scène dessinée par son corps (Marc 24/10 : « l'analyse c'est pas les nanobots »)", async () => {
+    for (const entree of ["Explique-moi ça", "Que peut-on changer ici ?", "Regarde ça avec moi"]) {
+      lia = mountLia({ vieAutonome: false, ask: vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockReturnValue(new Promise(() => undefined)) });
+      const l = lia;
+      clicDroit(carte);
+      choisir(entree);
+      await vi.waitFor(() => expect(l.nanobots().vide, entree).toBeGreaterThan(0.8), { timeout: 8000 });
+      const n = l.nanobots();
+      expect(n.actif, entree).toBe(true);
+      expect(n.total, entree).toBe(100);
+      expect(n.corps, entree).toBe("repos");
+      l.destroy();
+      lia = null;
+      document.querySelectorAll(".lia-ui").forEach((x) => x.remove());
+    }
+  }, 40000);
+
   it("ne dessine aucun cadre autour de l'élément dont elle parle (seuls ses nanobots analysent) et ne touche pas à la page", async () => {
     const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockResolvedValue({ text: "Voilà." });
     lia = mountLia({ vieAutonome: false, ask });

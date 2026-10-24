@@ -164,6 +164,10 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 />
 ```
 
+### Seuls les 100 nanobots analysent (v0.37.2)
+
+Pendant que ses nanobots travaillent sur un élément (les trois entrées du menu : explique, que changer, regarde), son corps ne dessine plus aucune scène à côté d'elle (ni les quatre coins et le balayage de « analyse », ni la loupe de « cherche », ni la page de « lit ») : il garde sa forme de repos et s'efface presque (opacité 0,15), vidé de ses traits partis avec eux. Ils sont toujours cent. Quand ils rentrent, le corps se remplit. `nanobots()` rend en plus `corps` (l'action que le moteur dessine) et `vide` (0 à 1).
+
 ### Cadre de la discussion plus subtil (v0.37.1)
 
 La bordure de la fenêtre est fondue (40 % de `--lia-border`), son ombre plus douce, le séparateur au-dessus du champ plus léger, et le bas de l'historique s'estompe comme le haut. Le champ n'est plus teinté de noir (gris sale en thème clair) : il se teinte de la couleur du texte de l'hôte (`--lia-text` à 7 %). Au clavier, l'anneau de focus est un trait de 2 px dans la boîte (`--lia-accent` à 78 %), sans halo autour : contraste mesuré sur les captures, au moins 3,4:1 (sombre 4,6:1, clair 3,5:1).

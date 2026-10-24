@@ -57,6 +57,25 @@ describe("ses nanobots analysent eux-mêmes ce qu'elle regarde, plus de carré",
     expect(carte().getAttribute("style")).toBeNull();
   });
 
+  it("pendant qu'ils travaillent, son corps ne dessine aucune scène (ni quatre coins ni balayage) et se vide ; il se remplit quand ils rentrent", () => {
+    lia = mountLia({ vieAutonome: false, quandMouvementReduit: "complet" });
+    const corps = document.querySelector<HTMLCanvasElement>(".lia-ui__corps canvas, canvas.lia-ui__toile, .lia-ui__corps > canvas") ?? document.querySelector<HTMLCanvasElement>("canvas:not(.lia-ui__nano)");
+    expect(lia.nanobots().total).toBe(0);
+    for (const etat of ["analyse"] as const) {
+      lia.envoyer(carte(), { etat, secondes: 5 });
+      seconde(3);
+      const n = lia.nanobots();
+      expect(n.total, etat).toBe(100);
+      expect(n.corps, etat).toBe("repos");
+      expect(n.vide, etat).toBeGreaterThan(0.8);
+      expect(Number(corps?.style.opacity), etat).toBeLessThan(0.3);
+      seconde(14);
+      expect(lia.nanobots().actif, etat).toBe(false);
+      expect(lia.nanobots().vide, etat).toBeLessThan(0.05);
+      expect(corps?.style.opacity, etat).toBe("");
+    }
+  });
+
   it("l'analyse finie, ils rentrent dans son corps et la canvas disparaît", () => {
     lia = mountLia({ vieAutonome: false, quandMouvementReduit: "complet" });
     lia.envoyer(carte(), { etat: "analyse", secondes: 4 });

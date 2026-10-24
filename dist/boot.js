@@ -774,15 +774,13 @@ function prochainPetitPas(hasard, energie) {
 
 // src/nano.ts
 var MARGE = 5;
-var MIN = 18;
-var MAX = 100;
+var NOMBRE = 100;
 var PERIODE_ONDE = 1.9;
-function nombreDeNano(zone) {
-  const cote = Math.sqrt(Math.max(0, zone.w) * Math.max(0, zone.h));
-  return Math.max(MIN, Math.min(MAX, Math.round(cote / 2.2)));
+function nombreDeNano() {
+  return NOMBRE;
 }
 function creerEssaim(zone, source, hasard, mode = "complet") {
-  const n = nombreDeNano(zone);
+  const n = nombreDeNano();
   const bots = [];
   for (let i = 0; i < n; i++) {
     const b = {
@@ -4936,6 +4934,8 @@ function mountLia(options = {}) {
   toileNano.setAttribute("aria-hidden", "true");
   couche.insertBefore(toileNano, corpsEl);
   let essaim = null;
+  let idCorps = "repos";
+  let videCorps = 0;
   let essaimSur = null;
   let essaimZone = null;
   const couleurNano = (nom, defaut) => {
@@ -5065,7 +5065,7 @@ function mountLia(options = {}) {
     if (detruit) return;
     clearTimeout(attenteElement);
     const baseMode = { expliquer: "analyse", changer: "planifie", regarder: "lit", question: "reflexion" }[mode];
-    analysePour = baseMode === "analyse" ? cible2 : null;
+    analysePour = mode === "question" ? null : cible2;
     if (analysePour) majEssaim(0);
     const debutAnalyse = Date.now();
     const demarrer = () => {
@@ -6130,11 +6130,15 @@ function mountLia(options = {}) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const px = Math.round(cote * dpr);
     if (toile.width !== px) toile.width = toile.height = px;
+    idCorps = essaim && ACT[etat]?.sc ? "repos" : etat;
+    const sortisNano = essaim ? essaim.bots.filter((b) => b.sorti && !b.rentre).length / Math.max(1, essaim.bots.length) : 0;
+    videCorps += (sortisNano - videCorps) * (still ? 1 : 1 - Math.exp(-dt * 6));
+    toile.style.opacity = videCorps > 0.01 ? (1 - 0.85 * videCorps).toFixed(2) : "";
     if (ctx) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cote, cote);
       ctx.lineCap = "round";
-      dessiner(ctx, cote, cote, etatMoteur, sansMouvement ? 0 : t, etat, {
+      dessiner(ctx, cote, cote, etatMoteur, sansMouvement ? 0 : t, idCorps, {
         cx: cote / 2,
         cy: cote / 2,
         R: rayon,
@@ -6281,7 +6285,9 @@ function mountLia(options = {}) {
       total: essaim?.bots.length ?? 0,
       sortis: essaim?.bots.filter((b) => b.sorti && !b.rentre).length ?? 0,
       surCible: essaim && essaimZone ? surLaCible(essaim, essaimZone) : 0,
-      cible: essaimZone ? { ...essaimZone } : null
+      cible: essaimZone ? { ...essaimZone } : null,
+      corps: idCorps,
+      vide: videCorps
     }),
     envoyer: envoyerVers,
     geste,
