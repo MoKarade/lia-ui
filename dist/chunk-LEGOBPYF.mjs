@@ -4017,7 +4017,7 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__bulle,.lia-ui__chat,.lia-ui__menu{position:absolute;pointer-events:auto;background:var(--lia-glass);border:1px solid var(--lia-border);border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.45);backdrop-filter:blur(14px)}
 .lia-ui__bulle{max-width:min(320px,calc(100% - 16px));padding:.6rem .85rem;font-size:.95rem;line-height:1.35}
 .lia-ui__bulle[hidden],.lia-ui__chat[hidden],.lia-ui__menu[hidden]{display:none}
-.lia-ui__chat{background:var(--lia-verre);border-radius:26px;box-shadow:0 8px 28px rgba(0,0,0,.32);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);animation:lia-ui-entre .22s cubic-bezier(.2,.8,.2,1) both}
+.lia-ui__chat{background:var(--lia-verre);border-radius:26px;border-color:color-mix(in srgb,var(--lia-border) 40%,transparent);box-shadow:0 6px 24px rgba(0,0,0,.16);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);animation:lia-ui-entre .22s cubic-bezier(.2,.8,.2,1) both}
 .lia-ui__puces{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
 .lia-ui__puce{min-height:44px;padding:0 .9rem;border-radius:22px;border:1px solid var(--lia-border);background:var(--lia-surface-2);color:var(--lia-text);font:inherit;font-size:.9rem;cursor:pointer}
 .lia-ui__puce:hover{border-color:var(--lia-accent)}
@@ -4028,7 +4028,7 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__btn[disabled]{opacity:.5;cursor:default}
 .lia-ui__btn--doux{border-color:transparent;color:var(--lia-soft)}
 .lia-ui__btn--doux:hover{color:var(--lia-text);background:rgba(255,255,255,.06)}
-.lia-ui__journal{flex:1 1 auto;min-height:0;max-height:min(62vh,540px);overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding:.9rem .8rem .3rem;display:flex;flex-direction:column;gap:.4rem;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 16px);mask-image:linear-gradient(to bottom,transparent 0,#000 16px)}
+.lia-ui__journal{flex:1 1 auto;min-height:0;max-height:min(62vh,540px);overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding:.9rem .8rem .3rem;display:flex;flex-direction:column;gap:.4rem;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 16px,#000 calc(100% - 10px),transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 16px,#000 calc(100% - 10px),transparent 100%)}
 .lia-ui__journal:empty{display:none}
 .lia-ui__msg{max-width:90%;padding:.45rem .75rem;border-radius:16px;font-size:.9rem;line-height:1.38;overflow-wrap:anywhere;white-space:pre-wrap;animation:lia-ui-entre .2s ease both}
 .lia-ui__msg--lia{align-self:flex-start;border-bottom-left-radius:6px;background:color-mix(in srgb,var(--lia-surface-2) 82%,transparent)}
@@ -4039,10 +4039,10 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__points i:nth-child(2){animation-delay:.15s}.lia-ui__points i:nth-child(3){animation-delay:.3s}
 @keyframes lia-ui-saut{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
 .lia-ui__form{display:flex;align-items:center;gap:.3rem;padding:.4rem}
-.lia-ui__journal:not(:empty)+.lia-ui__form{border-top:1px solid var(--lia-border)}
-.lia-ui__champ{flex:1;min-width:0;min-height:44px;border-radius:22px;border:1px solid transparent;background:rgba(0,0,0,.26);color:var(--lia-text);padding:0 .9rem;font:inherit;font-size:16px}
+.lia-ui__journal:not(:empty)+.lia-ui__form{border-top:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}
+.lia-ui__champ{flex:1;min-width:0;min-height:44px;border-radius:22px;border:1px solid transparent;background:color-mix(in srgb,var(--lia-text) 7%,transparent);color:var(--lia-text);padding:0 .9rem;font:inherit;font-size:16px}
 .lia-ui__champ::placeholder{color:var(--lia-soft)}
-.lia-ui__champ:focus-visible{outline:0;border-color:var(--lia-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--lia-accent) 25%,transparent)}
+.lia-ui__champ:focus-visible{outline:0;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--lia-accent) 78%,transparent)}
 .lia-ui__menu{min-width:240px;padding:.4rem;display:flex;flex-direction:column}
 .lia-ui__item{min-height:44px;display:flex;align-items:center;gap:.6rem;padding:0 .8rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;text-align:left;cursor:pointer}
 .lia-ui__item:hover{background:var(--lia-surface-2)}
@@ -6410,4 +6410,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-LKIQFOMQ.mjs.map
+//# sourceMappingURL=chunk-LEGOBPYF.mjs.map
