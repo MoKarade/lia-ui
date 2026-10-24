@@ -6,6 +6,7 @@ const zone = { x: 0, y: 0, w: 1200, h: 800 };
 const rayon = 56;
 const marge = rayon * 0.6;
 const params: ParamsPerchoir = { ...BALLE_DEFAUT, marge, rayon };
+const phys: ParamsBalle = { ...BALLE_DEFAUT, marge };
 const depart = { x: 1100, y: 740 };
 /** Une carte large, à 350 px de haut : à portée d'un bond. */
 const carte: RectCarte = { left: 300, top: 350, right: 700, bottom: 520 };
@@ -35,7 +36,6 @@ describe("choisirPerchoir : où peut-elle se poser ?", () => {
     expect(p).not.toBeNull();
     if (!p) return;
     const c: Corps = { x: depart.x, y: depart.y, vx: p.vx, vy: p.vy };
-    const phys: ParamsBalle = { ...BALLE_DEFAUT, marge };
     let plusHaut = c.y;
     for (let t = 0; t < p.duree - 1e-9; t += 0.016) {
       avancerBalle(c, Math.min(0.016, p.duree - t), zone, phys);
@@ -114,7 +114,7 @@ describe("atterrir : un sens unique, sur le bord haut", () => {
 
   it("retombant sur la carte, elle est posée sur le bord, rebondit amorti et perd son élan horizontal", () => {
     const c: Corps = { x: 500, y: surface.y + 4, vx: 300, vy: 800 };
-    const imp = atterrir(c, surface.y - 6, surface, BALLE_DEFAUT);
+    const imp = atterrir(c, surface.y - 6, surface, phys);
     expect(imp).toEqual({ cote: "bas", vitesse: 800 });
     expect(c.y).toBe(surface.y);
     expect(c.vy).toBeCloseTo(-800 * BALLE_DEFAUT.restitutionSol, 6);
@@ -123,30 +123,29 @@ describe("atterrir : un sens unique, sur le bord haut", () => {
 
   it("une retombée très lente ne rebondit plus", () => {
     const c: Corps = { x: 500, y: surface.y + 0.2, vx: 0, vy: 30 };
-    expect(atterrir(c, surface.y, surface, BALLE_DEFAUT)?.vitesse).toBe(30);
+    expect(atterrir(c, surface.y, surface, phys)?.vitesse).toBe(30);
     expect(c.vy).toBe(0);
   });
 
   it("montant, elle traverse le bord par en dessous : pas de contact", () => {
     const c: Corps = { x: 500, y: surface.y - 3, vx: 0, vy: -900 };
-    expect(atterrir(c, surface.y + 10, surface, BALLE_DEFAUT)).toBeNull();
+    expect(atterrir(c, surface.y + 10, surface, phys)).toBeNull();
     expect(c.y).toBe(surface.y - 3);
   });
 
   it("à côté de la carte, elle ne se pose pas dessus", () => {
     const c: Corps = { x: 900, y: surface.y + 4, vx: 0, vy: 800 };
-    expect(atterrir(c, surface.y - 6, surface, BALLE_DEFAUT)).toBeNull();
+    expect(atterrir(c, surface.y - 6, surface, phys)).toBeNull();
     expect(c.y).toBe(surface.y + 4);
   });
 
   it("encore au-dessus du bord : pas de contact", () => {
     const c: Corps = { x: 500, y: surface.y - 20, vx: 0, vy: 800 };
-    expect(atterrir(c, surface.y - 30, surface, BALLE_DEFAUT)).toBeNull();
+    expect(atterrir(c, surface.y - 30, surface, phys)).toBeNull();
   });
 
   it("une chute simulée image par image finit posée sur la carte, sans jamais la traverser ni en sortir", () => {
     const c: Corps = { x: 520, y: 150, vx: 200, vy: 0 };
-    const phys: ParamsBalle = { ...BALLE_DEFAUT, marge };
     let posee = false;
     let atterri = false;
     for (let i = 0; i < 300 && !posee; i++) {
