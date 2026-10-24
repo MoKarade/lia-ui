@@ -153,6 +153,16 @@ describe("titre, étiquette et question", () => {
     expect(q).toContain("genre : une carte d'app ; app : DriveAI ; texte : « Hors ligne depuis 2 h »");
   });
 
+  it("« expliquer » et « regarder » demandent d'apporter ce qui ne se voit pas, sans inventer", () => {
+    for (const mode of ["expliquer", "regarder"] as const) {
+      const q = composerQuestion(mode, d);
+      expect(q).toContain("Ne répète pas ce qui est déjà affiché");
+      expect(q).toContain("Si tu ne le sais pas, dis-le.");
+      expect(q.length).toBeLessThanOrEqual(2000);
+    }
+    expect(composerQuestion("changer", d)).not.toContain("Ne répète pas");
+  });
+
   it("en mode question, la question de Marc passe en tête, telle quelle", () => {
     const q = composerQuestion("question", d, "  Pourquoi hors ligne ?  ");
     expect(q.startsWith("Pourquoi hors ligne ?\n")).toBe(true);

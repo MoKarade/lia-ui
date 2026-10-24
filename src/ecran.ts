@@ -251,10 +251,12 @@ export function etiquetteMessage(mode: ModeElement, d: ElementDecrit): string {
 }
 
 const CONSIGNES: Record<Exclude<ModeElement, "question">, string> = {
-  expliquer: "Explique-moi cet élément de la page, simplement et en peu de mots.",
+  expliquer:
+    "Explique-moi cet élément de la page, simplement et en peu de mots. Ne répète pas ce qui est déjà affiché : apporte ce que je ne vois pas (ce que ça veut dire, d'où ça vient, ce qui a changé, quoi en faire). Si tu ne le sais pas, dis-le.",
   changer:
     "Que pourrait-on changer ici ? Tu ne modifies rien toi-même : propose des idées, en peu de mots.",
-  regarder: "Regarde cet élément avec moi et dis ce qui compte vraiment.",
+  regarder:
+    "Regarde cet élément avec moi et dis ce qui compte vraiment. Ne répète pas ce qui est déjà affiché : dis ce que je ne vois pas. Si tu ne le sais pas, dis-le.",
 };
 
 /**
