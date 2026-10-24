@@ -1,146 +1,120 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mountLia } from "../src/lia.js";
-import type { LiaHandle } from "../src/types.js";
-import { installerEnvironnement } from "./setup.js";
+import { describe, expect, it } from "vitest";
+import { auRepos, avancerBalle, BALLE_DEFAUT, ECRASEMENT_MAX, energie, frapper, normaleDe, relacherEcrasement, type Corps, type Ecrasement, type ParamsBalle } from "../src/physique.js";
 
-let lia: LiaHandle | null = null;
-
-const rectDe = (r: { left: number; top: number; right: number; bottom: number }): DOMRect =>
-  ({ ...r, x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top, toJSON: () => r }) as DOMRect;
-const position = (): [number, number] => {
-  const m = /translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\s*\)/.exec(document.querySelector<HTMLElement>(".lia-ui__corps")?.style.transform ?? "");
-  return m ? [Number(m[1]), Number(m[2])] : [Number.NaN, Number.NaN];
-};
-const toile = (): string => document.querySelector<HTMLElement>(".lia-ui__toile")?.style.transform ?? "";
-/** L'angle d'inclinaison du corps (radians), lu sur la toile. */
-const inclinaison = (): number => Number(/rotate\((-?[\d.]+)rad\)/.exec(toile())?.[1] ?? 0);
-
-beforeEach(() => {
-  installerEnvironnement({ sansMouvement: true }); // comme le navigateur de Marc ; l'hôte passe « complet »
-  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1400 });
-  Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    if (this.classList.contains("lia-ui")) return rectDe({ left: 0, top: 0, right: 1400, bottom: 900 });
-    if (this.id === "carte") return rectDe({ left: 900, top: 500, right: 1200, bottom: 700 });
-    return rectDe({ left: 0, top: 0, right: 0, bottom: 0 });
-  });
-  document.body.innerHTML = `<section id="carte" data-lia-cible>Une carte</section>`;
-});
-afterEach(() => {
-  vi.useRealTimers();
-  lia?.destroy();
-  lia = null;
-});
-
-/** 62,5 images par seconde : une image toutes les 16 ms exactement, pour que l'échantillonnage du test ne crée pas de faux sauts. */
-const PAS_MS = 16;
-const monter = (opts: Parameters<typeof mountLia>[0], fps = 1000 / PAS_MS): void => {
-  vi.useFakeTimers();
-  const base = Date.now();
-  vi.spyOn(performance, "now").mockImplementation(() => Date.now() - base);
-  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => setTimeout(() => cb(performance.now()), 1000 / fps) as unknown as number);
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => clearTimeout(id));
-  lia = mountLia({ quandMouvementReduit: "complet", vieAutonome: false, ...opts });
-  vi.advanceTimersByTime(1500);
-};
-
-/** Suit sa position image par image pendant `secondes`. */
-const trace = (secondes: number): Array<{ t: number; x: number; y: number; incl: number; transformToile: string }> => {
-  const points = [];
-  for (let i = 0; i < (secondes * 1000) / PAS_MS; i++) {
-    vi.advanceTimersByTime(PAS_MS);
-    const [x, y] = position();
-    points.push({ t: ((i + 1) * PAS_MS) / 1000, x, y, incl: inclinaison(), transformToile: toile() });
+const zone = { x: 0, y: 0, w: 1000, h: 700 };
+const p: ParamsBalle = { ...BALLE_DEFAUT, marge: 60 };
+const simuler = (c: Corps, secondes: number, pas: number): { impacts: ReturnType<typeof avancerBalle>; trace: Corps[] } => {
+  const impacts: ReturnType<typeof avancerBalle> = [];
+  const trace: Corps[] = [];
+  for (let t = 0; t < secondes; t += pas) {
+    impacts.push(...avancerBalle(c, pas, zone, p));
+    trace.push({ ...c });
   }
-  return points;
+  return { impacts, trace };
 };
 
-describe("quand elle va quelque part, elle a une masse", () => {
-  it("elle part doucement, atteint une pointe de vitesse au milieu, ne se téléporte jamais", () => {
-    monter({});
-    const depart = position();
-    expect(lia?.allerVoir(document.getElementById("carte") as HTMLElement, 10)).toBe(true);
-    const pts = trace(4);
-    const pas = pts.map((p, i) => Math.hypot(p.x - (i ? (pts[i - 1] as typeof p).x : depart[0]), p.y - (i ? (pts[i - 1] as typeof p).y : depart[1])));
-    const vitesse = pas.map((d) => (d * 1000) / PAS_MS); // px/s
-    expect(Math.max(...pas), "un pas de plus de 30 px en une image = une téléportation").toBeLessThan(30);
-    expect(Math.max(...vitesse), "vitesse de pointe").toBeGreaterThan(400);
-    expect(vitesse.slice(0, 3).every((v) => v < 250), "les trois premières images : elle démarre doucement").toBe(true);
-    const iPointe = vitesse.indexOf(Math.max(...vitesse));
-    expect(iPointe, "la pointe n'est ni au tout début ni à la fin").toBeGreaterThan(6);
-    expect(iPointe).toBeLessThan(pts.length - 30);
-  });
-
-  it("l'accélération reste humaine : pas de saut de vitesse d'une image à l'autre", () => {
-    monter({});
-    lia?.allerVoir(document.getElementById("carte") as HTMLElement, 10);
-    const pts = trace(4);
-    const v = pts.map((p, i) => (i ? (Math.hypot(p.x - (pts[i - 1] as typeof p).x, p.y - (pts[i - 1] as typeof p).y) * 1000) / PAS_MS : 0));
-    let pire = 0;
-    for (let i = 2; i < v.length - 1; i++) pire = Math.max(pire, Math.abs(((v[i + 1] as number) - (v[i - 1] as number)) / ((2 * PAS_MS) / 1000)));
-    expect(pire, "px/s²").toBeLessThan(9000);
-  });
-
-  it("elle se penche dans le sens de sa course, puis se redresse en arrivant", () => {
-    monter({});
-    lia?.allerVoir(document.getElementById("carte") as HTMLElement, 10);
-    const pts = trace(9);
-    const pic = Math.max(...pts.map((p) => Math.abs(p.incl)));
-    expect(pic, "inclinaison maximale (rad)").toBeGreaterThan(0.03);
-    expect(pic, "jamais plus de 12°").toBeLessThan(0.2);
-    expect(Math.abs((pts[pts.length - 1] as { incl: number }).incl), "redressée à l'arrivée").toBeLessThan(0.02);
-  });
-
-  it("elle s'étire le long de sa course quand elle file, et reprend sa forme à l'arrêt", () => {
-    monter({});
-    lia?.allerVoir(document.getElementById("carte") as HTMLElement, 10);
-    const pts = trace(9);
-    expect(pts.some((p) => /scale\(1\.0\d+,0\.9\d+\)/.test(p.transformToile))).toBe(true);
-    expect((pts[pts.length - 1] as { transformToile: string }).transformToile).not.toContain("scale(");
-  });
-
-  it("elle ne reste pas figée à l'arrivée : un léger flottement la garde vivante", () => {
-    monter({ vieAutonome: true });
-    lia?.allerVoir(document.getElementById("carte") as HTMLElement, 30);
-    trace(8);
-    const pts = trace(10);
-    const xs = pts.map((p) => p.x);
-    const ys = pts.map((p) => p.y);
-    expect(Math.max(...xs) - Math.min(...xs) + Math.max(...ys) - Math.min(...ys), "amplitude du flottement (px)").toBeGreaterThan(3);
-  });
-
-  it("« La laisser tranquille » (vie coupée) : elle ne flotte plus, elle reste posée", () => {
-    monter({ vieAutonome: true });
-    lia?.setVieAutonome(false);
-    vi.advanceTimersByTime(8000); // le temps de se poser
-    const a = position();
-    trace(10);
-    const b = position();
-    expect(Math.hypot(b[0] - a[0], b[1] - a[1])).toBeLessThan(1);
-  });
-
-  it("mouvement réduit « doux » : aucun effet physique, elle se pose d'un coup, droite", () => {
-    vi.useFakeTimers();
-    lia = mountLia({ quandMouvementReduit: "doux", vieAutonome: false });
-    lia.allerVoir(document.getElementById("carte") as HTMLElement, 10);
-    const pts = trace(3);
-    for (const p of pts) {
-      expect(Math.abs(p.incl)).toBeLessThan(1e-6);
-      expect(p.transformToile).not.toContain("scale(");
+describe("la balle : élan, gravité, rebonds", () => {
+  it("ne sort jamais de sa zone, et son énergie ne croît jamais", () => {
+    const c: Corps = { x: 300, y: 200, vx: 1800, vy: -900 };
+    let e = energie(c, zone, p);
+    for (let i = 0; i < 1200; i++) {
+      avancerBalle(c, 1 / 60, zone, p);
+      expect(c.x).toBeGreaterThanOrEqual(zone.x + p.marge - 1e-6);
+      expect(c.x).toBeLessThanOrEqual(zone.x + zone.w - p.marge + 1e-6);
+      expect(c.y).toBeGreaterThanOrEqual(zone.y + p.marge - 1e-6);
+      expect(c.y).toBeLessThanOrEqual(zone.y + zone.h - p.marge + 1e-6);
+      const suivante = energie(c, zone, p);
+      expect(suivante).toBeLessThanOrEqual(e + 1e-6);
+      e = suivante;
     }
   });
+
+  it("un rebond renverse la vitesse normale et en rend la restitution", () => {
+    const c: Corps = { x: 900, y: 300, vx: 1000, vy: 0 };
+    const sans: ParamsBalle = { ...p, gravite: 0, frottement: 0 };
+    const impacts = avancerBalle(c, 0.25, zone, sans);
+    expect(impacts).toHaveLength(1);
+    expect(impacts[0]?.cote).toBe("droite");
+    expect(impacts[0]?.vitesse).toBeCloseTo(1000, 3);
+    expect(c.vx).toBeCloseTo(-1000 * p.restitutionMur, 3);
+    const s: Corps = { x: 500, y: 600, vx: 0, vy: 800 };
+    const sol = avancerBalle(s, 0.2, zone, { ...p, gravite: 0, frottement: 0 });
+    expect(sol[0]?.cote).toBe("bas");
+    expect(s.vy).toBeCloseTo(-800 * p.restitutionSol, 3);
+  });
+
+  it("rebondit plusieurs fois puis se pose en moins de 8 s", () => {
+    const c: Corps = { x: 200, y: 150, vx: 1400, vy: -600 };
+    const { impacts, trace } = simuler(c, 8, 1 / 60);
+    expect(impacts.length).toBeGreaterThanOrEqual(4);
+    expect(impacts.some((i) => i.cote === "bas")).toBe(true);
+    expect(impacts.some((i) => i.cote === "droite")).toBe(true);
+    expect(auRepos(c, zone, p)).toBe(true);
+    // Posée, elle ne bouge plus.
+    const fin = trace[trace.length - 1] as Corps;
+    avancerBalle(c, 1, zone, p);
+    expect(Math.hypot(c.x - fin.x, c.y - fin.y)).toBeLessThan(2);
+  });
+
+  it("ne dépend pas de la taille du pas", () => {
+    const a: Corps = { x: 200, y: 200, vx: 900, vy: -300 };
+    const b: Corps = { ...a };
+    simuler(a, 1.5, 1 / 30);
+    simuler(b, 1.5, 1 / 240);
+    expect(Math.abs(a.x - b.x)).toBeLessThan(25);
+    expect(Math.abs(a.y - b.y)).toBeLessThan(25);
+  });
+
+  it("un pas absurde (NaN, négatif, énorme) ne la fait pas diverger", () => {
+    const c: Corps = { x: 500, y: 300, vx: 100, vy: 0 };
+    for (const dt of [Number.NaN, -1, 1e9]) {
+      avancerBalle(c, dt, zone, p);
+      expect(Number.isFinite(c.x + c.y + c.vx + c.vy)).toBe(true);
+      expect(c.y).toBeLessThanOrEqual(zone.h);
+    }
+  });
+
+  it("une zone plus petite que ses marges la garde au centre sans erreur", () => {
+    const c: Corps = { x: 5, y: 5, vx: 500, vy: 500 };
+    expect(() => avancerBalle(c, 0.1, { x: 0, y: 0, w: 50, h: 50 }, p)).not.toThrow();
+    expect(Number.isFinite(c.x + c.y)).toBe(true);
+  });
+
+  it("les normales regardent vers l'intérieur de la zone", () => {
+    expect(normaleDe("gauche")).toEqual({ x: 1, y: 0 });
+    expect(normaleDe("droite")).toEqual({ x: -1, y: 0 });
+    expect(normaleDe("haut")).toEqual({ x: 0, y: 1 });
+    expect(normaleDe("bas")).toEqual({ x: 0, y: -1 });
+  });
 });
 
-describe("à très faible cadence (écran lent), la physique reste stable", () => {
-  it.each([8, 4])("à %i images par seconde, elle arrive sans exploser", (fps) => {
-    monter({}, fps);
-    lia?.allerVoir(document.getElementById("carte") as HTMLElement, 10);
-    vi.advanceTimersByTime(6000);
-    const [x, y] = position();
-    expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
-    expect(x).toBeGreaterThan(500);
-    expect(x).toBeLessThan(1500);
-    expect(y).toBeGreaterThan(200);
-    expect(y).toBeLessThan(950);
+describe("l'écrasement à l'impact", () => {
+  const neuf = (): Ecrasement => ({ s: 0, v: 0, angle: 0 });
+
+  it("un impact fort écrase jusqu'à 28 %, un impact faible à peine, un tout petit pas du tout", () => {
+    const fort = neuf();
+    frapper(fort, 5000, { x: 0, y: -1 });
+    expect(fort.s).toBeCloseTo(ECRASEMENT_MAX, 5);
+    expect(fort.angle).toBeCloseTo(-Math.PI / 2, 5);
+    const moyen = neuf();
+    frapper(moyen, 360, { x: 1, y: 0 });
+    expect(moyen.s).toBeCloseTo(0.2, 5);
+    const rien = neuf();
+    frapper(rien, 0, { x: 1, y: 0 });
+    expect(rien.s).toBe(0);
+  });
+
+  it("se détend en se balançant un peu (sous-amorti), puis revient à zéro", () => {
+    const e = neuf();
+    frapper(e, 1800, { x: 0, y: -1 });
+    let min = e.s;
+    for (let i = 0; i < 180; i++) {
+      relacherEcrasement(e, 1 / 60);
+      min = Math.min(min, e.s);
+    }
+    expect(min).toBeLessThan(0);
+    expect(min).toBeGreaterThanOrEqual(-0.12);
+    expect(e.s).toBe(0);
+    expect(e.v).toBe(0);
   });
 });

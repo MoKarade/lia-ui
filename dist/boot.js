@@ -572,6 +572,95 @@ function phraseCommentVa(e, i) {
 }
 var MENTION_SIMULATION = "Simulation : des calculs en elle, pas un vrai ressenti.";
 
+// src/physique.ts
+var BALLE_DEFAUT = { gravite: 1400, frottement: 0.25, restitutionSol: 0.55, restitutionMur: 0.7 };
+var SEUIL_REBOND = 60;
+var PAS_MAX = 8e-3;
+function avancerBalle(c, dt, zone, p) {
+  const impacts = [];
+  const total = Number.isFinite(dt) ? Math.max(0, Math.min(0.25, dt)) : 0;
+  const n = Math.max(1, Math.ceil(total / PAS_MAX));
+  const h = total / n;
+  const minX = zone.x + p.marge;
+  const maxX = Math.max(minX, zone.x + zone.w - p.marge);
+  const minY = zone.y + p.marge;
+  const maxY = Math.max(minY, zone.y + zone.h - p.marge);
+  const amorti = Math.exp(-p.frottement * h);
+  for (let i = 0; i < n; i++) {
+    c.vy += p.gravite * h;
+    c.vx *= amorti;
+    c.vy *= amorti;
+    c.x += c.vx * h;
+    c.y += c.vy * h;
+    if (c.x < minX) {
+      c.x = minX;
+      if (c.vx < 0) {
+        impacts.push({ cote: "gauche", vitesse: -c.vx });
+        c.vx = -c.vx * p.restitutionMur;
+        if (c.vx < SEUIL_REBOND) c.vx = 0;
+      }
+    } else if (c.x > maxX) {
+      c.x = maxX;
+      if (c.vx > 0) {
+        impacts.push({ cote: "droite", vitesse: c.vx });
+        c.vx = -c.vx * p.restitutionMur;
+        if (-c.vx < SEUIL_REBOND) c.vx = 0;
+      }
+    }
+    if (c.y < minY) {
+      c.y = minY;
+      if (c.vy < 0) {
+        impacts.push({ cote: "haut", vitesse: -c.vy });
+        c.vy = -c.vy * p.restitutionSol;
+      }
+    } else if (c.y > maxY) {
+      c.y = maxY;
+      if (c.vy > 0) {
+        impacts.push({ cote: "bas", vitesse: c.vy });
+        c.vy = c.vy < SEUIL_REBOND ? 0 : -c.vy * p.restitutionSol;
+      }
+      if (Math.abs(c.vy) < 1) c.vx *= Math.exp(-3 * h);
+    }
+  }
+  return impacts;
+}
+function auRepos(c, zone, p) {
+  const maxY = Math.max(zone.y + p.marge, zone.y + zone.h - p.marge);
+  return Math.hypot(c.vx, c.vy) < 25 && c.y >= maxY - 1.5;
+}
+function normaleDe(cote) {
+  switch (cote) {
+    case "gauche":
+      return { x: 1, y: 0 };
+    case "droite":
+      return { x: -1, y: 0 };
+    case "haut":
+      return { x: 0, y: 1 };
+    default:
+      return { x: 0, y: -1 };
+  }
+}
+var ECRASEMENT_MAX = 0.28;
+function frapper(e, vitesse, normale) {
+  const f = Math.min(ECRASEMENT_MAX, Math.max(0, vitesse) / 1800);
+  if (f <= e.s * 0.6) return;
+  e.angle = Math.atan2(normale.y, normale.x);
+  e.s = Math.max(e.s, f);
+  e.v = 0;
+}
+function relacherEcrasement(e, dt) {
+  const K = 260;
+  const AMORT = 2 * 0.28 * Math.sqrt(K);
+  const n = Math.max(1, Math.ceil(Math.max(0, dt) / 8e-3));
+  const h = Math.max(0, dt) / n;
+  for (let i = 0; i < n; i++) {
+    e.v += (-K * e.s - AMORT * e.v) * h;
+    e.s += e.v * h;
+  }
+  if (Math.abs(e.s) < 2e-3 && Math.abs(e.v) < 0.05) e.s = e.v = 0;
+  e.s = Math.max(-0.12, Math.min(ECRASEMENT_MAX, e.s));
+}
+
 // src/humeurs.ts
 var PROFILS_V9 = {
   confiant: { bs: 0.85, ba: 1, blr: 0.8, ga: 0.9, en: 1, tint: 0.08, sag: 0, jit: 0.5, tc: [170, 215, 200] },
@@ -3419,6 +3508,8 @@ function mountLia(options = {}) {
   let dernierMonde = 0;
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
+  const balle = { actif: false, depuis: 0, choc: false };
+  const ecr = { s: 0, v: 0, angle: 0 };
   let rayon = rayonBase;
   let rayonCible = rayonBase;
   let cible = { x: 0, y: 0 };
@@ -4287,7 +4378,15 @@ function mountLia(options = {}) {
       cible = { x: pos.x, y: pos.y };
       errance = { jusqua: t + 7 };
       relache = t;
-      choisir2("content");
+      const lancee = !sansMouvement && !doux && Math.hypot(pos.vx, pos.vy) > 450;
+      if (lancee) {
+        balle.actif = true;
+        balle.depuis = t;
+        balle.choc = false;
+        pos.vx = limiter2(pos.vx, -2600, 2600);
+        pos.vy = limiter2(pos.vy, -2600, 2600);
+      }
+      choisir2(lancee ? "surpris" : "content");
       memoriser();
       setTimeout(() => {
         if (!detruit && !chatOuvert && !parle) choisir2(etatForce ?? "repos");
@@ -4358,7 +4457,7 @@ function mountLia(options = {}) {
     const f = fenetre();
     return liste.filter((x) => !couche.contains(x) && estRegarde(x.getBoundingClientRect(), f));
   };
-  const peutBouger = () => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
+  const peutBouger = () => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !balle.actif && !detruit;
   function finAttention() {
     if (!reperee || reperee !== regarde) retirerRegard();
     if (!attention) return;
@@ -4821,11 +4920,36 @@ function mountLia(options = {}) {
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
     const colle = attention?.type === "element" && attention.colle;
+    if (balle.actif && (glisse || chatOuvert || menuOuvert || attention || sansMouvement || doux || still)) {
+      balle.actif = false;
+      cible = { x: pos.x, y: pos.y };
+    }
     if (sansMouvement || doux || still) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
       phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
+    } else if (balle.actif) {
+      const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
+      for (const imp of avancerBalle(pos, dt, z, params)) {
+        frapper(ecr, imp.vitesse, normaleDe(imp.cote));
+        if (imp.vitesse > 1400 && !balle.choc) {
+          balle.choc = true;
+          stimulerInterieur("choc", Math.min(1, imp.vitesse / 3e3));
+        }
+      }
+      if (auRepos(pos, z, params) || t - balle.depuis > 9) {
+        balle.actif = false;
+        pos.vx = pos.vy = 0;
+        cible = dansZone(z, pos.x, pos.y - rayon * 2, rayon * 0.6);
+        choisir2(etatForce ?? "repos");
+      }
+      const pas = Math.max(dt, 8e-3);
+      const lisse = 1 - Math.exp(-dt * 18);
+      phys.ax = limiter2(phys.ax + ((pos.vx - phys.vxPrec) / pas - phys.ax) * lisse, -2600, 2600);
+      phys.ay = limiter2(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
+      phys.vxPrec = pos.vx;
+      phys.vyPrec = pos.vy;
     } else {
       const demande = attention?.type === "element" && !attention.colle;
       const suit = attention?.type === "curseur";
@@ -4920,7 +5044,11 @@ function mountLia(options = {}) {
     corpsEl.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${(pos.y + oy).toFixed(1)}px)`;
     const etire = 0.07 * filante;
     const cap = Math.atan2(pos.vy, pos.vx);
-    toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${etire > 4e-3 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
+    if (!still) relacherEcrasement(ecr, dt);
+    else ecr.s = ecr.v = 0;
+    const ecrase = Math.abs(ecr.s) > 4e-3 ? ` rotate(${ecr.angle.toFixed(3)}rad) scale(${(1 - ecr.s).toFixed(3)},${(1 + ecr.s * 0.8).toFixed(3)}) rotate(${(-ecr.angle).toFixed(3)}rad)` : "";
+    corpsEl.dataset["vol"] = balle.actif ? "1" : "0";
+    toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${ecrase}${etire > 4e-3 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
       puceHumeur.hidden = chatOuvert;
       const dessous = Math.min(rayon * 1.05, Math.max(rayon * 0.6, z.y + z.h - pos.y - 26));
