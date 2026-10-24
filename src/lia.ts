@@ -1410,6 +1410,21 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       clearTimeout(appui);
     }
   });
+  /** Le toucher de son corps : l'hôte peut le prendre (`surToucher`), sinon sa discussion s'ouvre ou se ferme. */
+  const toucher = (): void => {
+    if (chatOuvert) {
+      fermerChat();
+      return;
+    }
+    if (options.surToucher) {
+      try {
+        if (options.surToucher() === true) return;
+      } catch (e) {
+        console.error("LIA : surToucher a échoué, sa discussion s'ouvre", e);
+      }
+    }
+    ouvrirChat();
+  };
   const finGlisse = (): void => {
     clearTimeout(appui);
     if (!glisse) return;
@@ -1442,8 +1457,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }, 1800);
     } else {
       poke();
-      if (chatOuvert) fermerChat();
-      else ouvrirChat();
+      toucher();
     }
   };
   hit.addEventListener("pointerup", finGlisse);
@@ -1457,8 +1471,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   hit.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (chatOuvert) fermerChat();
-      else ouvrirChat();
+      toucher();
     } else if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
       e.preventDefault();
       const r = hit.getBoundingClientRect();

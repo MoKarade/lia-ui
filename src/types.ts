@@ -230,6 +230,12 @@ export interface OptionsLia {
    * l'état tel quel et elle dit qu'elle n'a pas pu. Sans cette option, pas d'entrée.
    */
   basculerPause?: (enPause: boolean) => Promise<void>;
+  /**
+   * Le toucher de son corps (clic sans glissement, Entrée, Espace) quand sa discussion est fermée : si l'hôte rend `true`, il l'a pris
+   * (il ouvre sa propre conversation) et elle n'ouvre pas la sienne ; elle réagit quand même au toucher. Autre valeur ou erreur levée :
+   * sa discussion s'ouvre comme avant. Discussion ouverte : le toucher la ferme, sans appeler l'hôte. Le menu n'est pas concerné.
+   */
+  surToucher?: () => boolean;
   /** Plafond de TOUTES ses paroles spontanées par jour local (mémorisé dans le navigateur), au-delà : plus rien jusqu'au lendemain. Défaut : aucun. */
   plafondSpontaneesParJour?: number;
   /**
