@@ -164,6 +164,10 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 />
 ```
 
+### Discussion plus grande, historique qui défile (v0.37.0)
+
+La fenêtre de discussion fait jusqu'à 440 px de large et 720 px de haut (bornée à l'écran, 16 px de marge) ; son historique atteint 62 % de la hauteur de l'écran (540 px au plus). Sur téléphone, quand elle se pose au-dessus ou en dessous de LIA, elle garde au moins 240 px de haut. L'historique défile à la molette et au doigt (`touch-action: pan-y`, `overscroll-behavior: contain` : la page derrière ne bouge pas) et au clavier (le journal est focusable, flèches et Page haut/bas).
+
 ### Réponses courtes, humaines, visuelles (v0.36.1)
 
 Les trois entrées du menu d'un élément (« Explique-moi ça », « Que changer ici ? », « Regarde ça avec moi ») ajoutent à la question une consigne de forme : deux ou trois phrases parlées, au plus un ou deux chiffres qui comptent (les autres seulement si Marc les demande), et un bloc visuel (jauge, courbe, frise…) quand il montre mieux que des mots. Le contrat `ask` ne change pas ; en mode « Poser une question », rien n'est ajouté : Marc garde la main sur la longueur. Que le modèle dessine ou non un bloc dépend de l'hôte et de MemoryAI (outil de blocs).
