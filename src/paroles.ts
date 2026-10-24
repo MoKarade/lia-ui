@@ -1,5 +1,6 @@
 import type { Envies, FaitLia } from "./cerveau.js";
 import { LIBELLES_HUMEURS } from "./humeurs.js";
+import type { Raison } from "./pensee.js";
 
 /**
  * Ce qu'elle dit d'elle-même quand l'hôte n'a rien de vrai à dire (répertoire de la maquette v5 : `PAROLES`,
@@ -29,6 +30,8 @@ export interface ContexteParole {
   maintenant: number;
   /** Ce qu'elle a dit récemment (identifiants) : elle s'en répète moins. */
   recentes: readonly string[];
+  /** Les raisons vraies de son état à cet instant (`raisons` de pensee.ts), de la plus pesante à la plus légère ; absent = aucune. */
+  raisons?: readonly Raison[];
 }
 
 type Hasard = () => number;
@@ -206,6 +209,15 @@ const PAROLES: readonly Parole[] = [
     dit: () => "Je viens de me promener, ça fait du bien.",
   },
   { id: "energie", poids: ({ envies }) => (envies.energie > 0.7 ? 1.4 : 0), dit: () => "J'ai de l'énergie, là. Ça se sent dans mes traits." },
+  {
+    // Ce qui pèse vraiment sur elle lui échappe : seulement si la raison est assez forte pour être vraie, avec sa phrase à elle.
+    id: "aparte",
+    poids: ({ raisons }) => ((raisons?.[0]?.force ?? 0) >= 0.5 ? 0.6 + 2 * (raisons?.[0]?.force ?? 0) : 0),
+    dit: ({ raisons }) => {
+      const phrase = raisons?.[0]?.phrase ?? "";
+      return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}.`;
+    },
+  },
   { id: "et-toi", poids: () => 0.9, dit: ({ humeur }) => `Moi, je suis « ${LIBELLES_HUMEURS[humeur] ?? humeur} ». Et toi ?`, chips: puces("Bien", "Comme ci comme ça", "Fatigué") },
   { id: "listes", poids: () => 0.8, dit: () => "Les listes ou les courbes ?", chips: puces("Les listes", "Les courbes", "Les deux") },
   { id: "cafe", poids: () => 0.8, dit: () => "Café, thé ou rien ?", chips: puces("Café", "Thé", "Rien") },
@@ -268,6 +280,7 @@ export const SILHOUETTE_PAROLE: Readonly<Record<string, string>> = {
   blague: "musique",
   resume: "souvient",
   rien: "reflexion",
+  aparte: "reflexion",
 };
 
 const sansAccent = (t: string): string => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();

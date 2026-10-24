@@ -3653,6 +3653,15 @@ var PAROLES = [
     dit: () => "Je viens de me promener, \xE7a fait du bien."
   },
   { id: "energie", poids: ({ envies }) => envies.energie > 0.7 ? 1.4 : 0, dit: () => "J'ai de l'\xE9nergie, l\xE0. \xC7a se sent dans mes traits." },
+  {
+    // Ce qui pèse vraiment sur elle lui échappe : seulement si la raison est assez forte pour être vraie, avec sa phrase à elle.
+    id: "aparte",
+    poids: ({ raisons: raisons2 }) => (raisons2?.[0]?.force ?? 0) >= 0.5 ? 0.6 + 2 * (raisons2?.[0]?.force ?? 0) : 0,
+    dit: ({ raisons: raisons2 }) => {
+      const phrase = raisons2?.[0]?.phrase ?? "";
+      return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}.`;
+    }
+  },
   { id: "et-toi", poids: () => 0.9, dit: ({ humeur: humeur2 }) => `Moi, je suis \xAB ${LIBELLES_HUMEURS[humeur2] ?? humeur2} \xBB. Et toi ?`, chips: puces("Bien", "Comme ci comme \xE7a", "Fatigu\xE9") },
   { id: "listes", poids: () => 0.8, dit: () => "Les listes ou les courbes ?", chips: puces("Les listes", "Les courbes", "Les deux") },
   { id: "cafe", poids: () => 0.8, dit: () => "Caf\xE9, th\xE9 ou rien ?", chips: puces("Caf\xE9", "Th\xE9", "Rien") },
@@ -3706,7 +3715,8 @@ var SILHOUETTE_PAROLE = {
   respire: "reflexion",
   blague: "musique",
   resume: "souvient",
-  rien: "reflexion"
+  rien: "reflexion",
+  aparte: "reflexion"
 };
 var sansAccent = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 function questionSurSonHumeur(question) {
@@ -5303,7 +5313,7 @@ function mountLia(options = {}) {
     return dite;
   };
   let recentesParoles = [];
-  const contexteParole = () => ({ heure: (/* @__PURE__ */ new Date()).getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles });
+  const contexteParole = () => ({ heure: (/* @__PURE__ */ new Date()).getHours(), humeur: humeurNom, envies, faits, maintenant: Date.now(), recentes: recentesParoles, raisons: raisons(contextePensee()) });
   const contextePensee = () => {
     const maintenant = Date.now();
     return { humeur: humeurNom, actives: reseauActif ? top3(reseau) : [], envies, interieur, fond: humeurDeFond(souvenirs, maintenant), heure: new Date(maintenant).getHours(), faits, maintenant };
