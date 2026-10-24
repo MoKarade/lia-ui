@@ -64,6 +64,29 @@ describe("décrire un élément par défaut", () => {
   });
 });
 
+describe("décrire un élément sans texte visible : son libellé dit ce que c'est", () => {
+  const d = (id: string) => decrireParDefaut(document.getElementById(id) as HTMLElement);
+
+  it("un graphique SVG se décrit par son aria-label, ou par le <title> qu'il porte", () => {
+    html(`<svg id="g" role="img" aria-label="Courbe des recharges"><polyline points="0,1 2,3"/></svg><svg id="t"><title>Répartition par app</title></svg>`);
+    expect(d("g")).toEqual({ genre: "une image", texte: "Courbe des recharges" });
+    expect(d("t").texte).toBe("Répartition par app");
+  });
+
+  it("une image se décrit par son alt, puis par son attribut title", () => {
+    html(`<img id="i" alt="Photo de la voiture" src="data:,"><img id="j" title="Plan du quartier" src="data:,"><img id="k" src="data:,">`);
+    expect(d("i").texte).toBe("Photo de la voiture");
+    expect(d("j").texte).toBe("Plan du quartier");
+    expect(d("k").texte).toBeUndefined();
+  });
+
+  it("le texte visible reste prioritaire, et le libellé est assaini comme le reste", () => {
+    html(`<button id="b" aria-label="Fermer">Ok</button><img id="x" alt="<b>gras</b> &nbsp; dangereux" src="data:,">`);
+    expect(d("b").texte).toBe("Ok");
+    expect(d("x").texte).toBe("b gras /b dangereux");
+  });
+});
+
 describe("élément visé par un clic droit", () => {
   it("vise EXACTEMENT l'élément sous le doigt, jamais son bloc ni sa carte", () => {
     html(`<main><article id="art"><h3 id="titre">Titre</h3><span id="in">x</span><div id="vide"></div></article><p id="p">y</p></main><div id="couche"></div>`);
