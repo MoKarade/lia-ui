@@ -674,6 +674,88 @@ function vitessePourBond(depart, but, duree, p) {
   return { vx, vy };
 }
 
+// src/perchoir.ts
+var LARGEUR_MIN_RAYONS = 3.2;
+var VITESSE_BOND_MAX = 2600;
+var DEPLACEMENT_MAX = 40;
+var ARRIVEE_MIN = 150;
+var SEUIL_REBOND2 = 60;
+function surfaceDeCarte(carte, marge) {
+  return { y: carte.top - marge, gauche: carte.left + marge, droite: carte.right - marge };
+}
+function trajet(depart, but, duree, p) {
+  const v = vitessePourBond(depart, but, duree, p);
+  const libre = { x: -1e7, y: -1e7, w: 2e7, h: 2e7 };
+  const sans = { ...p, marge: 0 };
+  const c = { x: depart.x, y: depart.y, vx: v.vx, vy: v.vy };
+  let sommet = c.y;
+  const pas = 8e-3;
+  for (let t = 0; t < duree - 1e-9; t += pas) {
+    avancerBalle(c, Math.min(pas, duree - t), libre, sans);
+    sommet = Math.min(sommet, c.y);
+  }
+  return { vx: v.vx, vy: v.vy, sommet, arrivee: c.vy };
+}
+var ALLONGEMENTS = [0, 0.15, 0.3, 0.45];
+function choisirPerchoir(zone, cartes, depart, params) {
+  const marge = params.marge;
+  const largeurMin = params.largeurMin ?? params.rayon * LARGEUR_MIN_RAYONS;
+  const vitesseMax = params.vitesseMax ?? VITESSE_BOND_MAX;
+  const minX = zone.x + marge;
+  const maxX = zone.x + zone.w - marge;
+  const hautMin = zone.y + marge;
+  const sol = zone.y + zone.h - marge;
+  const physique = { gravite: params.gravite, frottement: params.frottement, restitutionSol: params.restitutionSol, restitutionMur: params.restitutionMur, marge };
+  const possibles = [];
+  cartes.forEach((carte, index) => {
+    if (![carte.left, carte.top, carte.right, carte.bottom].every(Number.isFinite)) return;
+    if (carte.right - carte.left < largeurMin || carte.bottom <= carte.top) return;
+    const s = surfaceDeCarte(carte, marge);
+    if (s.y < hautMin || s.y > sol) return;
+    const gauche = Math.max(s.gauche, minX);
+    const droite = Math.min(s.droite, maxX);
+    if (droite <= gauche) return;
+    const but = { x: Math.min(droite, Math.max(gauche, depart.x)), y: s.y };
+    const d = Math.hypot(but.x - depart.x, but.y - depart.y);
+    if (d < params.rayon * 2.5) return;
+    const base = Math.min(1, Math.max(0.6, 0.55 + d / 1500));
+    for (const plus of ALLONGEMENTS) {
+      const duree = base + plus;
+      const tr = trajet(depart, but, duree, physique);
+      if (Math.hypot(tr.vx, tr.vy) >= vitesseMax) continue;
+      if (tr.sommet < hautMin) continue;
+      if (tr.arrivee < ARRIVEE_MIN) continue;
+      possibles.push({ index, appui: { x: but.x, y: carte.top }, but, duree, vx: tr.vx, vy: tr.vy, sommet: tr.sommet, arrivee: tr.arrivee });
+      break;
+    }
+  });
+  if (possibles.length === 0) return null;
+  possibles.sort((a, b) => Math.hypot(a.but.x - depart.x, a.but.y - depart.y) - Math.hypot(b.but.x - depart.x, b.but.y - depart.y));
+  const u = Number.isFinite(params.choix) ? Math.min(0.999999, Math.max(0, params.choix ?? 0)) : 0;
+  return possibles[Math.floor(u * possibles.length)] ?? null;
+}
+function atterrir(c, yAvant, surface, p) {
+  if (c.x < surface.gauche - 1 || c.x > surface.droite + 1) return null;
+  if (yAvant > surface.y + 1e-3 || c.y < surface.y || c.vy <= 0) return null;
+  const vitesse = c.vy;
+  c.y = surface.y;
+  c.vy = vitesse < SEUIL_REBOND2 ? 0 : -vitesse * p.restitutionSol;
+  c.vx *= 0.2;
+  return { cote: "bas", vitesse };
+}
+function poseeSurSurface(c, surface) {
+  return Math.hypot(c.vx, c.vy) < 25 && Math.abs(c.y - surface.y) < 1.5;
+}
+function carteToujoursPerchable(carte, page, reference, zone, params) {
+  if (![carte.left, carte.top, carte.right, carte.bottom, page.x, page.y].every(Number.isFinite)) return false;
+  if (carte.right <= carte.left || carte.bottom <= carte.top) return false;
+  if (carte.right - carte.left < (params.largeurMin ?? params.rayon * LARGEUR_MIN_RAYONS)) return false;
+  if (Math.hypot(page.x - reference.x, page.y - reference.y) > DEPLACEMENT_MAX) return false;
+  const s = surfaceDeCarte(carte, params.marge);
+  if (s.y < zone.y + params.marge || s.y > zone.y + zone.h - params.marge) return false;
+  return Math.min(s.droite, zone.x + zone.w - params.marge) > Math.max(s.gauche, zone.x + params.marge);
+}
+
 // src/humeurs.ts
 var PROFILS_V9 = {
   confiant: { bs: 0.85, ba: 1, blr: 0.8, ga: 0.9, en: 1, tint: 0.08, sag: 0, jit: 0.5, tc: [170, 215, 200] },
@@ -3527,6 +3609,8 @@ function mountLia(options = {}) {
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
   const balle = { actif: false, depuis: 0, choc: false, fin: 0, but: { x: 0, y: 0 } };
   let bond = null;
+  let perchage = null;
+  let ombreY = Number.NaN;
   const ecr = { s: 0, v: 0, angle: 0 };
   let rayon = rayonBase;
   let rayonCible = rayonBase;
@@ -4408,6 +4492,7 @@ function mountLia(options = {}) {
     if (!glisse) return;
     const aBouge = glisse.deplace;
     glisse = null;
+    annulerPerchage();
     if (aBouge && vitesseGlisse > 2200) stimulerInterieur("choc", Math.min(1, vitesseGlisse / 4e3));
     vitesseGlisse = 0;
     dernierPoint = null;
@@ -4513,6 +4598,7 @@ function mountLia(options = {}) {
   }
   function allerVoir(element, secondes = 10, etatArrivee) {
     if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
+    annulerPerchage();
     const r = element.getBoundingClientRect();
     attention = {
       type: "element",
@@ -4528,6 +4614,7 @@ function mountLia(options = {}) {
   }
   function venirPres() {
     if (!peutBouger()) return false;
+    annulerPerchage();
     attention = null;
     const r = couche.getBoundingClientRect();
     const z = zoneVie();
@@ -4671,7 +4758,7 @@ function mountLia(options = {}) {
     pos.vy -= dy / d * 70;
   };
   const programmerBond = () => {
-    if (sansMouvement || doux) return false;
+    if (sansMouvement || doux || perchage) return false;
     const z = zoneVie();
     const but = dansZone(z, cible.x, cible.y, rayon * 0.6);
     const d = Math.hypot(but.x - pos.x, but.y - pos.y);
@@ -4685,6 +4772,61 @@ function mountLia(options = {}) {
     cible = { x: pos.x, y: pos.y };
     return true;
   };
+  const lireCarte = (el2) => {
+    if (!el2.isConnected) return null;
+    const v = el2.getBoundingClientRect();
+    const r = couche.getBoundingClientRect();
+    return { rect: { left: v.left - r.left, top: v.top - r.top, right: v.right - r.left, bottom: v.bottom - r.top }, page: { x: v.left + window.scrollX, y: v.top + window.scrollY } };
+  };
+  const programmerPerchage = () => {
+    if (sansMouvement || doux || perchage || bond) return false;
+    let liste;
+    try {
+      liste = [...document.querySelectorAll(selecteurCibles)];
+    } catch {
+      return false;
+    }
+    const f = fenetre();
+    const vues = [];
+    for (const el2 of liste) {
+      if (couche.contains(el2)) continue;
+      if (!estVisible(el2.getBoundingClientRect(), f)) continue;
+      const c = lireCarte(el2);
+      if (c) vues.push({ el: el2, ...c });
+    }
+    if (vues.length === 0) return false;
+    const params = { ...BALLE_DEFAUT, marge: rayon * 0.6, rayon, choix: Math.random() };
+    const p = choisirPerchoir(
+      zoneVie(),
+      vues.map((v) => v.rect),
+      pos,
+      params
+    );
+    const carte = p ? vues[p.index] : void 0;
+    if (!p || !carte) return false;
+    bond = { t0: t + 0.18, duree: p.duree, but: p.but, vx: p.vx, vy: p.vy };
+    perchage = { el: carte.el, ref: carte.page, limite: Number.POSITIVE_INFINITY, atterri: false, pose: false, dx: 0, jusqua: 0 };
+    cible = { x: pos.x, y: pos.y };
+    return true;
+  };
+  function annulerPerchage() {
+    if (!perchage) return;
+    perchage = null;
+    if (bond) {
+      bond = null;
+      cible = { x: pos.x, y: pos.y };
+    }
+  }
+  function descendre() {
+    perchage = null;
+    balle.actif = true;
+    balle.depuis = t;
+    balle.choc = true;
+    balle.fin = 0;
+    pos.vx = 0;
+    pos.vy = -260;
+    cible = { x: pos.x, y: pos.y };
+  }
   const lancer = (id, vues) => {
     comportement = id;
     derniereDecision = t;
@@ -4698,7 +4840,7 @@ function mountLia(options = {}) {
       passagere(pool[Math.floor(Math.random() * pool.length)] ?? "repos", entre(Math.random, 5, 8));
     } else if (id === "promener") {
       cible = pointDansZone(zoneVie(), Math.random(), Math.random(), rayon * 1.3);
-      if (!(Math.random() < 0.3 && programmerBond())) anticiper();
+      if (!(Math.random() < 0.3 && (Math.random() < 0.5 && programmerPerchage() || programmerBond()))) anticiper();
       errance = { jusqua: t + 5 + entre(Math.random, 1.8, 3.6) };
       choisir2("repos");
       calme(30);
@@ -4981,12 +5123,33 @@ function mountLia(options = {}) {
       cible = { x: pos.x, y: pos.y };
       bond = null;
     }
+    const paramsPerchoir = { ...BALLE_DEFAUT, marge: rayon * 0.6, rayon };
+    let carte = null;
+    let surface = null;
+    if (perchage) {
+      if (glisse || chatOuvert || menuOuvert || attention || sansMouvement || doux || still) annulerPerchage();
+      else {
+        carte = lireCarte(perchage.el);
+        const bonne = !!carte && carteToujoursPerchable(carte.rect, carte.page, perchage.ref, z, paramsPerchoir);
+        if (!carte || !bonne) {
+          if (perchage.pose) descendre();
+          else annulerPerchage();
+        } else if (perchage.pose && t >= perchage.jusqua) descendre();
+        else if (!perchage.pose && (t > perchage.limite || !bond && !balle.actif)) annulerPerchage();
+        else surface = surfaceDeCarte(carte.rect, paramsPerchoir.marge);
+      }
+      if (!perchage) {
+        carte = null;
+        surface = null;
+      }
+    }
     if (bond && !balle.actif) {
       if (t >= bond.t0) {
         balle.actif = true;
         balle.depuis = t;
         balle.choc = true;
-        balle.fin = t + bond.duree;
+        balle.fin = perchage ? 0 : t + bond.duree;
+        if (perchage) perchage.limite = t + bond.duree + 1.6;
         balle.but = bond.but;
         pos.vx = bond.vx;
         pos.vy = bond.vy;
@@ -5005,6 +5168,7 @@ function mountLia(options = {}) {
       phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
     } else if (balle.actif) {
       const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
+      const yAvant = pos.y;
       for (const imp of avancerBalle(pos, dt, z, params)) {
         frapper(ecr, imp.vitesse, normaleDe(imp.cote));
         if (imp.vitesse > 1400 && !balle.choc) {
@@ -5012,7 +5176,31 @@ function mountLia(options = {}) {
           stimulerInterieur("choc", Math.min(1, imp.vitesse / 3e3));
         }
       }
-      if (balle.fin && t >= balle.fin) {
+      let posee = false;
+      if (perchage && surface && carte && !perchage.pose) {
+        const imp = atterrir(pos, yAvant, surface, params);
+        if (imp) {
+          perchage.atterri = true;
+          if (imp.vitesse > 100) frapper(ecr, imp.vitesse, normaleDe("bas"));
+        }
+        if (perchage.atterri) {
+          pos.x = limiter2(pos.x, surface.gauche, surface.droite);
+          if (poseeSurSurface(pos, surface)) {
+            posee = true;
+            balle.actif = false;
+            pos.vx = pos.vy = 0;
+            pos.y = surface.y;
+            perchage.pose = true;
+            perchage.dx = pos.x - carte.rect.left;
+            perchage.jusqua = t + entre(Math.random, 8, 15);
+            errance = { jusqua: perchage.jusqua };
+            cible = { x: pos.x, y: pos.y };
+            choisir2(etatForce ?? "repos");
+          }
+        }
+      }
+      if (posee) {
+      } else if (balle.fin && t >= balle.fin) {
         balle.actif = false;
         balle.fin = 0;
         cible = { x: balle.but.x, y: balle.but.y };
@@ -5029,6 +5217,12 @@ function mountLia(options = {}) {
       phys.ay = limiter2(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
       phys.vxPrec = pos.vx;
       phys.vyPrec = pos.vy;
+    } else if (perchage?.pose && surface && carte) {
+      pos.x = limiter2(carte.rect.left + perchage.dx, surface.gauche, surface.droite);
+      pos.y = surface.y;
+      pos.vx = pos.vy = 0;
+      phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
+      phys.flotte = 0;
     } else {
       const demande = attention?.type === "element" && !attention.colle;
       const suit = attention?.type === "curseur";
@@ -5095,7 +5289,7 @@ function mountLia(options = {}) {
     }
     if (!mobile) phys.incl = phys.vIncl = 0;
     const filante = limiter2(vitesse / 700, 0, 1);
-    phys.flotte += ((mobile && vie && !glisse && !chatOuvert && !menuOuvert ? 1 : 0) - phys.flotte) * (still ? 1 : 1 - Math.exp(-dt * 2));
+    phys.flotte += ((mobile && vie && !glisse && !chatOuvert && !menuOuvert && !perchage ? 1 : 0) - phys.flotte) * (still ? 1 : 1 - Math.exp(-dt * (perchage ? 8 : 2)));
     const amp = rayon * 0.26 * phys.flotte * (1 - 0.7 * filante);
     const ox = amp * (Math.sin(t * 0.78 + 1.3) + 0.45 * Math.sin(t * 1.93));
     const oy = amp * 0.85 * (Math.cos(t * 0.61) + 0.4 * Math.sin(t * 1.51 + 0.7)) + rayon * 0.05 * filante * Math.sin(t * 8.2);
@@ -5127,11 +5321,15 @@ function mountLia(options = {}) {
     else ecr.s = ecr.v = 0;
     const ecrase = Math.abs(ecr.s) > 4e-3 ? ` rotate(${ecr.angle.toFixed(3)}rad) scale(${(1 - ecr.s).toFixed(3)},${(1 + ecr.s * 0.8).toFixed(3)}) rotate(${(-ecr.angle).toFixed(3)}rad)` : "";
     corpsEl.dataset["vol"] = balle.actif ? "1" : "0";
-    const solY = z.y + z.h - rayon * 0.6;
+    corpsEl.dataset["perche"] = perchage?.pose ? "1" : "0";
+    const surCarte = !!perchage && !perchage.pose && !!carte && !!surface && pos.x >= carte.rect.left && pos.x <= carte.rect.right;
+    const solY = surCarte && surface ? surface.y : z.y + z.h - rayon * 0.6;
+    const ombreVisee = surCarte && surface && carte ? Math.min(carte.rect.top + Math.min(rayon * 0.2, (carte.rect.bottom - carte.rect.top) / 2), surface.y + rayon * 0.6) : z.y + z.h - rayon * 0.3;
+    ombreY = still || !Number.isFinite(ombreY) ? ombreVisee : ombreY + (ombreVisee - ombreY) * (1 - Math.exp(-dt * 14));
     const haut = Math.max(0, solY - pos.y);
     const echelleOmbre = 1 / (1 + haut / 450);
     ombre.style.opacity = balle.actif && !still ? (0.95 * echelleOmbre).toFixed(2) : "0";
-    ombre.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${(z.y + z.h - rayon * 0.3).toFixed(1)}px) translate(-50%,-50%) scale(${(rayon * 2.2 * echelleOmbre / 100).toFixed(3)},${(rayon * 0.5 * echelleOmbre / 24).toFixed(3)})`;
+    ombre.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${ombreY.toFixed(1)}px) translate(-50%,-50%) scale(${(rayon * 2.2 * echelleOmbre / 100).toFixed(3)},${(rayon * 0.5 * echelleOmbre / 24).toFixed(3)})`;
     toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${ecrase}${etire > 4e-3 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
       puceHumeur.hidden = chatOuvert;
