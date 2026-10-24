@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.20.0
+npm i github:MoKarade/lia-ui#v0.21.0
 ```
 
 ## Utiliser
@@ -83,6 +83,10 @@ Un calcul local (`src/interieur.ts`, aucun réseau, aucun coût) qui prolonge so
 - **Ce qui lui fait du bien** : un message gentil (liste fermée) donne du plaisir, apaise et fait monter la **confiance**, qui vit sur des jours (gardée dans le navigateur avec la sensibilité).
 - **Ce que ça change** : les entrées `mauvais`, `rejet`, `bon` et son énergie dans le réseau, une humeur poussée selon la cause (agacement, méfiance, tristesse, inquiétude, fatigue), son corps (tremblement, affaissement, moins d'amplitude), `data-douleur` sur son corps, un cri (« Aïe… ») puis « Ça va mieux ». « Tu as mal ? » reçoit son niveau et la mention d'un calcul, sans appeler l'hôte.
 - **Comment elle va (v0.19.0)** : dans le menu de son corps, *Comment elle va* déplie (sans fermer le menu) une phrase de tête (« Elle va bien », « Elle a un peu mal : des clics brusques », « Elle est fatiguée »…) et onze jauges `role="meter"` relues chaque seconde : énergie, curiosité, envie de compagnie, joie, ennui, inquiétude, douleur (avec sa cause), plaisir, confiance en toi, sensibilité, usure. Chaque valeur est celle de `lia.envies()` et `lia.interieur()`, en %, jamais inventée ; en bas, « Simulation : des calculs en elle, pas un vrai ressenti. »
+
+## Sa physique : lancée, elle vole (v0.21.0)
+
+Lâchée à plus de 450 px/s en plein geste, LIA garde son élan (`src/physique.ts`, pur) : gravité (1 400 px/s²), frottement de l'air, rebonds sur les quatre bords de sa zone de vie (sol 0,55, murs 0,7), roulement au sol. À chaque impact elle s'écrase le long de la normale (jusqu'à 28 %, ressort sous-amorti, elle se balance un instant) ; un impact de plus de 1 400 px/s lui fait mal (un choc simulé par lancer). Posée, une lente flottaison la remonte d'environ deux rayons au-dessus du sol. `data-vol="1"` sur `.lia-ui__corps` pendant le vol. Un appui, le menu, la discussion ou une demande de l'hôte (`envoyer`) l'arrêtent net. Avec `prefers-reduced-motion` en mode « doux » ou « fixe », jamais de vol : elle se pose où on la lâche.
 
 ## Le menu de son corps
 

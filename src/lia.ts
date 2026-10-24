@@ -18,6 +18,7 @@ import {
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, vieillir, garder as garderInterieur, type Stimulus } from "./interieur.js";
 import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
+import { auRepos, avancerBalle, BALLE_DEFAUT, frapper, normaleDe, relacherEcrasement, type Ecrasement } from "./physique.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
@@ -251,6 +252,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   /** Physique du corps : accélération filtrée (les traits la subissent), inclinaison sur ressort, flottement. */
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
+  /** Lancée par Marc : un vol avec élan, gravité et rebonds (src/physique.ts) jusqu'à ce qu'elle se pose ; `ecr` est son écrasement à l'impact. */
+  const balle = { actif: false, depuis: 0, choc: false };
+  const ecr: Ecrasement = { s: 0, v: 0, angle: 0 };
   let rayon = rayonBase;
   /** Le rayon qu'elle rejoint en douceur (`setRayon`) : plus grande au centre d'un accueil, plus petite ailleurs. */
   let rayonCible = rayonBase;
@@ -1225,7 +1229,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       cible = { x: pos.x, y: pos.y };
       errance = { jusqua: t + 7 };
       relache = t;
-      choisir("content");
+      // Lâchée en pleine course : elle garde son élan et vole (gravité, rebonds), sauf si le système demande de réduire le mouvement.
+      const lancee = !sansMouvement && !doux && Math.hypot(pos.vx, pos.vy) > 450;
+      if (lancee) {
+        balle.actif = true;
+        balle.depuis = t;
+        balle.choc = false;
+        pos.vx = limiter(pos.vx, -2600, 2600);
+        pos.vy = limiter(pos.vy, -2600, 2600);
+      }
+      choisir(lancee ? "surpris" : "content");
       memoriser();
       setTimeout(() => {
         if (!detruit && !chatOuvert && !parle) choisir(etatForce ?? "repos");
@@ -1302,7 +1315,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const f = fenetre();
     return liste.filter((x) => !couche.contains(x) && estRegarde(x.getBoundingClientRect(), f));
   };
-  const peutBouger = (): boolean => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !detruit;
+  const peutBouger = (): boolean => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !balle.actif && !detruit;
 
   function finAttention(): void {
     // Tant que la discussion est posée sur l'élément (cadre `reperee`), elle le regarde encore : le marqueur reste.
@@ -1818,11 +1831,39 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
     // Collée à un élément : exactement sur lui, sans retard ni flottement quand la page défile.
     const colle = attention?.type === "element" && attention.colle;
+    // Un appui, un menu, la discussion ou une demande de l'hôte l'arrêtent en plein vol : elle reste où elle est.
+    if (balle.actif && (glisse || chatOuvert || menuOuvert || attention || sansMouvement || doux || still)) {
+      balle.actif = false;
+      cible = { x: pos.x, y: pos.y };
+    }
     if (sansMouvement || doux || still) {
       pos.x = cc.x;
       pos.y = cc.y;
       pos.vx = pos.vy = 0;
       phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
+    } else if (balle.actif) {
+      // Le vol : élan, gravité, frottement de l'air, rebonds sur les bords de sa zone. Un impact l'écrase ; un très fort lui fait mal, une fois.
+      const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
+      for (const imp of avancerBalle(pos, dt, z, params)) {
+        frapper(ecr, imp.vitesse, normaleDe(imp.cote));
+        if (imp.vitesse > 1400 && !balle.choc) {
+          balle.choc = true;
+          stimulerInterieur("choc", Math.min(1, imp.vitesse / 3000));
+        }
+      }
+      if (auRepos(pos, z, params) || t - balle.depuis > 9) {
+        // Posée : une lente flottaison la remonte d'environ deux rayons au-dessus du sol.
+        balle.actif = false;
+        pos.vx = pos.vy = 0;
+        cible = dansZone(z, pos.x, pos.y - rayon * 2, rayon * 0.6);
+        choisir(etatForce ?? "repos");
+      }
+      const pas = Math.max(dt, 0.008);
+      const lisse = 1 - Math.exp(-dt * 18);
+      phys.ax = limiter(phys.ax + ((pos.vx - phys.vxPrec) / pas - phys.ax) * lisse, -2600, 2600);
+      phys.ay = limiter(phys.ay + ((pos.vy - phys.vyPrec) / pas - phys.ay) * lisse, -2600, 2600);
+      phys.vxPrec = pos.vx;
+      phys.vyPrec = pos.vy;
     } else {
       // Un corps qui a une masse : il accélère, file, freine et dépasse un peu sa cible avant de s'y poser (ressort un peu mou,
       // vitesse et accélération bornées). Une demande de Marc la fait courir ; la balade est une glissade lente de 2 à 3 s.
@@ -1927,7 +1968,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     // Étirement léger le long de sa course, et inclinaison : sur la toile seulement (la pastille et la zone cliquable restent droites).
     const etire = 0.07 * filante;
     const cap = Math.atan2(pos.vy, pos.vx);
-    toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${etire > 0.004 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
+    if (!still) relacherEcrasement(ecr, dt);
+    else ecr.s = ecr.v = 0;
+    const ecrase = Math.abs(ecr.s) > 0.004 ? ` rotate(${ecr.angle.toFixed(3)}rad) scale(${(1 - ecr.s).toFixed(3)},${(1 + ecr.s * 0.8).toFixed(3)}) rotate(${(-ecr.angle).toFixed(3)}rad)` : "";
+    corpsEl.dataset["vol"] = balle.actif ? "1" : "0";
+    toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${ecrase}${etire > 0.004 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
       puceHumeur.hidden = chatOuvert;
       // Sous son corps ; près du bas de la zone, elle se glisse plus haut pour ne jamais sortir de l'écran.
