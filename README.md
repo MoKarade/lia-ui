@@ -164,6 +164,10 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 />
 ```
 
+### Réponses courtes, humaines, visuelles (v0.36.1)
+
+Les trois entrées du menu d'un élément (« Explique-moi ça », « Que changer ici ? », « Regarde ça avec moi ») ajoutent à la question une consigne de forme : deux ou trois phrases parlées, au plus un ou deux chiffres qui comptent (les autres seulement si Marc les demande), et un bloc visuel (jauge, courbe, frise…) quand il montre mieux que des mots. Le contrat `ask` ne change pas ; en mode « Poser une question », rien n'est ajouté : Marc garde la main sur la longueur. Que le modèle dessine ou non un bloc dépend de l'hôte et de MemoryAI (outil de blocs).
+
 ### Pas de cadre, la discussion ne recouvre pas l'élément (v0.36.0)
 
 Quand elle analyse un élément, rien n'est dessiné autour de lui : seuls ses 100 nanobots travaillent (le cadre arrondi `.lia-ui__repere` qui apparaissait quand ils rentraient est supprimé). La discussion se pose à côté d'elle, puis en dessous, puis au-dessus, sans recouvrir l'élément dont elle parle quand une place existe (`src/placement.ts`).

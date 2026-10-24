@@ -163,6 +163,21 @@ describe("titre, étiquette et question", () => {
     expect(composerQuestion("changer", d)).not.toContain("Ne répète pas");
   });
 
+  it("les trois entrées demandent une réponse courte, parlée, peu de chiffres et du visuel", () => {
+    for (const mode of ["expliquer", "changer", "regarder"] as const) {
+      const q = composerQuestion(mode, d);
+      expect(q).toContain("deux ou trois phrases parlées");
+      expect(q).toContain("Au plus un ou deux chiffres");
+      expect(q).toContain("seulement si je te les demande");
+      expect(q).toContain("bloc visuel");
+      expect(q.length).toBeLessThanOrEqual(2000);
+    }
+  });
+
+  it("en mode question, la consigne de forme n'est pas ajoutée : Marc garde la main sur la longueur", () => {
+    expect(composerQuestion("question", d, "Détaille tout")).not.toContain("deux ou trois phrases");
+  });
+
   it("en mode question, la question de Marc passe en tête, telle quelle", () => {
     const q = composerQuestion("question", d, "  Pourquoi hors ligne ?  ");
     expect(q.startsWith("Pourquoi hors ligne ?\n")).toBe(true);

@@ -250,13 +250,23 @@ export function etiquetteMessage(mode: ModeElement, d: ElementDecrit): string {
   return d.texte ? `${libelle} : « ${nettoyer(d.texte, 60)} »` : `${libelle} (${d.genre})`;
 }
 
+/**
+ * Le ton demandé par Marc (24/10/2026) : une réponse courte et parlée, pas un tas de chiffres, et du visuel
+ * quand l'hôte sait dessiner des blocs. Le modèle reste libre d'en dire plus si Marc le demande ensuite.
+ */
+const FORME =
+  " Réponds en deux ou trois phrases parlées, comme à voix haute. Au plus un ou deux chiffres, ceux qui comptent ; les autres seulement si je te les demande. Si un bloc visuel (jauge, courbe, frise…) montre mieux que des mots, utilise-le.";
+
 const CONSIGNES: Record<Exclude<ModeElement, "question">, string> = {
   expliquer:
-    "Explique-moi cet élément de la page, simplement et en peu de mots. Ne répète pas ce qui est déjà affiché : apporte ce que je ne vois pas (ce que ça veut dire, d'où ça vient, ce qui a changé, quoi en faire). Si tu ne le sais pas, dis-le.",
+    "Explique-moi cet élément de la page, simplement. Ne répète pas ce qui est déjà affiché : apporte ce que je ne vois pas (ce que ça veut dire, d'où ça vient, ce qui a changé, quoi en faire). Si tu ne le sais pas, dis-le." +
+    FORME,
   changer:
-    "Que pourrait-on changer ici ? Tu ne modifies rien toi-même : propose des idées, en peu de mots.",
+    "Que pourrait-on changer ici ? Tu ne modifies rien toi-même : propose une ou deux idées, pas une liste." +
+    FORME,
   regarder:
-    "Regarde cet élément avec moi et dis ce qui compte vraiment. Ne répète pas ce qui est déjà affiché : dis ce que je ne vois pas. Si tu ne le sais pas, dis-le.",
+    "Regarde cet élément avec moi et dis ce qui compte vraiment. Ne répète pas ce qui est déjà affiché : dis ce que je ne vois pas. Si tu ne le sais pas, dis-le." +
+    FORME,
 };
 
 /**
