@@ -1,5 +1,5 @@
-import { O as OptionsLia, L as LiaHandle } from './types-BkCrPr6p.js';
-export { A as ActionLia, C as CAUSES, a as COMPORTEMENTS, b as Candidat, c as Cause, d as Comportement, e as ContexteLia, D as Decision, f as DescriptionElement, g as ENVIES_DEPART, h as Envies, i as EnvoiLia, E as EtatHote, j as EtatLia, F as FaitLia, G as GENRES_SOUVENIR, k as GESTES, l as GenreSouvenir, m as GesteLia, H as HUMEURS_LIA, n as HUMEURS_MENU, o as Hasard, p as HumeurDeFond, q as HumeurLia, I as Interieur, r as LIBELLE_HUMEUR, M as MotifMonde, s as MotifSpontane, t as OptionsElements, P as ParoleSpontanee, u as PropositionMonde, v as PuceLia, R as ReponseLia, S as SOUVENIR_DEMI_VIE_JOURS, w as Souvenir, Z as ZoneVie, x as ajouterSouvenir, y as apresComportement, z as candidats, B as choisirComportement, J as dansZone, K as humeurDeFond, N as majEnvies, Q as phraseDeRetour, T as poidsActuel, U as pointDansZone, V as prochaineDecision, W as validerEtat } from './types-BkCrPr6p.js';
+import { O as OptionsLia, L as LiaHandle } from './types-CDLsYyLx.js';
+export { A as ActionLia, C as CAUSES, a as COMPORTEMENTS, b as Candidat, c as Cause, d as Comportement, e as ContexteLia, D as Decision, f as DescriptionElement, g as ENVIES_DEPART, h as Envies, i as EnvoiLia, E as EtatHote, j as EtatLia, F as FaitLia, G as GENRES_SOUVENIR, k as GESTES, l as GenreSouvenir, m as GesteLia, H as HUMEURS_LIA, n as HUMEURS_MENU, o as Hasard, p as HumeurDeFond, q as HumeurLia, I as Interieur, r as LIBELLE_HUMEUR, M as MotifMonde, s as MotifSpontane, t as OptionsElements, P as ParoleSpontanee, u as PropositionMonde, v as PuceLia, R as ReponseLia, S as SOUVENIR_DEMI_VIE_JOURS, w as Souvenir, Z as ZoneVie, x as ajouterSouvenir, y as apresComportement, z as candidats, B as choisirComportement, J as dansZone, K as humeurDeFond, N as majEnvies, Q as phraseDeRetour, T as poidsActuel, U as pointDansZone, V as prochaineDecision, W as validerEtat } from './types-CDLsYyLx.js';
 
 /** Le nom de chacune des 40 humeurs (noms, pas d'accord : « Humeur : sérénité »), pour la pastille que LIA dessine. */
 declare const LIBELLES_HUMEURS: Readonly<Record<string, string>>;
@@ -30,7 +30,11 @@ interface ElementDecrit {
     /** Le texte visible, déjà court. */
     texte?: string;
 }
-/** Les éléments que le clic droit vise d'abord : le plus proche ancêtre qui correspond, sinon l'élément lui-même. */
+/**
+ * Les unités que l'hôte déclare (`data-lia-genre`, `data-lia-cible`) et les blocs courants. Le clic droit ne s'y arrête PLUS :
+ * il vise l'élément précis sous le doigt (Marc, 24/10 : « ça analyse pas forcément ce que je clique »). Ce sélecteur ne sert
+ * plus que de repli documenté, exporté pour les hôtes qui le lisaient.
+ */
 declare const SELECTEUR_ELEMENTS = "[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1, h2, h3, h4, button, a, label";
 /**
  * Décrit un élément quand l'hôte ne le fait pas : `data-lia-genre`, `data-lia-app` (sur lui ou un

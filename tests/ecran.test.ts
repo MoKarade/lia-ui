@@ -65,11 +65,22 @@ describe("décrire un élément par défaut", () => {
 });
 
 describe("élément visé par un clic droit", () => {
-  it("prend le plus proche ancêtre qui correspond, sinon l'élément lui-même", () => {
-    html(`<main><article id="art"><span id="in">x</span></article><p id="p">y</p></main><div id="couche"></div>`);
+  it("vise EXACTEMENT l'élément sous le doigt, jamais son bloc ni sa carte", () => {
+    html(`<main><article id="art"><h3 id="titre">Titre</h3><span id="in">x</span><div id="vide"></div></article><p id="p">y</p></main><div id="couche"></div>`);
     const couche = document.getElementById("couche") as HTMLElement;
-    expect(elementVise(document.getElementById("in"), SELECTEUR_ELEMENTS, couche)?.id).toBe("art");
-    expect(elementVise(document.getElementById("p"), SELECTEUR_ELEMENTS, couche)?.id).toBe("p");
+    for (const id of ["in", "titre", "vide", "p", "art"]) expect(elementVise(document.getElementById(id), SELECTEUR_ELEMENTS, couche)?.id, id).toBe(id);
+  });
+
+  it("une marque vide (point, pastille) dans un bouton ou un titre vise le bouton ou le titre, pas la marque", () => {
+    html(`<button id="b"><i id="point"></i>Ok</button><h2 id="h"><span id="pastille"></span>Titre</h2><div id="couche"></div>`);
+    const couche = document.getElementById("couche") as HTMLElement;
+    expect(elementVise(document.getElementById("point"), SELECTEUR_ELEMENTS, couche)?.id).toBe("b");
+    expect(elementVise(document.getElementById("pastille"), SELECTEUR_ELEMENTS, couche)?.id).toBe("h");
+  });
+
+  it("un sélecteur propre à l'hôte garde son sens d'avant : le plus proche ancêtre qui correspond", () => {
+    html(`<article id="art"><span id="in">x</span></article><div id="couche"></div>`);
+    expect(elementVise(document.getElementById("in"), "article", document.getElementById("couche") as HTMLElement)?.id).toBe("art");
   });
 
   it("laisse le menu du navigateur sur un champ, la page vide, ou LIA elle-même", () => {
@@ -153,7 +164,7 @@ describe("tout ce que Marc touche", () => {
     const vise = (id: string): Element | null => elementVise(document.getElementById(id), SELECTEUR_ELEMENTS, couche);
     expect(vise("p")?.id).toBe("p");
     expect(genreParDefaut(vise("p") as Element)).toBe("un paragraphe");
-    expect(vise("td")?.tagName).toBe("TR");
+    expect(vise("td")?.id).toBe("td");
     expect(vise("trace")?.id).toBe("g");
     expect(genreParDefaut(vise("g") as Element)).toBe("un graphique");
     expect(genreParDefaut(vise("i") as Element)).toBe("une image");

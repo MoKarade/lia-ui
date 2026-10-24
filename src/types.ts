@@ -111,8 +111,9 @@ export interface DescriptionElement {
 /** Le clic droit sur un élément de la page (comme la maquette : expliquer, que changer, regarder, question). */
 export interface OptionsElements {
   /**
-   * Éléments visés en premier : le plus proche ancêtre (ou l'élément lui-même) qui correspond. Défaut :
-   * `[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1…h4, button, a, label` ; à défaut un média (`img`, `svg`, `canvas`) ou un paragraphe, une cellule, une citation…
+   * Si l'hôte le règle : le plus proche ancêtre (ou l'élément lui-même) qui correspond. Sans lui (défaut, v0.26.0) :
+   * EXACTEMENT l'élément sous le doigt (un texte, un chiffre, une cellule, une image), sauf un morceau de graphique (le graphique ou la
+   * partie nommée) et une icône ou une marque vide dans un bouton ou un titre (le bouton ou le titre).
    */
   selecteur?: string;
   /**

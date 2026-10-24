@@ -51,8 +51,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("lancée par Marc : élan, gravité, rebonds", () => {
-  it("lâchée en pleine course vers la droite elle vole, rebondit sur le mur et retombe au sol, puis se pose", () => {
+describe("lancée par Marc : élan, rebonds, aucune gravité", () => {
+  it("lâchée en pleine course elle file droit avec son élan, rebondit sur le mur, ralentit et flotte là où elle s'arrête (elle ne tombe pas)", () => {
     monter();
     seconde(2);
     const depart = aumilieu();
@@ -70,13 +70,32 @@ describe("lancée par Marc : élan, gravité, rebonds", () => {
       xs.push(p.x);
       ys.push(p.y);
     }
-    // Elle va vers la droite, touche le mur de droite (moins sa marge), et retombe : sa hauteur finit plus bas que son sommet.
+    // Elle va vers la droite et touche le mur de droite (moins sa marge).
     expect(Math.max(...xs)).toBeGreaterThan(depart.x + 250);
-    expect(Math.min(...ys)).toBeLessThan(ys[ys.length - 1] ?? 0);
-    // Posée : le vol s'arrête avant 9 s et elle ne dépasse jamais sa zone.
+    // Sans gravité : sa hauteur ne se creuse jamais en arc, elle monte (ou rebondit sur le plafond) sans jamais redescendre au sol.
+    expect(Math.min(...ys)).toBeLessThan(depart.y - 40);
+    expect(ys[ys.length - 1] ?? 600).toBeLessThan(560);
+    // Elle s'est arrêtée où elle était arrivée : le vol est fini avant 9 s, et elle ne dépasse jamais sa zone.
     expect(corps().dataset["vol"]).toBe("0");
+    const fin = position();
+    seconde(1);
+    expect(Math.hypot(position().x - fin.x, position().y - fin.y)).toBeLessThan(40);
     for (const x of xs) expect(x).toBeLessThanOrEqual(900);
     for (const y of ys) expect(y).toBeLessThanOrEqual(600);
+  });
+
+  it("lancée à l'horizontale, sa hauteur ne bouge pas d'un pixel : rien ne la tire vers le bas", () => {
+    monter();
+    seconde(2);
+    const d = aumilieu();
+    tirer(d.x, d.y, d.x + 300, d.y, 100);
+    evt("pointerup", d.x + 300, d.y);
+    const ys: number[] = [];
+    for (let k = 0; k < 40; k++) {
+      seconde(0.1);
+      ys.push(position().y);
+    }
+    for (const y of ys) expect(Math.abs(y - d.y)).toBeLessThan(25);
   });
 
   it("un impact fort lui fait mal (un choc simulé, une seule fois par lancer)", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auRepos, avancerBalle, BALLE_DEFAUT, ECRASEMENT_MAX, energie, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Corps, type Ecrasement, type ParamsBalle } from "../src/physique.js";
+import { auRepos, avancerBalle, BALLE_DEFAUT, BALLE_LIBRE, ECRASEMENT_MAX, energie, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Corps, type Ecrasement, type ParamsBalle } from "../src/physique.js";
 
 const zone = { x: 0, y: 0, w: 1000, h: 700 };
 const p: ParamsBalle = { ...BALLE_DEFAUT, marge: 60 };
@@ -143,5 +143,28 @@ describe("le bond : arriver au point voulu à l'heure dite", () => {
   it("une durée absurde ne donne ni NaN ni vitesse infinie", () => {
     const v = vitessePourBond({ x: 0, y: 0 }, { x: 300, y: 0 }, -5, { ...BALLE_DEFAUT, marge: 0 });
     expect(Number.isFinite(v.vx + v.vy)).toBe(true);
+  });
+});
+
+describe("lancer sans gravité (BALLE_LIBRE)", () => {
+  const libre: ParamsBalle = { ...BALLE_LIBRE, marge: 60 };
+  it("file en ligne droite : la vitesse verticale ne change que par le frottement, jamais vers le bas", () => {
+    const c: Corps = { x: 200, y: 300, vx: 800, vy: 0 };
+    for (let k = 0; k < 20; k++) avancerBalle(c, 0.05, zone, libre);
+    expect(c.y).toBeCloseTo(300, 6);
+    expect(c.vy).toBe(0);
+  });
+  it("garde sa direction jusqu'au bord, rebondit presque entier et ralentit", () => {
+    const c: Corps = { x: 500, y: 300, vx: 900, vy: -300 };
+    const impacts: ReturnType<typeof avancerBalle> = [];
+    for (let k = 0; k < 190; k++) impacts.push(...avancerBalle(c, 0.016, zone, libre));
+    expect(impacts.some((i) => i.cote === "droite")).toBe(true);
+    expect(impacts.some((i) => i.cote === "haut")).toBe(true);
+    expect(Math.hypot(c.vx, c.vy)).toBeLessThan(Math.hypot(900, 300));
+  });
+  it("s'arrête où elle est, pas forcément au sol", () => {
+    const c: Corps = { x: 400, y: 250, vx: 10, vy: 5 };
+    expect(auRepos(c, zone, libre)).toBe(true);
+    expect(auRepos(c, zone, p)).toBe(false);
   });
 });

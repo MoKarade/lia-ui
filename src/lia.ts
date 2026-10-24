@@ -18,7 +18,7 @@ import {
 import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, vieillir, garder as garderInterieur, type Stimulus } from "./interieur.js";
 import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
-import { auRepos, avancerBalle, BALLE_DEFAUT, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Ecrasement } from "./physique.js";
+import { auRepos, avancerBalle, BALLE_DEFAUT, BALLE_LIBRE, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Ecrasement } from "./physique.js";
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
@@ -275,7 +275,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** Physique du corps : accélération filtrée (les traits la subissent), inclinaison sur ressort, flottement. */
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
   /** Lancée par Marc : un vol avec élan, gravité et rebonds (src/physique.ts) jusqu'à ce qu'elle se pose ; `ecr` est son écrasement à l'impact. */
-  const balle = { actif: false, depuis: 0, choc: false, fin: 0, but: { x: 0, y: 0 } };
+  const balle = { actif: false, depuis: 0, choc: false, fin: 0, libre: false, but: { x: 0, y: 0 } };
   /** Un bond décidé par elle : elle s'accroupit un instant, puis part en arc vers `but` et y arrive à `t0 + duree`. Annulé comme un vol. */
   let bond: { t0: number; duree: number; but: { x: number; y: number }; vx: number; vy: number } | null = null;
   /**
@@ -1287,13 +1287,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       cible = { x: pos.x, y: pos.y };
       errance = { jusqua: t + 7 };
       relache = t;
-      // Lâchée en pleine course : elle garde son élan et vole (gravité, rebonds), sauf si le système demande de réduire le mouvement.
+      // Lâchée en pleine course : elle garde son élan et file SANS gravité (frottement léger, rebonds sur les bords), sauf si le système demande de réduire le mouvement.
       const lancee = !sansMouvement && !doux && Math.hypot(pos.vx, pos.vy) > 450;
       if (lancee) {
         balle.actif = true;
         balle.depuis = t;
         balle.choc = false;
         balle.fin = 0;
+        balle.libre = true;
         pos.vx = limiter(pos.vx, -2600, 2600);
         pos.vy = limiter(pos.vy, -2600, 2600);
       }
@@ -1669,6 +1670,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     balle.depuis = t;
     balle.choc = true;
     balle.fin = 0;
+    balle.libre = false;
     pos.vx = 0;
     pos.vy = -260;
     cible = { x: pos.x, y: pos.y };
@@ -2042,6 +2044,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         balle.actif = true;
         balle.depuis = t;
         balle.choc = true;
+        balle.libre = false;
         // Vers une carte, il n'y a pas d'heure d'arrivée : c'est la carte qui la reçoit (atterrir), avec un délai de grâce.
         balle.fin = perchage ? 0 : t + bond.duree;
         if (perchage) perchage.limite = t + bond.duree + 1.6;
@@ -2064,7 +2067,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
     } else if (balle.actif) {
       // Le vol : élan, gravité, frottement de l'air, rebonds sur les bords de sa zone. Un impact l'écrase ; un très fort lui fait mal, une fois.
-      const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
+      const params = { ...(balle.libre ? BALLE_LIBRE : BALLE_DEFAUT), marge: rayon * 0.6 };
       const yAvant = pos.y;
       for (const imp of avancerBalle(pos, dt, z, params)) {
         frapper(ecr, imp.vitesse, normaleDe(imp.cote));
@@ -2109,7 +2112,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         // Posée : une lente flottaison la remonte d'environ deux rayons au-dessus du sol.
         balle.actif = false;
         pos.vx = pos.vy = 0;
-        cible = dansZone(z, pos.x, pos.y - rayon * 2, rayon * 0.6);
+        // Sans gravité elle flotte où elle s'est arrêtée ; après une chute, une lente flottaison la remonte.
+        cible = balle.libre ? { x: pos.x, y: pos.y } : dansZone(z, pos.x, pos.y - rayon * 2, rayon * 0.6);
         choisir(etatForce ?? "repos");
       }
       const pas = Math.max(dt, 0.008);
@@ -2242,7 +2246,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     ombreY = still || !Number.isFinite(ombreY) ? ombreVisee : ombreY + (ombreVisee - ombreY) * (1 - Math.exp(-dt * 14));
     const haut = Math.max(0, solY - pos.y);
     const echelleOmbre = 1 / (1 + haut / 450);
-    ombre.style.opacity = balle.actif && !still ? (0.95 * echelleOmbre).toFixed(2) : "0";
+    ombre.style.opacity = balle.actif && !balle.libre && !still ? (0.95 * echelleOmbre).toFixed(2) : "0";
     ombre.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${ombreY.toFixed(1)}px) translate(-50%,-50%) scale(${((rayon * 2.2 * echelleOmbre) / 100).toFixed(3)},${((rayon * 0.5 * echelleOmbre) / 24).toFixed(3)})`;
     toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${ecrase}${etire > 0.004 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {

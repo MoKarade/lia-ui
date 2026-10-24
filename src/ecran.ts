@@ -24,16 +24,20 @@ export interface ElementDecrit {
   texte?: string;
 }
 
-/** Les éléments que le clic droit vise d'abord : le plus proche ancêtre qui correspond, sinon l'élément lui-même. */
+/**
+ * Les unités que l'hôte déclare (`data-lia-genre`, `data-lia-cible`) et les blocs courants. Le clic droit ne s'y arrête PLUS :
+ * il vise l'élément précis sous le doigt (Marc, 24/10 : « ça analyse pas forcément ce que je clique »). Ce sélecteur ne sert
+ * plus que de repli documenté, exporté pour les hôtes qui le lisaient.
+ */
 export const SELECTEUR_ELEMENTS =
   "[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1, h2, h3, h4, button, a, label";
 
-/** Une image, un graphique, une vidéo : visés eux-mêmes même à l'intérieur d'une carte (Marc : « tout ce que je clique »). */
+/** Une image, un graphique, une vidéo. */
 const MEDIAS = "img, svg, canvas, picture, video";
-/** Une icône dans un bouton ou un titre : c'est le bouton ou le titre qu'on vise, pas l'icône. */
+/** Un contrôle ou un titre : une petite icône ou une marque vide posée dedans vise le contrôle, pas la marque. */
 const PRIORITAIRES = "button, a, label, h1, h2, h3, h4, summary";
-/** Ce qui est visé à défaut de bloc : un paragraphe, une cellule… plutôt qu'un conteneur anonyme. */
-const SECOURS = "p, td, th, blockquote, pre, details, summary, nav, header, footer, aside";
+/** Sous cette taille (en px, côté le plus long), une image ou un graphique dans un contrôle est une icône. */
+const TAILLE_ICONE = 40;
 
 /** Là où LIA ne prend jamais le clic droit : le menu du navigateur reste. */
 const EXCLUS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], [data-lia-ignorer]";
@@ -93,6 +97,21 @@ const GENRES_BALISE: Record<string, string> = {
   CODE: "du code",
   DETAILS: "un bloc repliable",
   SUMMARY: "un titre repliable",
+  SPAN: "un texte",
+  B: "un texte en gras",
+  STRONG: "un texte en gras",
+  I: "un texte en italique",
+  EM: "un texte en italique",
+  SMALL: "un petit texte",
+  MARK: "un texte surligné",
+  TIME: "une date",
+  UL: "une liste",
+  OL: "une liste",
+  DL: "une liste de définitions",
+  TBODY: "un tableau",
+  THEAD: "un tableau",
+  FORM: "un formulaire",
+  OPTION: "un choix",
 };
 
 const GENRES_ROLE: Record<string, string> = {
@@ -118,13 +137,40 @@ export function genreParDefaut(cible: Element): string {
  */
 export function decrireParDefaut(cible: Element): ElementDecrit {
   const genre = cible.getAttribute("data-lia-genre") ?? genreParDefaut(cible);
-  const nom = cible.closest("[data-lia-app]")?.getAttribute("data-lia-app") ?? undefined;
+  // Le bloc auquel il appartient : l'app, sinon l'unité que l'hôte a déclarée autour (« une carte d'app »), pour qu'un morceau de carte reste situé.
+  const nom =
+    cible.closest("[data-lia-app]")?.getAttribute("data-lia-app") ??
+    cible.parentElement?.closest("[data-lia-genre]")?.getAttribute("data-lia-genre") ??
+    undefined;
   const visible = (cible as HTMLElement).innerText;
   const texte = typeof visible === "string" ? visible : (cible.textContent ?? "");
   return normaliser({ genre, ...(nom ? { nom } : {}), texte });
 }
 
-/** L'élément que vise un clic droit, ou `null` quand LIA doit laisser le menu du navigateur. */
+/** Vrai quand l'élément n'a ni texte à lui, ni enfant, ni rôle de média : une marque (point, pastille, icône en CSS). */
+function estMarqueVide(cible: Element): boolean {
+  return cible.children.length === 0 && !(cible.textContent ?? "").trim() && !cible.matches(MEDIAS);
+}
+
+/** Dans un graphique, la plus petite partie que l'auteur a nommée (`data-lia-genre`, `aria-label`, `<title>`), sinon le graphique entier. */
+function partieNommeeDuGraphique(cible: Element, svg: Element): Element {
+  for (let e: Element | null = cible; e && e !== svg; e = e.parentElement) {
+    if (e.hasAttribute("data-lia-genre") || e.hasAttribute("aria-label") || e.querySelector(":scope > title")) return e;
+  }
+  return svg;
+}
+
+function estIcone(media: Element): boolean {
+  const r = media.getBoundingClientRect();
+  return Math.max(r.width, r.height) <= TAILLE_ICONE;
+}
+
+/**
+ * L'élément que vise un clic droit : EXACTEMENT celui qui est sous le doigt, ni son bloc, ni sa carte (Marc, 24/10).
+ * Exceptions, toutes dites : un morceau d'un graphique vise le graphique (ou la partie qu'il nomme) ; une icône ou une marque
+ * vide dans un contrôle ou un titre vise ce contrôle ; `null` quand LIA doit laisser le menu du navigateur.
+ * Un sélecteur propre à l'hôte (`options.elements.selecteur`) garde son sens d'avant : le plus proche ancêtre qui correspond.
+ */
 export function elementVise(
   cible: EventTarget | null,
   selecteur: string,
@@ -136,11 +182,17 @@ export function elementVise(
   if (couche.contains(cible)) return null;
   if (cible.closest(EXCLUS)) return null;
   try {
-    const bloc = cible.closest(selecteur);
-    if (selecteur !== SELECTEUR_ELEMENTS) return bloc ?? cible;
-    const media = cible.closest(MEDIAS);
-    if (media && (!bloc || (bloc.contains(media) && !bloc.matches(PRIORITAIRES)))) return media;
-    return bloc ?? cible.closest(SECOURS) ?? cible;
+    if (selecteur !== SELECTEUR_ELEMENTS) return cible.closest(selecteur) ?? cible;
+    const svg = cible.closest("svg");
+    const media = svg ?? (cible.matches(MEDIAS) ? cible : null);
+    const dedans = cible.parentElement?.closest(PRIORITAIRES) ?? null;
+    if (media) {
+      const contenant = media.parentElement?.closest(PRIORITAIRES) ?? null;
+      if (contenant && estIcone(media)) return contenant;
+      return svg ? partieNommeeDuGraphique(cible, svg) : media;
+    }
+    if (dedans && estMarqueVide(cible)) return dedans;
+    return cible;
   } catch {
     // Sélecteur invalide fourni par l'hôte : le clic droit vise l'élément cliqué lui-même.
     return cible;

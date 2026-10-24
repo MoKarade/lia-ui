@@ -574,6 +574,7 @@ var MENTION_SIMULATION = "Simulation : des calculs en elle, pas un vrai ressenti
 
 // src/physique.ts
 var BALLE_DEFAUT = { gravite: 1400, frottement: 0.25, restitutionSol: 0.55, restitutionMur: 0.7 };
+var BALLE_LIBRE = { gravite: 0, frottement: 0.8, restitutionSol: 0.82, restitutionMur: 0.82 };
 var SEUIL_REBOND = 60;
 var PAS_MAX = 8e-3;
 function avancerBalle(c, dt, zone, p) {
@@ -619,14 +620,14 @@ function avancerBalle(c, dt, zone, p) {
         impacts.push({ cote: "bas", vitesse: c.vy });
         c.vy = c.vy < SEUIL_REBOND ? 0 : -c.vy * p.restitutionSol;
       }
-      if (Math.abs(c.vy) < 1) c.vx *= Math.exp(-3 * h);
+      if (p.gravite > 0 && Math.abs(c.vy) < 1) c.vx *= Math.exp(-3 * h);
     }
   }
   return impacts;
 }
 function auRepos(c, zone, p) {
   const maxY = Math.max(zone.y + p.marge, zone.y + zone.h - p.marge);
-  return Math.hypot(c.vx, c.vy) < 25 && c.y >= maxY - 1.5;
+  return Math.hypot(c.vx, c.vy) < 25 && (p.gravite <= 0 || c.y >= maxY - 1.5);
 }
 function normaleDe(cote) {
   switch (cote) {
@@ -3039,7 +3040,7 @@ var ENTREES_MENU = [
 var SELECTEUR_ELEMENTS = "[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1, h2, h3, h4, button, a, label";
 var MEDIAS = "img, svg, canvas, picture, video";
 var PRIORITAIRES = "button, a, label, h1, h2, h3, h4, summary";
-var SECOURS = "p, td, th, blockquote, pre, details, summary, nav, header, footer, aside";
+var TAILLE_ICONE = 40;
 var EXCLUS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], [data-lia-ignorer]";
 var MAX_GENRE = 80;
 var MAX_NOM = 60;
@@ -3086,7 +3087,22 @@ var GENRES_BALISE = {
   PRE: "un bloc de code",
   CODE: "du code",
   DETAILS: "un bloc repliable",
-  SUMMARY: "un titre repliable"
+  SUMMARY: "un titre repliable",
+  SPAN: "un texte",
+  B: "un texte en gras",
+  STRONG: "un texte en gras",
+  I: "un texte en italique",
+  EM: "un texte en italique",
+  SMALL: "un petit texte",
+  MARK: "un texte surlign\xE9",
+  TIME: "une date",
+  UL: "une liste",
+  OL: "une liste",
+  DL: "une liste de d\xE9finitions",
+  TBODY: "un tableau",
+  THEAD: "un tableau",
+  FORM: "un formulaire",
+  OPTION: "un choix"
 };
 var GENRES_ROLE = {
   button: "un bouton",
@@ -3104,10 +3120,23 @@ function genreParDefaut(cible) {
 }
 function decrireParDefaut(cible) {
   const genre = cible.getAttribute("data-lia-genre") ?? genreParDefaut(cible);
-  const nom = cible.closest("[data-lia-app]")?.getAttribute("data-lia-app") ?? void 0;
+  const nom = cible.closest("[data-lia-app]")?.getAttribute("data-lia-app") ?? cible.parentElement?.closest("[data-lia-genre]")?.getAttribute("data-lia-genre") ?? void 0;
   const visible = cible.innerText;
   const texte = typeof visible === "string" ? visible : cible.textContent ?? "";
   return normaliser({ genre, ...nom ? { nom } : {}, texte });
+}
+function estMarqueVide(cible) {
+  return cible.children.length === 0 && !(cible.textContent ?? "").trim() && !cible.matches(MEDIAS);
+}
+function partieNommeeDuGraphique(cible, svg) {
+  for (let e = cible; e && e !== svg; e = e.parentElement) {
+    if (e.hasAttribute("data-lia-genre") || e.hasAttribute("aria-label") || e.querySelector(":scope > title")) return e;
+  }
+  return svg;
+}
+function estIcone(media) {
+  const r = media.getBoundingClientRect();
+  return Math.max(r.width, r.height) <= TAILLE_ICONE;
 }
 function elementVise(cible, selecteur, couche, racine = document) {
   if (!(cible instanceof Element)) return null;
@@ -3115,11 +3144,17 @@ function elementVise(cible, selecteur, couche, racine = document) {
   if (couche.contains(cible)) return null;
   if (cible.closest(EXCLUS)) return null;
   try {
-    const bloc = cible.closest(selecteur);
-    if (selecteur !== SELECTEUR_ELEMENTS) return bloc ?? cible;
-    const media = cible.closest(MEDIAS);
-    if (media && (!bloc || bloc.contains(media) && !bloc.matches(PRIORITAIRES))) return media;
-    return bloc ?? cible.closest(SECOURS) ?? cible;
+    if (selecteur !== SELECTEUR_ELEMENTS) return cible.closest(selecteur) ?? cible;
+    const svg = cible.closest("svg");
+    const media = svg ?? (cible.matches(MEDIAS) ? cible : null);
+    const dedans = cible.parentElement?.closest(PRIORITAIRES) ?? null;
+    if (media) {
+      const contenant = media.parentElement?.closest(PRIORITAIRES) ?? null;
+      if (contenant && estIcone(media)) return contenant;
+      return svg ? partieNommeeDuGraphique(cible, svg) : media;
+    }
+    if (dedans && estMarqueVide(cible)) return dedans;
+    return cible;
   } catch {
     return cible;
   }
@@ -3819,7 +3854,7 @@ function mountLia(options = {}) {
   let dernierMonde = 0;
   const pos = { x: 0, y: 0, vx: 0, vy: 0 };
   const phys = { ax: 0, ay: 0, vxPrec: 0, vyPrec: 0, incl: 0, vIncl: 0, flotte: 0 };
-  const balle = { actif: false, depuis: 0, choc: false, fin: 0, but: { x: 0, y: 0 } };
+  const balle = { actif: false, depuis: 0, choc: false, fin: 0, libre: false, but: { x: 0, y: 0 } };
   let bond = null;
   let perchage = null;
   let ombreY = Number.NaN;
@@ -4721,6 +4756,7 @@ function mountLia(options = {}) {
         balle.depuis = t;
         balle.choc = false;
         balle.fin = 0;
+        balle.libre = true;
         pos.vx = limiter2(pos.vx, -2600, 2600);
         pos.vy = limiter2(pos.vy, -2600, 2600);
       }
@@ -5038,6 +5074,7 @@ function mountLia(options = {}) {
     balle.depuis = t;
     balle.choc = true;
     balle.fin = 0;
+    balle.libre = false;
     pos.vx = 0;
     pos.vy = -260;
     cible = { x: pos.x, y: pos.y };
@@ -5386,6 +5423,7 @@ function mountLia(options = {}) {
         balle.actif = true;
         balle.depuis = t;
         balle.choc = true;
+        balle.libre = false;
         balle.fin = perchage ? 0 : t + bond.duree;
         if (perchage) perchage.limite = t + bond.duree + 1.6;
         balle.but = bond.but;
@@ -5405,7 +5443,7 @@ function mountLia(options = {}) {
       pos.vx = pos.vy = 0;
       phys.ax = phys.ay = phys.vxPrec = phys.vyPrec = 0;
     } else if (balle.actif) {
-      const params = { ...BALLE_DEFAUT, marge: rayon * 0.6 };
+      const params = { ...balle.libre ? BALLE_LIBRE : BALLE_DEFAUT, marge: rayon * 0.6 };
       const yAvant = pos.y;
       for (const imp of avancerBalle(pos, dt, z, params)) {
         frapper(ecr, imp.vitesse, normaleDe(imp.cote));
@@ -5446,7 +5484,7 @@ function mountLia(options = {}) {
       } else if (auRepos(pos, z, params) || t - balle.depuis > 9) {
         balle.actif = false;
         pos.vx = pos.vy = 0;
-        cible = dansZone(z, pos.x, pos.y - rayon * 2, rayon * 0.6);
+        cible = balle.libre ? { x: pos.x, y: pos.y } : dansZone(z, pos.x, pos.y - rayon * 2, rayon * 0.6);
         choisir2(etatForce ?? "repos");
       }
       const pas = Math.max(dt, 8e-3);
@@ -5566,7 +5604,7 @@ function mountLia(options = {}) {
     ombreY = still || !Number.isFinite(ombreY) ? ombreVisee : ombreY + (ombreVisee - ombreY) * (1 - Math.exp(-dt * 14));
     const haut = Math.max(0, solY - pos.y);
     const echelleOmbre = 1 / (1 + haut / 450);
-    ombre.style.opacity = balle.actif && !still ? (0.95 * echelleOmbre).toFixed(2) : "0";
+    ombre.style.opacity = balle.actif && !balle.libre && !still ? (0.95 * echelleOmbre).toFixed(2) : "0";
     ombre.style.transform = `translate(${(pos.x + ox).toFixed(1)}px,${ombreY.toFixed(1)}px) translate(-50%,-50%) scale(${(rayon * 2.2 * echelleOmbre / 100).toFixed(3)},${(rayon * 0.5 * echelleOmbre / 24).toFixed(3)})`;
     toile.style.transform = `translate(-50%,-50%) rotate(${phys.incl.toFixed(3)}rad)${ecrase}${etire > 4e-3 ? ` rotate(${cap.toFixed(3)}rad) scale(${(1 + etire).toFixed(3)},${(1 - etire * 0.8).toFixed(3)}) rotate(${(-cap).toFixed(3)}rad)` : ""}`;
     if (puceHumeur) {
