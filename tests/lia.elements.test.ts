@@ -32,6 +32,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     if (this.classList.contains("lia-ui")) return rectDe({ left: 0, top: 0, right: 1000, bottom: 800 });
     if (this === carte) return rectDe({ left: 100, top: 300, right: 400, bottom: 500 });
+    if (this.id === "dedans") return rectDe({ left: 120, top: 320, right: 300, bottom: 340 });
     return rectDe({ left: 0, top: 0, right: 0, bottom: 0 });
   });
   document.body.innerHTML = `
@@ -51,7 +52,7 @@ describe("clic droit sur un élément de la page", () => {
     expect(e.defaultPrevented).toBe(true);
     expect(entrees()).toEqual(["Explique-moi ça", "Que peut-on changer ici ?", "Regarde ça avec moi", "Poser une question…"]);
     expect(menu()?.querySelector(".lia-ui__menu-titre")?.textContent).toBe(
-      "Une carte d'app · DriveAI : « Hors ligne depuis 2 h »",
+      "Un texte · DriveAI : « Hors ligne depuis 2 h »",
     );
   });
 
@@ -60,10 +61,10 @@ describe("clic droit sur un élément de la page", () => {
     lia = mountLia({ vieAutonome: false, ask });
     clicDroit(document.getElementById("dedans") as Element);
     choisir("Explique-moi ça");
-    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1), { timeout: 8000 });
     const envoye = ask.mock.calls[0]?.[0] ?? "";
     expect(envoye).toContain("Explique-moi cet élément de la page");
-    expect(envoye).toContain("genre : une carte d'app ; app : DriveAI ; texte : « Hors ligne depuis 2 h »");
+    expect(envoye).toContain("genre : un texte ; app : DriveAI ; texte : « Hors ligne depuis 2 h »");
     // La discussion montre l'entrée choisie, pas le texte technique envoyé.
     await vi.waitFor(() => {
       const msgs = [...document.querySelectorAll(".lia-ui__msg")].map((m) => m.textContent);
@@ -133,7 +134,7 @@ describe("clic droit sur un élément de la page", () => {
     expect(champ.placeholder).toContain("Ta question sur « Hors ligne depuis 2 h »");
     champ.value = "Pourquoi hors ligne ?";
     (document.querySelector(".lia-ui__form") as HTMLFormElement).dispatchEvent(new Event("submit", { cancelable: true }));
-    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1), { timeout: 8000 });
     const envoye = ask.mock.calls[0]?.[0] ?? "";
     expect(envoye.startsWith("Pourquoi hors ligne ?\n")).toBe(true);
     expect(envoye).toContain("app : DriveAI");

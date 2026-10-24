@@ -11,21 +11,30 @@ export interface OptionsEtatHttp {
   fetch?: typeof fetch;
 }
 
-export function etatHttp(url: string, options: OptionsEtatHttp = {}): EtatHote {
+/** Résout l'adresse sur la page et refuse tout autre site. Seul endroit qui lit `window`. */
+function resoudre(url: string): URL {
   const cible = new URL(url, window.location.href);
   if (cible.origin !== window.location.origin) {
     throw new Error("etatHttp : l'adresse doit être de la même origine que la page (LIA n'envoie son état à aucun autre site)");
   }
+  return cible;
+}
+
+export function etatHttp(url: string, options: OptionsEtatHttp = {}): EtatHote {
+  // Rendu serveur (Node) : le composant crée l'hôte avant tout navigateur, donc rien ne touche `window` ici ; l'adresse
+  // est résolue (et refusée si elle est d'un autre site) au premier appel. Dans un navigateur, l'erreur reste immédiate.
+  let resolue: URL | null = typeof window === "undefined" ? null : resoudre(url);
+  const adresse = (): string => (resolue ??= resoudre(url)).href;
   const appeler = options.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
   return {
     async lire() {
-      const r = await appeler(cible.href, { credentials: "same-origin", cache: "no-store", headers: { accept: "application/json" } });
+      const r = await appeler(adresse(), { credentials: "same-origin", cache: "no-store", headers: { accept: "application/json" } });
       if (r.status === 204 || r.status === 404) return null;
       if (!r.ok) throw new Error(`état de LIA : lecture refusée (HTTP ${r.status})`);
       return (await r.json()) as unknown;
     },
     async ecrire(etat: EtatLia) {
-      const r = await appeler(cible.href, {
+      const r = await appeler(adresse(), {
         method: "PUT",
         credentials: "same-origin",
         keepalive: true,

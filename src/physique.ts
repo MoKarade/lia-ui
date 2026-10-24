@@ -33,6 +33,13 @@ export interface ParamsBalle {
 
 export const BALLE_DEFAUT: Readonly<Omit<ParamsBalle, "marge">> = { gravite: 1400, frottement: 0.25, restitutionSol: 0.55, restitutionMur: 0.7 };
 
+/**
+ * Lancée à la main : AUCUNE gravité (Marc, 24/10 : « ya pas forcément de gravité, juste ça la jette »). Elle file en ligne droite avec son élan,
+ * ralentit doucement (frottement), rebondit franchement sur les quatre bords de sa zone et flotte là où elle s'arrête. Seuls ses bonds voulus
+ * (sauts, perchoirs) gardent la gravité de `BALLE_DEFAUT`.
+ */
+export const BALLE_LIBRE: Readonly<Omit<ParamsBalle, "marge">> = { gravite: 0, frottement: 0.8, restitutionSol: 0.82, restitutionMur: 0.82 };
+
 /** Une collision : de quel côté, et la vitesse normale qu'avait le corps juste avant. */
 export interface Impact {
   cote: "gauche" | "droite" | "haut" | "bas";
@@ -88,17 +95,17 @@ export function avancerBalle(c: Corps, dt: number, zone: Zone, p: ParamsBalle): 
         impacts.push({ cote: "bas", vitesse: c.vy });
         c.vy = c.vy < SEUIL_REBOND ? 0 : -c.vy * p.restitutionSol;
       }
-      // Au sol : un frottement de roulement, sinon elle glisserait sans fin.
-      if (Math.abs(c.vy) < 1) c.vx *= Math.exp(-3 * h);
+      // Au sol : un frottement de roulement, sinon elle glisserait sans fin (sans gravité, il n'y a pas de sol à rouler).
+      if (p.gravite > 0 && Math.abs(c.vy) < 1) c.vx *= Math.exp(-3 * h);
     }
   }
   return impacts;
 }
 
-/** Posée : plus d'élan notable, et au sol (ou sans gravité). */
+/** Posée : plus d'élan notable, et au sol ; sans gravité elle s'arrête où elle est, au sol ou pas. */
 export function auRepos(c: Readonly<Corps>, zone: Zone, p: ParamsBalle): boolean {
   const maxY = Math.max(zone.y + p.marge, zone.y + zone.h - p.marge);
-  return Math.hypot(c.vx, c.vy) < 25 && c.y >= maxY - 1.5;
+  return Math.hypot(c.vx, c.vy) < 25 && (p.gravite <= 0 || c.y >= maxY - 1.5);
 }
 
 /** La normale (unitaire, vers l'intérieur de la zone) d'un côté, pour orienter l'écrasement. */
