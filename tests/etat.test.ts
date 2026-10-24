@@ -67,6 +67,74 @@ describe("son monde intérieur dans l'état partagé", () => {
   });
 });
 
+describe("sa mémoire sur plusieurs jours dans l'état partagé", () => {
+  const il = Date.now();
+  const bons = [
+    { quand: il - 3_600_000, genre: "gentil" as const, poids: 0.6 },
+    { quand: il - 60_000, genre: "brusque" as const, poids: 0.9 },
+  ];
+
+  it("garde des souvenirs valides, sans autre clé", () => {
+    const e = validerEtat({ ...etat(), souvenirs: [{ ...bons[0], texte: "secret" }, bons[1]] });
+    expect(e?.souvenirs).toEqual(bons);
+    expect(Object.keys(e?.souvenirs?.[0] ?? {}).sort()).toEqual(["genre", "poids", "quand"]);
+  });
+
+  it("borne la liste à 40 en gardant les plus récents de la liste", () => {
+    const beaucoup = Array.from({ length: 130 }, (_, k) => ({ quand: il - 1000 * (130 - k), genre: "gentil", poids: 0.5 }));
+    const e = validerEtat({ ...etat(), souvenirs: beaucoup });
+    expect(e?.souvenirs).toHaveLength(40);
+    expect(e?.souvenirs?.[39]).toEqual(beaucoup[129]);
+    expect(e?.souvenirs?.[0]).toEqual(beaucoup[90]);
+  });
+
+  it("retire un souvenir invalide sans rejeter l'état ni les autres souvenirs", () => {
+    const mauvais = [
+      { quand: il, genre: "inconnu", poids: 0.5 },
+      { quand: Number.NaN, genre: "ton", poids: 0.5 },
+      { quand: il, genre: "ton", poids: 1.5 },
+      { quand: il, genre: "ton", poids: -0.1 },
+      { quand: il, genre: "ton", poids: Number.POSITIVE_INFINITY },
+      { quand: -1, genre: "ton", poids: 0.5 },
+      { quand: 1e300, genre: "ton", poids: 0.5 },
+      { quand: "hier", genre: "ton", poids: 0.5 },
+      "souvenir",
+      null,
+      7,
+    ];
+    const e = validerEtat({ ...etat(), souvenirs: [...mauvais, bons[0]] });
+    expect(e).not.toBeNull();
+    expect(e?.souvenirs).toEqual([bons[0]]);
+  });
+
+  it("tolère l'absence, un champ qui n'est pas un tableau ou une liste entièrement invalide : le champ disparaît", () => {
+    expect(validerEtat(etat())).not.toHaveProperty("souvenirs");
+    for (const x of ["mal", 3, null, {}, [], [{ genre: "x" }]]) {
+      const e = validerEtat({ ...etat(), souvenirs: x });
+      expect(e).not.toBeNull();
+      expect(e).not.toHaveProperty("souvenirs");
+    }
+  });
+
+  it("un état ancien (sans souvenirs) et un état neuf restent lisibles ensemble", () => {
+    const ancien = validerEtat(etat({ interieur: INTERIEUR_DEPART }));
+    const neuf = validerEtat(etat({ souvenirs: bons }));
+    expect(ancien?.interieur).toBeDefined();
+    expect(neuf?.souvenirs).toHaveLength(2);
+  });
+
+  it("l'empreinte change avec un nouveau souvenir ou un poids qui bouge d'un palier, pas pour un millième", () => {
+    const a = etat({ souvenirs: bons });
+    expect(empreinte({ ...a, souvenirs: bons.map((s) => ({ ...s, poids: s.poids + 0.001 })) })).toBe(empreinte(a));
+    expect(empreinte({ ...a, souvenirs: [...bons, { quand: il, genre: "retour", poids: 0.5 }] })).not.toBe(empreinte(a));
+    expect(empreinte({ ...a, souvenirs: [bons[0] as (typeof bons)[number], { ...(bons[1] as (typeof bons)[number]), quand: il }] })).not.toBe(empreinte(a));
+    expect(empreinte({ ...a, souvenirs: bons.map((s) => ({ ...s, poids: s.poids * 0.4 })) })).not.toBe(empreinte(a));
+    const { souvenirs: _sans, ...sansSouvenirs } = a;
+    expect(empreinte(sansSouvenirs)).not.toBe(empreinte(a));
+    expect(empreinte({ ...a, souvenirs: [] })).toBe(empreinte(sansSouvenirs));
+  });
+});
+
 describe("adopter et empreinte", () => {
   it("adopte seulement un état plus récent (ou de même date et de version plus haute)", () => {
     const d = etat({ maj: 1000, version: 5 });

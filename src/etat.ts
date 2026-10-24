@@ -5,6 +5,7 @@
  */
 import { COMPORTEMENTS, JOURNAL_MAX, type Envies, type FaitLia } from "./cerveau.js";
 import { CAUSES, type Interieur } from "./interieur.js";
+import { validerSouvenirs, type Souvenir } from "./souvenirs.js";
 
 export interface RelancesPartagees {
   /** Date locale AAAA-MM-JJ. */
@@ -27,6 +28,8 @@ export interface EtatLia {
   relances: RelancesPartagees;
   /** Son monde intérieur SIMULÉ (v0.20.0, optionnel : un hôte plus ancien ne l'a pas). Adopté vieilli de l'âge de l'état. */
   interieur?: Interieur;
+  /** Sa mémoire affective sur plusieurs jours (optionnelle : un hôte plus ancien ne l'a pas). Au plus 40, jamais de texte. */
+  souvenirs?: Souvenir[];
 }
 
 /** Ce que l'hôte fournit. `ecrire` peut rendre l'état que l'hôte garde (plus récent que le nôtre), `lire` rend `null` s'il n'en a aucun. */
@@ -81,7 +84,19 @@ export function validerEtat(brut: unknown): EtatLia | null {
   }
   const enviesPropres = Object.fromEntries(NOMS_ENVIES.map((k) => [k, e[k] as number])) as unknown as Envies;
   const interieur = validerInterieur(o["interieur"]);
-  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur, relances: { jour, n }, ...(interieur ? { interieur } : {}) };
+  // Les souvenirs douteux sont retirés un à un (jamais l'état) ; une liste vide n'est pas écrite.
+  const souvenirs = validerSouvenirs(o["souvenirs"]);
+  return {
+    version,
+    maj,
+    envies: enviesPropres,
+    journal: faits.slice(-JOURNAL_MAX),
+    lente: propre,
+    humeur,
+    relances: { jour, n },
+    ...(interieur ? { interieur } : {}),
+    ...(souvenirs.length ? { souvenirs } : {}),
+  };
 }
 
 /** Faut-il adopter l'état de l'hôte ? Oui s'il est plus récent que le dernier que nous avons lu ou écrit ; à égalité de date, la version la plus haute. */
@@ -90,11 +105,15 @@ export function adopter(distant: EtatLia | null, majVue: number, versionVue: num
   return distant.maj > majVue || (distant.maj === majVue && distant.version > versionVue);
 }
 
-/** Une empreinte grossière de ce qui compte : ne réécrire que si quelque chose a vraiment changé (envies, douleur, plaisir et confiance au vingtième près). */
-export function empreinte(e: Pick<EtatLia, "envies" | "journal" | "humeur" | "relances" | "interieur">): string {
+/** Une empreinte grossière de ce qui compte : ne réécrire que si quelque chose a vraiment changé (envies, douleur, plaisir et confiance au vingtième près, souvenirs : leur nombre, le dernier et leur poids au cinquième près). */
+export function empreinte(e: Pick<EtatLia, "envies" | "journal" | "humeur" | "relances" | "interieur"> & { souvenirs?: readonly Souvenir[] }): string {
   const arrondi = NOMS_ENVIES.map((k) => Math.round(e.envies[k] * 20)).join(",");
   const dernier = e.journal[e.journal.length - 1];
   const i = e.interieur;
   const dedans = i ? `${[i.douleur, i.plaisir, i.confiance].map((x) => Math.round(x * 20)).join(",")}:${i.cause ?? "-"}` : "-";
-  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}`;
+  const sv = e.souvenirs ?? [];
+  const dernierSouvenir = sv.reduce((m, x) => Math.max(m, x.quand), 0);
+  const lourdeur = Math.round(sv.reduce((t, x) => t + x.poids, 0) * 5);
+  const memoire = sv.length ? `${sv.length}:${dernierSouvenir}:${lourdeur}` : "-";
+  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}|${memoire}`;
 }
