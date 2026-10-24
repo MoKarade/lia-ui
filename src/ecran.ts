@@ -207,6 +207,36 @@ export function elementVise(
   }
 }
 
+/**
+ * Un lien « étiré » (son `::after` couvre toute la carte) reçoit le clic de tout ce qui est dessous : la cible est alors le lien,
+ * qui n'est pas ce que la personne a visé. Quand le point cliqué est HORS de la boîte propre de la cible, c'est qu'une surcouche
+ * l'a reçu : on prend le premier élément de la page, dessous, dont la boîte contient le point. Sinon (ou sans `elementsFromPoint`,
+ * ou si rien ne convient) la cible du clic reste la cible.
+ */
+export function cibleSousSurcouche(
+  cible: EventTarget | null,
+  x: number,
+  y: number,
+  couche: Element,
+  racine: Document = document,
+): EventTarget | null {
+  if (!(cible instanceof Element) || typeof racine.elementsFromPoint !== "function") return cible;
+  const contient = (e: Element): boolean => {
+    const r = e.getBoundingClientRect();
+    return x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1;
+  };
+  if (contient(cible)) return cible;
+  try {
+    for (const e of racine.elementsFromPoint(x, y)) {
+      if (e === cible || couche.contains(e) || e === racine.documentElement || e === racine.body) continue;
+      if (contient(e)) return e;
+    }
+  } catch {
+    /* le navigateur ne sait pas lire sous le point : la cible du clic reste la cible */
+  }
+  return cible;
+}
+
 /** La première ligne du menu : ce que LIA a compris du clic. */
 export function titreMenu(d: ElementDecrit): string {
   const majuscule = d.genre.charAt(0).toUpperCase() + d.genre.slice(1);
