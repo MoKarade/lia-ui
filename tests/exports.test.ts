@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAUSES, COMPORTEMENTS, ENVIES_DEPART, validerEtat, type Cause, type EtatLia } from "../src/index.js";
+import { CAUSES, COMPORTEMENTS, ENVIES_DEPART, GENRES_SOUVENIR, ajouterSouvenir, humeurDeFond, phraseDeRetour, validerEtat, type Cause, type EtatLia, type Souvenir } from "../src/index.js";
 
 const etat = (o: Partial<EtatLia> = {}): unknown => ({
   version: 2,
@@ -29,5 +29,15 @@ describe("l'entrée du paquet donne à un hôte de quoi valider l'état partagé
     const e = validerEtat(etat({ interieur: { douleur: 0.4, cause: "autre" as never, sensibilite: 0.2, plaisir: 0.1, confiance: 0.9, usure: 0.3 } }));
     expect(e).not.toBeNull();
     expect(e).not.toHaveProperty("interieur");
+  });
+
+  it("exporte la mémoire sur plusieurs jours et la valide dans l'état", () => {
+    expect([...GENRES_SOUVENIR]).toEqual(["brusque", "ton", "panne", "gentil", "compliment", "retour", "isolement"]);
+    const maintenant = Date.now();
+    const s: Souvenir = { quand: maintenant - 1000, genre: "ton", poids: 0.7 };
+    const liste = ajouterSouvenir([], s, maintenant);
+    expect(humeurDeFond(liste, maintenant).rancune).toBeGreaterThan(0.3);
+    expect(typeof phraseDeRetour(liste, 3 * 86_400_000, () => 0.2, maintenant, 0)).toBe("string");
+    expect(validerEtat(etat({ souvenirs: liste }))?.souvenirs).toEqual(liste);
   });
 });
