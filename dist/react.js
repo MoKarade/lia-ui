@@ -652,12 +652,12 @@ function frapper(e, vitesse, normale) {
   e.v = 0;
 }
 function relacherEcrasement(e, dt) {
-  const K = 260;
-  const AMORT = 2 * 0.28 * Math.sqrt(K);
+  const K2 = 260;
+  const AMORT = 2 * 0.28 * Math.sqrt(K2);
   const n = Math.max(1, Math.ceil(Math.max(0, dt) / 8e-3));
   const h = Math.max(0, dt) / n;
   for (let i = 0; i < n; i++) {
-    e.v += (-K * e.s - AMORT * e.v) * h;
+    e.v += (-K2 * e.s - AMORT * e.v) * h;
     e.s += e.v * h;
   }
   if (Math.abs(e.s) < 2e-3 && Math.abs(e.v) < 0.05) e.s = e.v = 0;
@@ -675,6 +675,139 @@ function vitessePourBond(depart, but, duree, p) {
     vy += (but.y - c.y) / T;
   }
   return { vx, vy };
+}
+
+// src/nano.ts
+var MARGE = 5;
+var MIN = 18;
+var MAX = 100;
+var PERIODE_ONDE = 1.9;
+function nombreDeNano(zone) {
+  const cote = Math.sqrt(Math.max(0, zone.w) * Math.max(0, zone.h));
+  return Math.max(MIN, Math.min(MAX, Math.round(cote / 2.2)));
+}
+function creerEssaim(zone, source, hasard, mode = "complet") {
+  const n = nombreDeNano(zone);
+  const bots = [];
+  for (let i = 0; i < n; i++) {
+    const b = {
+      x: source.x,
+      y: source.y,
+      vx: 0,
+      vy: 0,
+      retard: mode === "complet" ? i / n * 0.55 + hasard() * 0.08 : 0,
+      sorti: mode !== "complet",
+      rentre: false,
+      jx: hasard(),
+      jy: hasard(),
+      ph: hasard() * Math.PI * 2,
+      om: (hasard() < 0.5 ? -1 : 1) * (1.6 + hasard() * 2.4),
+      rr: 1.5 + hasard() * 4
+    };
+    if (mode !== "complet") {
+      const a = accueil(i, n, zone, b);
+      b.x = a.x;
+      b.y = a.y;
+    }
+    bots.push(b);
+  }
+  return { bots, age: 0, rentre: false, mode };
+}
+function accueil(i, n, zone, b) {
+  const w = Math.max(1, zone.w);
+  const h = Math.max(1, zone.h);
+  const colonnes = Math.max(1, Math.round(Math.sqrt(n * w / h)));
+  const lignes = Math.max(1, Math.ceil(n / colonnes));
+  let u = (i % colonnes + 0.15 + b.jx * 0.7) / colonnes;
+  let v = (Math.floor(i / colonnes) + 0.15 + b.jy * 0.7) / lignes;
+  if (i % 5 === 0) {
+    const d = [u, 1 - u, v, 1 - v];
+    const m = Math.min(...d);
+    if (m === d[0]) u = 0;
+    else if (m === d[1]) u = 1;
+    else if (m === d[2]) v = 0;
+    else v = 1;
+  }
+  return { x: zone.x - MARGE + u * (w + 2 * MARGE), y: zone.y - MARGE + v * (h + 2 * MARGE) };
+}
+function positionOnde(age) {
+  return age % PERIODE_ONDE / PERIODE_ONDE * 1.5 - 0.25;
+}
+function eclat(e, i, zone) {
+  const b = e.bots[i];
+  if (!b) return 0;
+  const w = Math.max(1, zone.w + 2 * MARGE);
+  const h = Math.max(1, zone.h + 2 * MARGE);
+  const d = ((b.x - (zone.x - MARGE)) / w + (b.y - (zone.y - MARGE)) / h) / 2;
+  const x = (d - positionOnde(e.age)) / 0.14;
+  return Math.exp(-x * x);
+}
+var K = 70;
+var C = 2 * Math.sqrt(K) * 0.42;
+function avancerEssaim(e, dt, zone, source) {
+  const total = Number.isFinite(dt) ? Math.max(0, Math.min(0.25, dt)) : 0;
+  const n = e.bots.length;
+  const pas = Math.max(1, Math.ceil(total / 0.016));
+  const h = total / pas;
+  for (let s = 0; s < pas; s++) {
+    e.age += h;
+    for (let i = 0; i < n; i++) {
+      const b = e.bots[i];
+      if (b.rentre) continue;
+      b.ph += b.om * h;
+      if (e.rentre) {
+        if (!b.sorti) {
+          b.rentre = true;
+          continue;
+        }
+        b.vx += (K * 1.4 * (source.x - b.x) - C * 1.1 * b.vx) * h;
+        b.vy += (K * 1.4 * (source.y - b.y) - C * 1.1 * b.vy) * h;
+        b.x += b.vx * h;
+        b.y += b.vy * h;
+        if (Math.hypot(source.x - b.x, source.y - b.y) < 12) b.rentre = true;
+        continue;
+      }
+      if (!b.sorti) {
+        b.x = source.x;
+        b.y = source.y;
+        if (e.age >= b.retard) {
+          b.sorti = true;
+          const a2 = accueil(i, n, zone, b);
+          const dx = a2.x - source.x;
+          const dy = a2.y - source.y;
+          const d = Math.max(1, Math.hypot(dx, dy));
+          const v = 380 + (b.jx + b.jy) * 160;
+          b.vx = dx / d * v + (b.jy - 0.5) * 180;
+          b.vy = dy / d * v + (b.jx - 0.5) * 180;
+        }
+        continue;
+      }
+      if (e.mode === "fixe") continue;
+      const a = accueil(i, n, zone, b);
+      const l = eclat(e, i, zone);
+      const r = b.rr * (1 + 1.6 * l);
+      const tx = a.x + Math.cos(b.ph) * r;
+      const ty = a.y + Math.sin(b.ph) * r;
+      b.vx += (K * (tx - b.x) - C * b.vx) * h;
+      b.vy += (K * (ty - b.y) - C * b.vy) * h;
+      b.x += b.vx * h;
+      b.y += b.vy * h;
+    }
+  }
+}
+function rappeler(e) {
+  e.rentre = true;
+}
+function termine(e) {
+  return e.bots.every((b) => b.rentre);
+}
+function surLaCible(e, zone) {
+  const sortis = e.bots.filter((b) => b.sorti && !b.rentre);
+  if (sortis.length === 0) return 0;
+  const dedans = sortis.filter(
+    (b) => b.x >= zone.x - MARGE * 2 && b.x <= zone.x + zone.w + MARGE * 2 && b.y >= zone.y - MARGE * 2 && b.y <= zone.y + zone.h + MARGE * 2
+  );
+  return dedans.length / sortis.length;
 }
 
 // src/perchoir.ts
@@ -1519,7 +1652,7 @@ var pulse = (x, w) => Math.exp(-(x / w) * (x / w));
 var vhAt = (P, d) => P.vh[Math.max(0, P.vh.length - 1 - Math.floor(d))] || 0;
 var GRIS = h2("#8a8f98");
 var BLANC = h2("#E9EDF5");
-var C = {
+var C2 = {
   ind: h2("#93A0FF"),
   ind2: h2("#C4CBFF"),
   teal: h2("#2DD4BF"),
@@ -1546,17 +1679,17 @@ def(
   "Pr\xE9sence",
   "Il ne fait rien et attend.",
   "Il respire, soupire parfois, jette un coup d'\u0153il de temps en temps.",
-  [C.ind, C.ind2],
+  [C2.ind, C2.ind2],
   { gz: "free", e: (c) => 0.05 + 0.07 * nz1(c.i * 0.35 + c.t * 0.35, c.k) }
 );
-def("ecoute", "Il \xE9coute", "Pr\xE9sence", "Tu parles ou tu \xE9cris.", "Un micro re\xE7oit des ondes qui arrivent des deux c\xF4t\xE9s, le niveau monte et descend.", [C.teal, C.ind2], { sc: 1, gz: "user", br: [0.6, 0.45] });
+def("ecoute", "Il \xE9coute", "Pr\xE9sence", "Tu parles ou tu \xE9cris.", "Un micro re\xE7oit des ondes qui arrivent des deux c\xF4t\xE9s, le niveau monte et descend.", [C2.teal, C2.ind2], { sc: 1, gz: "user", br: [0.6, 0.45] });
 def(
   "reponse",
   "Il r\xE9pond",
   "Pr\xE9sence",
   "Il te r\xE9pond.",
   "Chaque syllabe part du bas, comme une bouche, et se propage de chaque c\xF4t\xE9 : les composants de l'anneau ext\xE9rieur sortent, ceux de l'int\xE9rieur rentrent, au rythme des mots.",
-  [C.ind, BLANC],
+  [C2.ind, BLANC],
   {
     gz: "userSoft",
     e: (c) => 0.05 + 0.55 * vhAt(c.P, adiff(c.a0, Math.PI / 2) / Math.PI * 28 + (c.k ? 2 : 0)),
@@ -1566,42 +1699,42 @@ def(
     }
   }
 );
-def("demande", "Il demande", "Pr\xE9sence", "Il a besoin de ton accord avant d'agir.", "Un point d'interrogation et deux boutons, oui et non, qu'il survole tour \xE0 tour en attendant ton choix.", [C.ambre, C.ambre], { sc: 1, gz: "user" });
-def("confus", "Il ne comprend pas", "Pr\xE9sence", "Ta demande est floue.", "Le point d'interrogation vacille, des gribouillis flottent autour.", [C.rouge, C.ambre], { sc: 1, gz: "aside" });
+def("demande", "Il demande", "Pr\xE9sence", "Il a besoin de ton accord avant d'agir.", "Un point d'interrogation et deux boutons, oui et non, qu'il survole tour \xE0 tour en attendant ton choix.", [C2.ambre, C2.ambre], { sc: 1, gz: "user" });
+def("confus", "Il ne comprend pas", "Pr\xE9sence", "Ta demande est floue.", "Le point d'interrogation vacille, des gribouillis flottent autour.", [C2.rouge, C2.ambre], { sc: 1, gz: "aside" });
 def("indispo", "Indisponible", "Pr\xE9sence", "Une app ou un service ne r\xE9pond pas.", "Une prise qui tente de se brancher, \xE9tincelle, et n'y arrive pas.", [GRIS, GRIS], { sc: 1, gz: "down", br: [0.5, 1.1], bl: 0 });
-def("reflexion", "Il r\xE9fl\xE9chit", "Pens\xE9e", "Il pr\xE9pare une r\xE9ponse.", "Une bulle de pens\xE9e, trois points qui sautent \xE0 tour de r\xF4le.", [C.viol, C.blue], { sc: 1, gz: "upleft", br: [1.5, 0.5] });
-def("apprend", "Il apprend", "Pens\xE9e", "Il retient une information nouvelle.", "Des points entrent dans une ampoule, elle s'allume d'un coup.", [C.ambre, C.viol], { sc: 1, gz: "upleft" });
-def("souvient", "Il se souvient", "Pens\xE9e", "Il va chercher dans sa m\xE9moire (MemoryAI).", "Une horloge dont les aiguilles reculent, une fl\xE8che qui tourne \xE0 l'envers.", [C.viol, C.ind2], { sc: 1, gz: "upleft" });
-def("consulte", "Il consulte tes apps", "Recherche", "Il appelle une de tes apps (appel r\xE9el seulement).", "Six cases autour de lui : un rayon part vers l'une, y va, revient, puis passe \xE0 la suivante.", [C.blue, C.teal], { sc: 1, gz: "sectors" });
-def("cherche", "Il cherche", "Recherche", "Recherche sur le web ou dans des sources.", "Une loupe parcourt un champ de points, ils grossissent sous le verre, elle se fixe sur celui qu'elle trouve.", [C.blue, C.cyan], { sc: 1, gz: "scan" });
-def("lit", "Il lit", "Recherche", "Il lit un document, un mail, une page.", "Une page, des lignes qui se remplissent une \xE0 une au passage d'un surlignage.", [C.teal, C.vert], { sc: 1, gz: "read" });
-def("surveille", "Il surveille", "Recherche", "Il garde un \u0153il sur tes apps en arri\xE8re-plan.", "Un radar : un balayage lent, des points qui s'allument \xE0 son passage et s'estompent.", [C.teal, C.blue], { sc: 1, gz: "scan", br: [0.8, 0.6] });
-def("ecrit", "Il \xE9crit", "Cr\xE9ation", "Il r\xE9dige un texte, un mail, une lettre.", "Un crayon \xE9crit des lignes de mots qui apparaissent par rafales irr\xE9guli\xE8res.", [C.viol, C.pink], { sc: 1, gz: "typing" });
-def("code", "Il programme", "Cr\xE9ation", "Il \xE9crit ou lit du code.", "Les chevrons \xAB < / > \xBB respirent, la barre oblique s'\xE9crit, un curseur clignote.", [C.lime, C.teal], { sc: 1, gz: "read" });
+def("reflexion", "Il r\xE9fl\xE9chit", "Pens\xE9e", "Il pr\xE9pare une r\xE9ponse.", "Une bulle de pens\xE9e, trois points qui sautent \xE0 tour de r\xF4le.", [C2.viol, C2.blue], { sc: 1, gz: "upleft", br: [1.5, 0.5] });
+def("apprend", "Il apprend", "Pens\xE9e", "Il retient une information nouvelle.", "Des points entrent dans une ampoule, elle s'allume d'un coup.", [C2.ambre, C2.viol], { sc: 1, gz: "upleft" });
+def("souvient", "Il se souvient", "Pens\xE9e", "Il va chercher dans sa m\xE9moire (MemoryAI).", "Une horloge dont les aiguilles reculent, une fl\xE8che qui tourne \xE0 l'envers.", [C2.viol, C2.ind2], { sc: 1, gz: "upleft" });
+def("consulte", "Il consulte tes apps", "Recherche", "Il appelle une de tes apps (appel r\xE9el seulement).", "Six cases autour de lui : un rayon part vers l'une, y va, revient, puis passe \xE0 la suivante.", [C2.blue, C2.teal], { sc: 1, gz: "sectors" });
+def("cherche", "Il cherche", "Recherche", "Recherche sur le web ou dans des sources.", "Une loupe parcourt un champ de points, ils grossissent sous le verre, elle se fixe sur celui qu'elle trouve.", [C2.blue, C2.cyan], { sc: 1, gz: "scan" });
+def("lit", "Il lit", "Recherche", "Il lit un document, un mail, une page.", "Une page, des lignes qui se remplissent une \xE0 une au passage d'un surlignage.", [C2.teal, C2.vert], { sc: 1, gz: "read" });
+def("surveille", "Il surveille", "Recherche", "Il garde un \u0153il sur tes apps en arri\xE8re-plan.", "Un radar : un balayage lent, des points qui s'allument \xE0 son passage et s'estompent.", [C2.teal, C2.blue], { sc: 1, gz: "scan", br: [0.8, 0.6] });
+def("ecrit", "Il \xE9crit", "Cr\xE9ation", "Il r\xE9dige un texte, un mail, une lettre.", "Un crayon \xE9crit des lignes de mots qui apparaissent par rafales irr\xE9guli\xE8res.", [C2.viol, C2.pink], { sc: 1, gz: "typing" });
+def("code", "Il programme", "Cr\xE9ation", "Il \xE9crit ou lit du code.", "Les chevrons \xAB < / > \xBB respirent, la barre oblique s'\xE9crit, un curseur clignote.", [C2.lime, C2.teal], { sc: 1, gz: "read" });
 def("image", "Il dessine", "Cr\xE9ation", "Il g\xE9n\xE8re ou retouche une image.", "Un pinceau peint un paysage : fond en couleurs changeantes, montagnes, soleil.", (t) => [hsl(t * 40 + 300, 0.75, 0.68), hsl(t * 40 + 20, 0.8, 0.66)], { sc: 1, gz: "around" });
-def("traduit", "Il traduit", "Cr\xE9ation", "Il passe un texte d'une langue \xE0 l'autre.", "Un \xAB A \xBB saute en arc d'une carte \xE0 l'autre et devient \xAB \u6587 \xBB.", [C.pink, C.blue], { sc: 1, gz: "read" });
-def("calcule", "Il calcule", "Calcul", "Il analyse des chiffres, une projection.", "Un graphique en barres dont les hauteurs changent, la plus haute s'allume, une courbe les relie.", [C.ambre, C.orange], { sc: 1, gz: "upleft" });
-def("planifie", "Il planifie", "Calcul", "Il organise ton agenda ou tes t\xE2ches.", "Un calendrier dont les cases se remplissent une \xE0 une, un cadre indique la prochaine.", [C.blue2, C.ind], { sc: 1, gz: "sectors" });
-def("organise", "Il range", "Calcul", "Il trie des fichiers (DriveAI).", "Des carr\xE9s \xE9parpill\xE9s se rangent par couleur en trois piles, puis se dispersent de nouveau.", [C.blue, C.teal], { sc: 1, gz: "read" });
-def("synchronise", "Il synchronise", "Calcul", "Il envoie ou re\xE7oit des donn\xE9es.", "Deux fl\xE8ches se poursuivent en cercle : l'ic\xF4ne universelle de synchro.", [C.blue, C.viol], { sc: 1, gz: "scan" });
-def("envoie", "Il envoie", "Calcul", "Il envoie un message ou un mail.", "Un avion en papier d\xE9colle, laisse une tra\xEEn\xE9e et dispara\xEEt.", [C.vert, C.teal], { sc: 1, gz: "up" });
-def("securise", "Il s\xE9curise", "Alerte", "Il v\xE9rifie un acc\xE8s, prot\xE8ge une donn\xE9e.", "Un cadenas dont l'anse descend, un balayage le v\xE9rifie, une onde de protection part.", [C.vert, C.blue], { sc: 1, gz: "scan" });
-def("alerte", "Il pr\xE9vient", "Alerte", "Quelque chose demande ton attention.", "Un triangle d'alerte tremble, des ondes s'en \xE9chappent.", [C.ambre, C.rouge], { sc: 1, gz: "user" });
-def("reussi", "C'est fait", "Alerte", "Une t\xE2che est termin\xE9e avec succ\xE8s.", "Un cercle se trace, la coche s'\xE9crit, une gerbe d'\xE9tincelles part.", [C.vert, C.lime], { sc: 1, gz: "user" });
-def("veille", "Il dort", "Alerte", "Personne depuis longtemps, il se met en veille.", "Un croissant de lune, des \xAB z \xBB qui montent et s'\xE9vanouissent.", [C.ind, C.ind2], { sc: 1, gz: "down", br: [0.4, 1], bl: 0, dim: 0.55 });
-def("salue", "Il salue", "\xC9motion", "Tu arrives, ou tu reviens apr\xE8s un moment.", "Une main s'agite, deux petites ondes de chaque c\xF4t\xE9 : le bonjour universel.", [C.orange, C.ambre], { sc: 1, gz: "user" });
-def("content", "Il est content", "\xC9motion", "Une bonne nouvelle, un objectif atteint.", "Une \xE9toile qui bat comme un c\u0153ur, des \xE9tincelles qui jaillissent et des points qui montent.", [C.ambre, C.lime], { sc: 1, gz: "around" });
-def("triste", "Il est triste", "\xC9motion", "Un \xE9chec, une mauvaise nouvelle, une longue absence.", "Un petit nuage bas, la pluie tombe goutte \xE0 goutte, il regarde vers le sol.", [C.blue, C.ind], { sc: 1, gz: "down", br: [0.7, 0.8], dim: 0.8 });
-def("surpris", "Il est surpris", "\xC9motion", "Un \xE9v\xE9nement inattendu.", "Un point d'exclamation qui saute, des rayons qui \xE9clatent tout autour.", [C.cyan, C.ind2], { sc: 1, gz: "up" });
-def("remercie", "Il te remercie", "\xC9motion", "Tu l'as aid\xE9, ou un geste sympa.", "Un c\u0153ur qui bat \xE0 deux temps, de petits c\u0153urs qui montent.", [C.pink, C.rouge], { sc: 1, gz: "user" });
-def("musique", "Il fredonne", "\xC9motion", "Il est de bonne humeur, rien \xE0 faire.", "Deux notes rebondissent \xE0 tour de r\xF4le, des ondes de son s'\xE9chappent.", [C.viol, C.pink], { sc: 1, gz: "around" });
-def("reveille", "Il se r\xE9veille", "Pr\xE9sence", "Le matin, ou tu reviens apr\xE8s un long silence.", "Un soleil se l\xE8ve sur la ligne d'horizon, ses rayons s'ouvrent un \xE0 un.", [C.ambre, C.orange], { sc: 1, gz: "up", br: [0.7, 1.1] });
-def("concentre", "Il se concentre", "Travail", "T\xE2che longue ou d\xE9licate.", "Des cercles se resserrent sur une cible, le point central bat de plus en plus net.", [C.teal, C.cyan], { sc: 1, gz: "scan", br: [0.6, 0.4] });
-def("attend", "Il attend", "Travail", "Un traitement lent, ou ta r\xE9ponse.", "Un sablier : le sable coule, il se retourne tout seul.", [C.ind, C.blue], { sc: 1, gz: "free", br: [0.8, 0.8] });
-def("telecharge", "Il t\xE9l\xE9charge", "Travail", "Il r\xE9cup\xE8re un fichier ou des donn\xE9es.", "Une fl\xE8che descend dans un bac, une barre de progression se remplit.", [C.blue2, C.teal], { sc: 1, gz: "read" });
-def("verifie", "Il v\xE9rifie", "Travail", "Il contr\xF4le une liste de choses.", "Trois cases, chacune coch\xE9e \xE0 son tour par une coche qui s'\xE9crit.", [C.vert, C.lime], { sc: 1, gz: "read" });
-def("appelle", "Il t'appelle", "Travail", "Il te contacte : message, appel, rappel.", "Un t\xE9l\xE9phone qui vibre, des ondes qui sortent des deux c\xF4t\xE9s.", [C.vert, C.cyan], { sc: 1, gz: "user" });
-def("analyse", "Il analyse", "Travail", "Il lit une app ou un bloc en d\xE9tail.", "Quatre coins se posent sur ce qu'il regarde, une ligne le balaie, les points s'allument \xE0 son passage.", [C.teal, C.cyan], { sc: 1, gz: "scan" });
+def("traduit", "Il traduit", "Cr\xE9ation", "Il passe un texte d'une langue \xE0 l'autre.", "Un \xAB A \xBB saute en arc d'une carte \xE0 l'autre et devient \xAB \u6587 \xBB.", [C2.pink, C2.blue], { sc: 1, gz: "read" });
+def("calcule", "Il calcule", "Calcul", "Il analyse des chiffres, une projection.", "Un graphique en barres dont les hauteurs changent, la plus haute s'allume, une courbe les relie.", [C2.ambre, C2.orange], { sc: 1, gz: "upleft" });
+def("planifie", "Il planifie", "Calcul", "Il organise ton agenda ou tes t\xE2ches.", "Un calendrier dont les cases se remplissent une \xE0 une, un cadre indique la prochaine.", [C2.blue2, C2.ind], { sc: 1, gz: "sectors" });
+def("organise", "Il range", "Calcul", "Il trie des fichiers (DriveAI).", "Des carr\xE9s \xE9parpill\xE9s se rangent par couleur en trois piles, puis se dispersent de nouveau.", [C2.blue, C2.teal], { sc: 1, gz: "read" });
+def("synchronise", "Il synchronise", "Calcul", "Il envoie ou re\xE7oit des donn\xE9es.", "Deux fl\xE8ches se poursuivent en cercle : l'ic\xF4ne universelle de synchro.", [C2.blue, C2.viol], { sc: 1, gz: "scan" });
+def("envoie", "Il envoie", "Calcul", "Il envoie un message ou un mail.", "Un avion en papier d\xE9colle, laisse une tra\xEEn\xE9e et dispara\xEEt.", [C2.vert, C2.teal], { sc: 1, gz: "up" });
+def("securise", "Il s\xE9curise", "Alerte", "Il v\xE9rifie un acc\xE8s, prot\xE8ge une donn\xE9e.", "Un cadenas dont l'anse descend, un balayage le v\xE9rifie, une onde de protection part.", [C2.vert, C2.blue], { sc: 1, gz: "scan" });
+def("alerte", "Il pr\xE9vient", "Alerte", "Quelque chose demande ton attention.", "Un triangle d'alerte tremble, des ondes s'en \xE9chappent.", [C2.ambre, C2.rouge], { sc: 1, gz: "user" });
+def("reussi", "C'est fait", "Alerte", "Une t\xE2che est termin\xE9e avec succ\xE8s.", "Un cercle se trace, la coche s'\xE9crit, une gerbe d'\xE9tincelles part.", [C2.vert, C2.lime], { sc: 1, gz: "user" });
+def("veille", "Il dort", "Alerte", "Personne depuis longtemps, il se met en veille.", "Un croissant de lune, des \xAB z \xBB qui montent et s'\xE9vanouissent.", [C2.ind, C2.ind2], { sc: 1, gz: "down", br: [0.4, 1], bl: 0, dim: 0.55 });
+def("salue", "Il salue", "\xC9motion", "Tu arrives, ou tu reviens apr\xE8s un moment.", "Une main s'agite, deux petites ondes de chaque c\xF4t\xE9 : le bonjour universel.", [C2.orange, C2.ambre], { sc: 1, gz: "user" });
+def("content", "Il est content", "\xC9motion", "Une bonne nouvelle, un objectif atteint.", "Une \xE9toile qui bat comme un c\u0153ur, des \xE9tincelles qui jaillissent et des points qui montent.", [C2.ambre, C2.lime], { sc: 1, gz: "around" });
+def("triste", "Il est triste", "\xC9motion", "Un \xE9chec, une mauvaise nouvelle, une longue absence.", "Un petit nuage bas, la pluie tombe goutte \xE0 goutte, il regarde vers le sol.", [C2.blue, C2.ind], { sc: 1, gz: "down", br: [0.7, 0.8], dim: 0.8 });
+def("surpris", "Il est surpris", "\xC9motion", "Un \xE9v\xE9nement inattendu.", "Un point d'exclamation qui saute, des rayons qui \xE9clatent tout autour.", [C2.cyan, C2.ind2], { sc: 1, gz: "up" });
+def("remercie", "Il te remercie", "\xC9motion", "Tu l'as aid\xE9, ou un geste sympa.", "Un c\u0153ur qui bat \xE0 deux temps, de petits c\u0153urs qui montent.", [C2.pink, C2.rouge], { sc: 1, gz: "user" });
+def("musique", "Il fredonne", "\xC9motion", "Il est de bonne humeur, rien \xE0 faire.", "Deux notes rebondissent \xE0 tour de r\xF4le, des ondes de son s'\xE9chappent.", [C2.viol, C2.pink], { sc: 1, gz: "around" });
+def("reveille", "Il se r\xE9veille", "Pr\xE9sence", "Le matin, ou tu reviens apr\xE8s un long silence.", "Un soleil se l\xE8ve sur la ligne d'horizon, ses rayons s'ouvrent un \xE0 un.", [C2.ambre, C2.orange], { sc: 1, gz: "up", br: [0.7, 1.1] });
+def("concentre", "Il se concentre", "Travail", "T\xE2che longue ou d\xE9licate.", "Des cercles se resserrent sur une cible, le point central bat de plus en plus net.", [C2.teal, C2.cyan], { sc: 1, gz: "scan", br: [0.6, 0.4] });
+def("attend", "Il attend", "Travail", "Un traitement lent, ou ta r\xE9ponse.", "Un sablier : le sable coule, il se retourne tout seul.", [C2.ind, C2.blue], { sc: 1, gz: "free", br: [0.8, 0.8] });
+def("telecharge", "Il t\xE9l\xE9charge", "Travail", "Il r\xE9cup\xE8re un fichier ou des donn\xE9es.", "Une fl\xE8che descend dans un bac, une barre de progression se remplit.", [C2.blue2, C2.teal], { sc: 1, gz: "read" });
+def("verifie", "Il v\xE9rifie", "Travail", "Il contr\xF4le une liste de choses.", "Trois cases, chacune coch\xE9e \xE0 son tour par une coche qui s'\xE9crit.", [C2.vert, C2.lime], { sc: 1, gz: "read" });
+def("appelle", "Il t'appelle", "Travail", "Il te contacte : message, appel, rappel.", "Un t\xE9l\xE9phone qui vibre, des ondes qui sortent des deux c\xF4t\xE9s.", [C2.vert, C2.cyan], { sc: 1, gz: "user" });
+def("analyse", "Il analyse", "Travail", "Il lit une app ou un bloc en d\xE9tail.", "Quatre coins se posent sur ce qu'il regarde, une ligne le balaie, les points s'allument \xE0 son passage.", [C2.teal, C2.cyan], { sc: 1, gz: "scan" });
 var ST = ORDRE.slice();
 var cl = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 var eo = (u) => {
@@ -1674,8 +1807,8 @@ var bz = (s) => {
   return [a * -0.8 + b * -0.2 + d * 0.85, a * 0.6 + b * -0.75 + d * -0.45];
 };
 var SC = {};
-SC.ecoute = (c, t, K) => {
-  c.strokeStyle = K.A(1);
+SC.ecoute = (c, t, K2) => {
+  c.strokeStyle = K2.A(1);
   rr(c, -0.2, -0.62, 0.4, 0.7, 0.2);
   c.stroke();
   c.beginPath();
@@ -1684,7 +1817,7 @@ SC.ecoute = (c, t, K) => {
   L(c, 0, 0.28, 0, 0.55);
   for (let j = 0; j < 2; j++) {
     const u = (t * 0.8 + j / 2) % 1, r = 1 - 0.45 * u, al = Math.sin(Math.PI * u) * 0.9;
-    c.strokeStyle = K.B(al);
+    c.strokeStyle = K2.B(al);
     c.beginPath();
     c.arc(0, -0.2, r, -0.5, 0.5);
     c.stroke();
@@ -1693,33 +1826,33 @@ SC.ecoute = (c, t, K) => {
     c.stroke();
   }
 };
-SC.demande = (c, t, K) => {
+SC.demande = (c, t, K2) => {
   c.save();
   c.translate(0, -0.15 - 0.04 * Math.sin(t * 2.2));
-  c.strokeStyle = K.A(1);
-  c.fillStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
+  c.fillStyle = K2.A(1);
   Q(c, 1.1);
   circ(c, 0, 0.34, 0.06, true);
   c.restore();
   const hov = Math.floor(t * 0.9) % 2;
   for (let i = 0; i < 2; i++) {
-    c.fillStyle = css(i ? C.rouge : C.vert, hov === i ? 1 : 0.5);
+    c.fillStyle = css(i ? C2.rouge : C2.vert, hov === i ? 1 : 0.5);
     circ(c, i ? 0.4 : -0.4, 0.7, hov === i ? 0.1 : 0.06, true);
   }
 };
-SC.confus = (c, t, K) => {
+SC.confus = (c, t, K2) => {
   c.save();
   c.rotate(0.3 * Math.sin(t * 2.2));
   c.translate(0, 0.04);
-  c.strokeStyle = K.A(1);
-  c.fillStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
+  c.fillStyle = K2.A(1);
   Q(c, 1.2);
   circ(c, 0, 0.42, 0.07, true);
   c.restore();
 };
-SC.indispo = (c, t, K) => {
+SC.indispo = (c, t, K2) => {
   const q = Math.pow(0.5 + 0.5 * Math.sin(t * 1.5), 3), xp = -0.7 + 0.56 * q;
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   rr(c, xp - 0.22, -0.26, 0.44, 0.52, 0.08);
   c.stroke();
   L(c, xp + 0.22, -0.12, xp + 0.42, -0.12);
@@ -1727,24 +1860,24 @@ SC.indispo = (c, t, K) => {
   rr(c, 0.38, -0.34, 0.52, 0.68, 0.08);
   c.stroke();
   if (q > 0.55 && hs(Math.floor(t * 14), 1) > 0.35) {
-    c.strokeStyle = css(C.rouge, 1);
+    c.strokeStyle = css(C2.rouge, 1);
     poly(c, [[xp + 0.46, -0.1], [xp + 0.52, 0.02], [xp + 0.57, -0.04], [0.37, 0.08]]);
   }
 };
-SC.reflexion = (c, t, K) => {
-  c.strokeStyle = K.A(1);
+SC.reflexion = (c, t, K2) => {
+  c.strokeStyle = K2.A(1);
   c.beginPath();
   c.ellipse(0, -0.12, 0.92 + 0.015 * Math.sin(t * 1.7), 0.6 + 0.015 * Math.cos(t * 1.3), 0, 0, TAU2);
   c.stroke();
   for (let i = 0; i < 3; i++) {
     const b = Math.pow(Math.max(0, Math.sin(t * 3.4 - i * 0.8)), 2);
-    c.fillStyle = i === 1 ? K.B(1) : K.A(1);
+    c.fillStyle = i === 1 ? K2.B(1) : K2.A(1);
     circ(c, (i - 1) * 0.4, -0.12 - 0.22 * b, 0.1 + 0.03 * b, true);
   }
 };
-SC.apprend = (c, t, K) => {
+SC.apprend = (c, t, K2) => {
   const u = t % 4.4 / 4.4, lit = sm((u - 0.5) / 0.08) * (1 - sm((u - 0.88) / 0.1)), by = -0.15, br = 0.5;
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   c.beginPath();
   c.arc(0, by, br, Math.PI / 2 + 0.42, Math.PI / 2 - 0.42 + TAU2);
   c.lineTo(0.2, 0.52);
@@ -1752,7 +1885,7 @@ SC.apprend = (c, t, K) => {
   c.closePath();
   c.stroke();
   if (lit > 0.02) {
-    c.strokeStyle = K.B(lit);
+    c.strokeStyle = K2.B(lit);
     for (let k = 0; k < 5; k++) {
       const a = -Math.PI * 0.9 + k * (Math.PI * 0.8 / 4);
       L(c, Math.cos(a) * 0.74, by + Math.sin(a) * 0.74, Math.cos(a) * (0.74 + 0.22 * lit), by + Math.sin(a) * (0.74 + 0.22 * lit));
@@ -1762,22 +1895,22 @@ SC.apprend = (c, t, K) => {
     const pr = cl(u / 0.5 * 1.3 - i * 0.12);
     if (pr > 0 && pr < 1) {
       const a = i * 1.3 + 0.4, r = 1.15 * (1 - eo(pr)) + 0.66 * eo(pr);
-      c.fillStyle = K.W(1 - Math.pow(pr, 3));
+      c.fillStyle = K2.W(1 - Math.pow(pr, 3));
       circ(c, Math.cos(a) * r, by + Math.sin(a) * r * 0.8, 0.06, true);
     }
   }
 };
-SC.souvient = (c, t, K) => {
-  c.strokeStyle = K.A(1);
+SC.souvient = (c, t, K2) => {
+  c.strokeStyle = K2.A(1);
   circ(c, 0, 0, 0.62);
   const rw = -(t * 2.6 + 0.5 * Math.sin(t * 2.6));
-  c.strokeStyle = K.B(1);
+  c.strokeStyle = K2.B(1);
   L(c, 0, 0, Math.cos(rw - Math.PI / 2) * 0.46, Math.sin(rw - Math.PI / 2) * 0.46);
-  c.strokeStyle = K.W(0.85);
+  c.strokeStyle = K2.W(0.85);
   L(c, 0, 0, Math.cos(rw / 12 - Math.PI / 2) * 0.3, Math.sin(rw / 12 - Math.PI / 2) * 0.3);
   c.save();
   c.rotate(-t * 0.5);
-  c.strokeStyle = K.A(0.9);
+  c.strokeStyle = K2.A(0.9);
   c.beginPath();
   c.arc(0, 0, 0.88, -0.15 * Math.PI, -0.85 * Math.PI, true);
   c.stroke();
@@ -1785,24 +1918,24 @@ SC.souvient = (c, t, K) => {
   arrow(c, Math.cos(e) * 0.88, Math.sin(e) * 0.88, Math.sin(e), -Math.cos(e), 0.2);
   c.restore();
 };
-SC.consulte = (c, t, K) => {
+SC.consulte = (c, t, K2) => {
   const sp = 1.3, k = Math.floor(t * sp) % 6, u = t * sp % 1;
   for (let i = 0; i < 6; i++) {
     const a = -Math.PI / 2 + i * TAU2 / 6, x = Math.cos(a) * 0.74, y = Math.sin(a) * 0.74, on = i === k;
-    c.fillStyle = on ? K.A(1) : K.A(0.45);
+    c.fillStyle = on ? K2.A(1) : K2.A(0.45);
     circ(c, x, y, on ? 0.13 : 0.07, true);
     if (on) {
       const d = u < 0.5 ? u * 2 : 2 - u * 2;
-      c.strokeStyle = K.B(0.6);
+      c.strokeStyle = K2.B(0.6);
       L(c, 0, 0, x * 0.8, y * 0.8);
-      c.fillStyle = K.W(1);
+      c.fillStyle = K2.W(1);
       circ(c, x * (0.15 + 0.65 * d), y * (0.15 + 0.65 * d), 0.06, true);
     }
   }
-  c.fillStyle = K.B(1);
+  c.fillStyle = K2.B(1);
   circ(c, 0, 0, 0.12, true);
 };
-SC.cherche = (c, t, K) => {
+SC.cherche = (c, t, K2) => {
   const cyc = 3.6, n = Math.floor(t / cyc), u = t % cyc / cyc, f = (n * 7 + 3) % 15, fx = -0.7 + f % 5 * 0.35, fy = -0.4 + Math.floor(f / 5) * 0.4;
   let lx = 0.45 * Math.sin(t * 0.9), ly = 0.25 * Math.sin(t * 1.3 + 1);
   const m = sm((u - 0.55) / 0.25) * (1 - sm((u - 0.88) / 0.1));
@@ -1810,49 +1943,49 @@ SC.cherche = (c, t, K) => {
   ly += (fy - ly) * m;
   for (let i = 0; i < 15; i++) {
     const x = -0.7 + i % 5 * 0.35, y = -0.4 + Math.floor(i / 5) * 0.4, d = Math.hypot(x - lx, y - ly), g = 1 - cl(d / 0.45), isF = i === f && m > 0.5;
-    c.fillStyle = isF ? K.B(1) : K.W(0.25 + 0.6 * g);
+    c.fillStyle = isF ? K2.B(1) : K2.W(0.25 + 0.6 * g);
     circ(c, x, y, 0.04 + 0.05 * g + (isF ? 0.04 * (1 + Math.sin(t * 10)) : 0), true);
   }
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   circ(c, lx, ly, 0.34);
   L(c, lx + 0.24, ly + 0.24, lx + 0.55, ly + 0.55);
 };
-SC.lit = (c, t, K) => {
+SC.lit = (c, t, K2) => {
   const WW = [0.95, 0.85, 0.95, 0.6, 0.9], sp = 1, cur = Math.floor(t * sp) % 7, p = t * sp % 1;
   for (let i = 0; i < 5; i++) {
     const y = -0.5 + i * 0.25, x0 = -0.5, w = WW[i] * 0.95;
     if (i < cur) {
-      c.strokeStyle = K.A(0.95);
+      c.strokeStyle = K2.A(0.95);
       L(c, x0, y, x0 + w, y);
     } else if (i === cur) {
-      c.strokeStyle = K.W(0.25);
+      c.strokeStyle = K2.W(0.25);
       L(c, x0, y, x0 + w, y);
-      c.strokeStyle = K.B(1);
+      c.strokeStyle = K2.B(1);
       L(c, x0, y, x0 + w * p, y);
-      c.fillStyle = K.B(1);
+      c.fillStyle = K2.B(1);
       circ(c, x0 + w * p, y, 0.06, true);
     } else {
-      c.strokeStyle = K.W(0.25);
+      c.strokeStyle = K2.W(0.25);
       L(c, x0, y, x0 + w, y);
     }
   }
 };
-SC.surveille = (c, t, K) => {
-  c.strokeStyle = K.W(0.25);
+SC.surveille = (c, t, K2) => {
+  c.strokeStyle = K2.W(0.25);
   for (const r of [0.4, 0.85]) circ(c, 0, 0, r);
   const a0 = t * 1.3;
   for (let j = 0; j < 5; j++) {
     const a = a0 - j * 0.1, al = Math.pow(1 - j / 5, 1.4) * 0.7;
-    c.strokeStyle = K.A(al);
+    c.strokeStyle = K2.A(al);
     L(c, 0, 0, Math.cos(a) * 0.85, Math.sin(a) * 0.85);
   }
   for (let i = 0; i < 4; i++) {
     const a = hs(i, 1) * TAU2, r = 0.3 + 0.5 * hs(i, 2), dl = ang(a0 - a), al = Math.max(0, 1 - dl / TAU2 * 1.3);
-    c.fillStyle = i === 2 ? K.B(al) : K.A(al);
+    c.fillStyle = i === 2 ? K2.B(al) : K2.A(al);
     circ(c, Math.cos(a) * r, Math.sin(a) * r, 0.07, true);
   }
 };
-SC.ecrit = (c, t, K) => {
+SC.ecrit = (c, t, K2) => {
   const cap = 1.5, pos = (t * 0.7 + 0.12 * Math.sin(t * 4.3)) % 5.6, tot = Math.min(pos, 4.5);
   for (let li2 = 0; li2 < 3; li2++) {
     const y = -0.4 + li2 * 0.4, done = cl(tot - li2 * cap, 0, cap);
@@ -1860,7 +1993,7 @@ SC.ecrit = (c, t, K) => {
     while (x < -0.8 + cap - 0.03) {
       const w = 0.2 + 0.3 * hs(li2 * 9 + wi, 5), x2 = Math.min(x + w, -0.8 + cap), vis = -0.8 + done;
       if (x < vis) {
-        c.strokeStyle = K.A(0.95);
+        c.strokeStyle = K2.A(0.95);
         L(c, x, y, Math.min(x2, vis), y);
       }
       x = x2 + 0.1;
@@ -1872,21 +2005,21 @@ SC.ecrit = (c, t, K) => {
   c.globalAlpha *= al;
   c.translate(cx, cy + 0.02 * Math.sin(t * 20));
   c.rotate(-0.9);
-  c.strokeStyle = K.B(1);
+  c.strokeStyle = K2.B(1);
   L(c, 0, 0, 0.6, 0);
   L(c, 0.12, -0.07, 0.12, 0.07);
   c.restore();
 };
-SC.code = (c, t, K) => {
+SC.code = (c, t, K2) => {
   const br = 0.04 * Math.sin(t * 1.6);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   poly(c, [[-0.28 - br, -0.5], [-0.78 - br, 0], [-0.28 - br, 0.5]]);
   poly(c, [[0.28 + br, -0.5], [0.78 + br, 0], [0.28 + br, 0.5]]);
   const s = 0.55 + 0.45 * sm(0.5 + 0.5 * Math.sin(t * 1.8));
-  c.strokeStyle = K.B(1);
+  c.strokeStyle = K2.B(1);
   L(c, 0.1 * s, -0.5 * s, -0.1 * s, 0.5 * s);
 };
-SC.image = (c, t, K) => {
+SC.image = (c, t, K2) => {
   const cyc = 6, u = t % cyc / cyc, p = cl(u / 0.78), xe = -0.85 + 1.7 * eo(p), al = 1 - sm((u - 0.93) / 0.07);
   c.save();
   c.globalAlpha *= al;
@@ -1901,23 +2034,23 @@ SC.image = (c, t, K) => {
   poly(c, [[-0.85, 0.62], [-0.4, 0], [-0.1, 0.3], [0.25, -0.1], [0.85, 0.62]], cl((xe + 0.85) / 1.7));
   c.restore();
 };
-SC.traduit = (c, t, K) => {
+SC.traduit = (c, t, K2) => {
   const cyc = 3.8, u = t % cyc / cyc, out = 1 - sm((u - 0.9) / 0.08), v = cl((u - 0.12) / 0.5);
-  c.strokeStyle = K.A(v > 0 && v < 1 ? 0.35 : 1);
+  c.strokeStyle = K2.A(v > 0 && v < 1 ? 0.35 : 1);
   gA(c, -0.58, 0, 1.2);
   if (v > 0 && v < 1) {
     const x = -0.58 + 1.16 * eo(v), y = -0.55 * Math.sin(Math.PI * v), m = sm((v - 0.35) / 0.4);
-    c.strokeStyle = K.A(1 - m);
+    c.strokeStyle = K2.A(1 - m);
     gA(c, x, y, 1.2);
-    c.strokeStyle = K.B(m);
+    c.strokeStyle = K2.B(m);
     gB(c, x, y, 1.2);
   }
   if (v >= 1) {
-    c.strokeStyle = K.B(out);
+    c.strokeStyle = K2.B(out);
     gB(c, 0.58, 0, 1.2);
   }
 };
-SC.calcule = (c, t, K) => {
+SC.calcule = (c, t, K2) => {
   const hh = [];
   let max = 0, mi = 0;
   for (let i = 0; i < 5; i++) {
@@ -1930,54 +2063,54 @@ SC.calcule = (c, t, K) => {
   }
   for (let i = 0; i < 5; i++) {
     const x = -0.6 + i * 0.3;
-    c.strokeStyle = i === mi ? K.B(1) : K.A(0.8);
+    c.strokeStyle = i === mi ? K2.B(1) : K2.A(0.8);
     L(c, x, 0.7, x, 0.7 - hh[i]);
   }
 };
-SC.planifie = (c, t, K) => {
-  c.strokeStyle = K.A(0.95);
+SC.planifie = (c, t, K2) => {
+  c.strokeStyle = K2.A(0.95);
   rr(c, -0.85, -0.62, 1.7, 1.5, 0.1);
   c.stroke();
   const f = Math.floor(t * 2.4) % 24;
   for (let i = 0; i < 15; i++) {
     const x = -0.6 + i % 5 * 0.3, y = -0.2 + Math.floor(i / 5) * 0.34, filled = i < f && hs(i, 4) > 0.3;
-    c.fillStyle = filled ? hs(i, 8) > 0.7 ? K.B(0.95) : K.A(0.9) : K.W(0.3);
+    c.fillStyle = filled ? hs(i, 8) > 0.7 ? K2.B(0.95) : K2.A(0.9) : K2.W(0.3);
     circ(c, x, y, 0.06, true);
   }
 };
-SC.organise = (c, t, K) => {
+SC.organise = (c, t, K2) => {
   const u = t % 6 / 6;
   for (let i = 0; i < 9; i++) {
     const g = i % 3, k = Math.floor(i / 3), m = sm((u - 0.1 - i * 0.03) / 0.4) * (1 - sm((u - 0.85 + i * 0.01) / 0.12));
     const sx = -0.8 + hs(i, 5) * 1.6 + 0.03 * Math.sin(t * 1.3 + i), sy = -0.7 + hs(i, 6) * 0.9 + 0.03 * Math.cos(t * 1.1 + i), tx = (g - 1) * 0.6, ty = 0.5 - k * 0.22;
-    c.fillStyle = g === 0 ? K.A(0.9) : g === 1 ? K.B(0.9) : K.W(0.8);
+    c.fillStyle = g === 0 ? K2.A(0.9) : g === 1 ? K2.B(0.9) : K2.W(0.8);
     circ(c, sx + (tx - sx) * m, sy + (ty - sy) * m, 0.09, true);
   }
 };
-SC.synchronise = (c, t, K) => {
+SC.synchronise = (c, t, K2) => {
   const rot = t * 1.4 + 0.5 * Math.sin(t * 1.4);
   for (let j = 0; j < 2; j++) {
     const a1 = rot + j * Math.PI + 0.3, a2 = rot + j * Math.PI + Math.PI - 0.3;
-    c.strokeStyle = j ? K.B(1) : K.A(1);
+    c.strokeStyle = j ? K2.B(1) : K2.A(1);
     c.beginPath();
     c.arc(0, 0, 0.62, a1, a2);
     c.stroke();
     arrow(c, Math.cos(a2) * 0.62, Math.sin(a2) * 0.62, -Math.sin(a2), Math.cos(a2), 0.22);
   }
 };
-SC.envoie = (c, t, K) => {
+SC.envoie = (c, t, K2) => {
   const cyc = 2.8, u = t % cyc / cyc, s = sm(cl(u / 0.8)), al = sm(u / 0.08) * (1 - sm((u - 0.86) / 0.14));
   c.save();
   c.globalAlpha *= al;
   for (let j = 0; j < 24; j += 3) {
     const p3 = bz(s * j / 24), q = bz(s * (j + 1.6) / 24);
-    c.strokeStyle = K.B(j / 24);
+    c.strokeStyle = K2.B(j / 24);
     L(c, p3[0], p3[1], q[0], q[1]);
   }
   const p = bz(s), p2 = bz(Math.min(1, s + 0.01)), p1 = bz(Math.max(0, s - 0.01)), a = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]);
   c.translate(p[0], p[1]);
   c.rotate(a);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   c.beginPath();
   c.moveTo(0.4, 0);
   c.lineTo(-0.3, -0.26);
@@ -1986,9 +2119,9 @@ SC.envoie = (c, t, K) => {
   c.stroke();
   c.restore();
 };
-SC.securise = (c, t, K) => {
+SC.securise = (c, t, K2) => {
   const u = t % 5 / 5, lf = 0.3 * (1 - sm((u - 0.12) / 0.12)) + 0.3 * sm((u - 0.88) / 0.1);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   c.beginPath();
   c.moveTo(-0.27, 0.02 - lf);
   c.lineTo(-0.27, -0.3 - lf);
@@ -1998,46 +2131,46 @@ SC.securise = (c, t, K) => {
   rr(c, -0.45, 0.02, 0.9, 0.72, 0.1);
   c.stroke();
 };
-SC.alerte = (c, t, K) => {
+SC.alerte = (c, t, K2) => {
   const u = t % 1.3 / 1.3, P0 = [[0, -0.78], [0.82, 0.64], [-0.82, 0.64]];
   c.save();
   c.rotate(u < 0.25 ? 0.05 * Math.sin(u * 70) : 0);
   const sc = 1 + 0.04 * Math.sin(t * 6);
   c.scale(sc, sc);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   poly(c, P0.concat([P0[0]]));
   L(c, 0, -0.3, 0, 0.15);
-  c.fillStyle = K.A(1);
+  c.fillStyle = K2.A(1);
   circ(c, 0, 0.4, 0.06, true);
   c.restore();
 };
-SC.reussi = (c, t, K) => {
+SC.reussi = (c, t, K2) => {
   const u = t % 3.8 / 3.8, al = 1 - sm((u - 0.9) / 0.1);
   c.save();
   c.globalAlpha *= al;
   const pop = 1 + 0.08 * Math.sin(Math.PI * cl((u - 0.25) / 0.2));
   c.scale(pop, pop);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   c.beginPath();
   c.arc(0, 0, 0.62, -Math.PI / 2, -Math.PI / 2 + TAU2 * eo(u / 0.25));
   c.stroke();
-  c.strokeStyle = K.B(1);
+  c.strokeStyle = K2.B(1);
   poly(c, [[-0.3, 0.02], [-0.08, 0.26], [0.32, -0.2]], cl((u - 0.2) / 0.2));
   const p = (u - 0.4) / 0.5;
   if (p > 0 && p < 1) {
     for (let k = 0; k < 8; k++) {
       const a = k * TAU2 / 8 + 0.1, r1 = 0.85 + 0.4 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.04;
-      c.strokeStyle = k % 2 ? K.A(1 - p) : K.B(1 - p);
+      c.strokeStyle = k % 2 ? K2.A(1 - p) : K2.B(1 - p);
       L(c, Math.cos(a) * r1, Math.sin(a) * r1, Math.cos(a) * r2, Math.sin(a) * r2);
     }
   }
   c.restore();
 };
-SC.veille = (c, t, K) => {
+SC.veille = (c, t, K2) => {
   const br = 1 + 0.03 * Math.sin(t * 0.9);
   c.save();
   c.scale(br, br);
-  c.strokeStyle = K.A(0.95);
+  c.strokeStyle = K2.A(0.95);
   const ax = -0.1, ay = 0.05, r1 = 0.55, bx = 0.2, by = -0.15, r2 = 0.46, ph = Math.atan2(by - ay, bx - ax), a1 = 0.9815, a2 = 1.4523;
   c.beginPath();
   c.arc(ax, ay, r1, ph + a1, ph - a1 + TAU2);
@@ -2048,16 +2181,16 @@ SC.veille = (c, t, K) => {
   c.restore();
   for (let i = 0; i < 2; i++) {
     const u = ((t * 0.35 - i * 0.5) % 1 + 1) % 1, s = 0.16 + 0.06 * i, x = 0.35 + i * 0.25 + u * 0.1, y = 0.15 - u * 0.9;
-    c.strokeStyle = K.B(Math.sin(Math.PI * u) * 0.9);
+    c.strokeStyle = K2.B(Math.sin(Math.PI * u) * 0.9);
     poly(c, [[x, y], [x + s, y], [x, y + s], [x + s, y + s]]);
   }
 };
-SC.salue = (c, t, K) => {
+SC.salue = (c, t, K2) => {
   const w = 0.4 * Math.sin(t * 5.2) * (0.7 + 0.3 * Math.sin(t * 0.8));
   c.save();
   c.translate(0, 0.78);
   c.rotate(w);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   rr(c, -0.3, -0.52, 0.6, 0.52, 0.16);
   c.stroke();
   for (let i = 0; i < 4; i++) {
@@ -2070,7 +2203,7 @@ SC.salue = (c, t, K) => {
   c.restore();
   for (let j = 0; j < 2; j++) {
     const u = (t * 0.9 + j / 2) % 1, al = Math.sin(Math.PI * u) * 0.9, r = 0.78 + 0.3 * u;
-    c.strokeStyle = K.B(al);
+    c.strokeStyle = K2.B(al);
     c.beginPath();
     c.arc(0, 0.25, r, Math.PI * 1.12, Math.PI * 1.32);
     c.stroke();
@@ -2079,28 +2212,28 @@ SC.salue = (c, t, K) => {
     c.stroke();
   }
 };
-SC.content = (c, t, K) => {
+SC.content = (c, t, K2) => {
   const s = 1 + 0.07 * Math.sin(t * 4.4), pts = [];
   for (let i = 0; i < 10; i++) {
     const a = i / 10 * TAU2 - Math.PI / 2 + t * 0.5, r = (i % 2 ? 0.26 : 0.62) * s;
     pts.push([Math.cos(a) * r, Math.sin(a) * r]);
   }
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   poly(c, pts.concat([pts[0]]));
   for (let k = 0; k < 6; k++) {
     const u = (t * 0.7 + k / 6) % 1, a = k * TAU2 / 6 + 0.4 + 0.3 * hs(k, 2), r1 = 0.8 + 0.3 * u;
-    c.strokeStyle = k % 2 ? K.A(1 - u) : K.B(1 - u);
+    c.strokeStyle = k % 2 ? K2.A(1 - u) : K2.B(1 - u);
     L(c, Math.cos(a) * r1, Math.sin(a) * r1, Math.cos(a) * (r1 + 0.12), Math.sin(a) * (r1 + 0.12));
   }
   for (let k = 0; k < 3; k++) {
     const u = (t * 0.5 + k / 3) % 1;
-    c.fillStyle = K.W(Math.sin(Math.PI * u));
+    c.fillStyle = K2.W(Math.sin(Math.PI * u));
     circ(c, (hs(k, 3) - 0.5) * 1.5, 0.75 - u * 1.5, 0.05, true);
   }
 };
-SC.triste = (c, t, K) => {
+SC.triste = (c, t, K2) => {
   const by = -0.35 + 0.02 * Math.sin(t * 1.1);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   c.beginPath();
   c.moveTo(-0.55, by + 0.28);
   c.lineTo(0.5, by + 0.28);
@@ -2111,16 +2244,16 @@ SC.triste = (c, t, K) => {
   c.stroke();
   for (let k = 0; k < 6; k++) {
     const u = (t * 0.8 + hs(k, 1) + k * 0.17) % 1, x = -0.45 + k * 0.18, y = by + 0.42 + u * 0.7;
-    c.strokeStyle = k % 2 ? K.B(Math.sin(Math.PI * u)) : K.A(Math.sin(Math.PI * u));
+    c.strokeStyle = k % 2 ? K2.B(Math.sin(Math.PI * u)) : K2.A(Math.sin(Math.PI * u));
     L(c, x, y, x - 0.03, y + 0.14);
   }
 };
-SC.surpris = (c, t, K) => {
+SC.surpris = (c, t, K2) => {
   const u = t % 1.8 / 1.8, j = Math.pow(Math.max(0, 1 - u * 3), 2) * 0.12;
   c.save();
   c.translate(0, -j);
-  c.strokeStyle = K.A(1);
-  c.fillStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
+  c.fillStyle = K2.A(1);
   L(c, -0.07, -0.62, -0.02, 0.1);
   L(c, 0.07, -0.62, 0.02, 0.1);
   circ(c, 0, 0.4, 0.08, true);
@@ -2128,25 +2261,25 @@ SC.surpris = (c, t, K) => {
   const p = cl(u / 0.85);
   if (p < 1) for (let k = 0; k < 12; k++) {
     const a = k * TAU2 / 12 + 0.13, r1 = 0.62 + 0.3 * eo(p), r2 = r1 + 0.2 * (1 - p) + 0.05;
-    c.strokeStyle = k % 2 ? K.A(1 - p * 0.8) : K.B(1 - p * 0.8);
+    c.strokeStyle = k % 2 ? K2.A(1 - p * 0.8) : K2.B(1 - p * 0.8);
     L(c, Math.cos(a) * r1, Math.sin(a) * r1 * 1.05, Math.cos(a) * r2, Math.sin(a) * r2 * 1.05);
   }
 };
-SC.remercie = (c, t, K) => {
+SC.remercie = (c, t, K2) => {
   const ph = t % 1.5 / 1.5, b = Math.pow(Math.max(0, Math.sin(ph * TAU2)), 6) * 0.12 + Math.pow(Math.max(0, Math.sin(ph * TAU2 - 1.2)), 6) * 0.07, pts = [];
   for (let i = 0; i <= 40; i++) {
     const th = i / 40 * TAU2, x = 16 * Math.pow(Math.sin(th), 3), y = -(13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th));
     pts.push([x / 19 * 0.72 * (1 + b), y / 19 * 0.72 * (1 + b) + 0.05]);
   }
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   poly(c, pts);
   for (let k = 0; k < 4; k++) {
     const u = (t * 0.45 + k / 4) % 1;
-    c.fillStyle = k % 2 ? K.B(Math.sin(Math.PI * u)) : K.W(Math.sin(Math.PI * u));
+    c.fillStyle = k % 2 ? K2.B(Math.sin(Math.PI * u)) : K2.W(Math.sin(Math.PI * u));
     circ(c, (hs(k, 4) - 0.5) * 1.5, 0.85 - u * 1.6, 0.06, true);
   }
 };
-SC.musique = (c, t, K) => {
+SC.musique = (c, t, K2) => {
   const nt = (x, ph, col) => {
     const b = Math.abs(Math.sin(t * 3 + ph)) * 0.14, y = 0.32 - b;
     c.fillStyle = col;
@@ -2155,23 +2288,23 @@ SC.musique = (c, t, K) => {
     L(c, x + 0.1, y, x + 0.1, y - 0.62);
     L(c, x + 0.1, y - 0.62, x + 0.34, y - 0.4);
   };
-  nt(-0.4, 0, K.A(1));
-  nt(0.2, 1.5, K.B(1));
+  nt(-0.4, 0, K2.A(1));
+  nt(0.2, 1.5, K2.B(1));
   for (let j = 0; j < 2; j++) {
     const u = (t * 0.8 + j / 2) % 1;
-    c.strokeStyle = K.W(Math.sin(Math.PI * u) * 0.6);
+    c.strokeStyle = K2.W(Math.sin(Math.PI * u) * 0.6);
     c.beginPath();
     c.arc(-0.05, 0.05, 0.8 + 0.2 * u, -1.1, -0.4);
     c.stroke();
   }
 };
-SC.reveille = (c, t, K) => {
+SC.reveille = (c, t, K2) => {
   const tc = t % 7, u = Math.min(1, tc / 4.5), h = eo(u), cy = 0.4 - 0.55 * h, al = 1 - sm((tc - 6.3) / 0.7), q = Math.min(1, (0.4 - cy) / 0.38);
   c.save();
   c.globalAlpha *= al;
-  c.strokeStyle = K.A(0.7);
+  c.strokeStyle = K2.A(0.7);
   L(c, -0.9, 0.4, 0.9, 0.4);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   c.beginPath();
   if (q >= 1) c.arc(0, cy, 0.38, 0, TAU2);
   else c.arc(0, cy, 0.38, Math.PI - Math.asin(Math.max(-1, q)), TAU2 + Math.asin(Math.max(-1, q)));
@@ -2180,33 +2313,33 @@ SC.reveille = (c, t, K) => {
   for (let k = 0; k < 7; k++) {
     const a = -Math.PI + (k + 0.5) * Math.PI / 7, r1 = 0.52, r2 = 0.52 + 0.3 * ry;
     if (ry > 0.02 && cy + Math.sin(a) * r2 < 0.4) {
-      c.strokeStyle = k % 2 ? K.B(ry) : K.A(ry);
+      c.strokeStyle = k % 2 ? K2.B(ry) : K2.A(ry);
       L(c, Math.cos(a) * r1, cy + Math.sin(a) * r1, Math.cos(a) * r2, cy + Math.sin(a) * r2);
     }
   }
   c.restore();
 };
-SC.concentre = (c, t, K) => {
+SC.concentre = (c, t, K2) => {
   for (let j = 0; j < 3; j++) {
     const r = [0.92, 0.6, 0.3][j], al = 0.25 + 0.75 * pulse(((t * 1.2 - (2 - j) * 0.45) % 2.4 + 2.4) % 2.4 - 0, 0.5);
-    c.strokeStyle = j % 2 ? K.B(al) : K.A(al);
+    c.strokeStyle = j % 2 ? K2.B(al) : K2.A(al);
     circ(c, 0, 0, r);
   }
-  c.strokeStyle = K.W(0.6);
+  c.strokeStyle = K2.W(0.6);
   for (let k = 0; k < 4; k++) {
     const a = k * Math.PI / 2 + t * 0.3;
     L(c, Math.cos(a) * 0.98, Math.sin(a) * 0.98, Math.cos(a) * 1.1, Math.sin(a) * 1.1);
   }
-  c.fillStyle = K.B(1);
+  c.fillStyle = K2.B(1);
   circ(c, 0, 0, 0.06 + 0.02 * Math.sin(t * 6), true);
 };
-SC.attend = (c, t, K) => {
+SC.attend = (c, t, K2) => {
   const cyc = 5, u = t % cyc / cyc, fl = sm((u - 0.9) / 0.1), p = cl(u / 0.88);
   c.save();
   c.rotate(Math.PI * fl);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   poly(c, [[-0.42, -0.72], [0.42, -0.72], [0.03, -0.03], [0.03, 0.03], [0.42, 0.72], [-0.42, 0.72], [-0.03, 0.03], [-0.03, -0.03], [-0.42, -0.72]]);
-  c.strokeStyle = K.B(1);
+  c.strokeStyle = K2.B(1);
   const ty = -0.62 + 0.55 * p, w = 0.3 * (1 - p), by = 0.7 - 0.45 * p;
   if (w > 0.04) L(c, -w, ty, w, ty);
   if (p < 1 && fl < 0.05) {
@@ -2217,51 +2350,51 @@ SC.attend = (c, t, K) => {
   if (p > 0.3) L(c, -w2 * 0.7, by + 0.08, w2 * 0.7, by + 0.08);
   c.restore();
 };
-SC.telecharge = (c, t, K) => {
+SC.telecharge = (c, t, K2) => {
   const u = t % 2.6 / 2.6, y = -0.75 + 0.8 * eo(cl(u / 0.8)), al = 1 - sm((u - 0.88) / 0.12);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   poly(c, [[-0.62, 0.12], [-0.62, 0.58], [0.62, 0.58], [0.62, 0.12]]);
   c.save();
   c.globalAlpha *= al;
-  c.strokeStyle = K.B(1);
+  c.strokeStyle = K2.B(1);
   L(c, 0, y - 0.5, 0, y);
   arrow(c, 0, y, 0, 1, 0.2);
   c.restore();
-  c.strokeStyle = K.W(0.25);
+  c.strokeStyle = K2.W(0.25);
   L(c, -0.62, 0.8, 0.62, 0.8);
-  c.strokeStyle = K.B(1);
+  c.strokeStyle = K2.B(1);
   L(c, -0.62, 0.8, -0.62 + 1.24 * u, 0.8);
 };
-SC.verifie = (c, t, K) => {
+SC.verifie = (c, t, K2) => {
   const cyc = 4.8, u = t % cyc / cyc, al = 1 - sm((u - 0.92) / 0.08);
   c.save();
   c.globalAlpha *= al;
   for (let i = 0; i < 3; i++) {
     const y = -0.5 + i * 0.5, p = cl(u * 3.4 - i * 0.95);
-    c.strokeStyle = K.A(0.9);
+    c.strokeStyle = K2.A(0.9);
     rr(c, -0.78, y - 0.16, 0.32, 0.32, 0.06);
     c.stroke();
-    c.strokeStyle = K.W(0.35);
+    c.strokeStyle = K2.W(0.35);
     L(c, -0.3, y, 0.72, y);
     if (p > 0) {
-      c.strokeStyle = K.B(1);
+      c.strokeStyle = K2.B(1);
       poly(c, [[-0.72, y], [-0.63, y + 0.1], [-0.5, y - 0.12]], cl(p * 1.4));
     }
   }
   c.restore();
 };
-SC.appelle = (c, t, K) => {
+SC.appelle = (c, t, K2) => {
   const u = t % 2 / 2, ring = u < 0.55, sh = ring ? 0.06 * Math.sin(t * 28) : 0;
   c.save();
   c.rotate(sh);
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   rr(c, -0.3, -0.62, 0.6, 1.24, 0.12);
   c.stroke();
   c.restore();
   if (ring) for (let j = 0; j < 2; j++) {
     const q = cl(u / 0.55 * 1.3 - j * 0.3);
     if (q > 0 && q < 1) {
-      c.strokeStyle = K.B(Math.sin(Math.PI * q));
+      c.strokeStyle = K2.B(Math.sin(Math.PI * q));
       const r = 0.55 + 0.2 * j + 0.2;
       c.beginPath();
       c.arc(0, 0, r, -0.55, 0.55);
@@ -2272,19 +2405,19 @@ SC.appelle = (c, t, K) => {
     }
   }
 };
-SC.analyse = (c, t, K, o) => {
+SC.analyse = (c, t, K2, o) => {
   const asp = o && o.asp || 0.7, x = 0.96, y = asp * 0.96, L22 = 0.2;
-  c.strokeStyle = K.A(1);
+  c.strokeStyle = K2.A(1);
   for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
     L(c, sx * x, sy * y, sx * (x - L22), sy * y);
     L(c, sx * x, sy * y, sx * x, sy * (y - L22 * asp * 1.2));
   }
   const u = t * 0.45 % 1, by = -y + 2 * y * u;
-  c.strokeStyle = K.B(1);
+  c.strokeStyle = K2.B(1);
   L(c, -0.86, by, 0.86, by);
   for (let i = 0; i < 12; i++) {
     const px = -0.7 + i % 4 * 0.46, py = (-0.55 + Math.floor(i / 4) * 0.55) * asp * 1.2, g = Math.max(0, 1 - Math.abs(py - by) / (0.5 * asp));
-    c.fillStyle = g > 0.2 ? K.B(0.5 + 0.5 * g) : K.W(0.25);
+    c.fillStyle = g > 0.2 ? K2.B(0.5 + 0.5 * g) : K2.W(0.25);
     circ(c, px, py, 0.035 + 0.03 * g, true);
   }
 };
@@ -2740,7 +2873,7 @@ function corps() {
   const ew = [];
   return (c, w, h, P, t, id, o) => {
     o = o || {};
-    const A = ACT[id], R = o.R || Math.min(w, h) / 2 * 0.92, cx = o.cx != null ? o.cx : w / 2, cy = o.cy != null ? o.cy : h / 2, W = P.W, H = P.H || HZ, K = HK.v, M = humeurNow();
+    const A = ACT[id], R = o.R || Math.min(w, h) / 2 * 0.92, cx = o.cx != null ? o.cx : w / 2, cy = o.cy != null ? o.cy : h / 2, W = P.W, H = P.H || HZ, K2 = HK.v, M = humeurNow();
     const dt = last == null ? 0 : Math.min(0.05, Math.max(0, t - last));
     last = t;
     if (id !== curId) {
@@ -2770,14 +2903,14 @@ function corps() {
     }
     const cbase = [[mixc(BLANC, O, 0.35), O], [mixc(BLANC, I, 0.35), I]];
     const gAng = Math.atan2(H.gy, H.gx), ux = Math.cos(gAng), uy = Math.sin(gAng);
-    const sy = 1 + K * H.sq * 1.2 * 0.8, sx = 1 / sy, th = K * 0.38 * H.mag, cs = Math.cos(th), ro = K * 0.1 * H.gx + H.tilt * K, cr0 = Math.cos(ro), sr0 = Math.sin(ro);
-    const sc = 1 + K * 0.035 * H.b + K * 0.04 * H.kick + 0.04 * H.cur, sag = W.veille * 0.05 + M.sag, nodY = R * 0.04 * K * H.nod - R * 0.07 * H.hop;
+    const sy = 1 + K2 * H.sq * 1.2 * 0.8, sx = 1 / sy, th = K2 * 0.38 * H.mag, cs = Math.cos(th), ro = K2 * 0.1 * H.gx + H.tilt * K2, cr0 = Math.cos(ro), sr0 = Math.sin(ro);
+    const sc = 1 + K2 * 0.035 * H.b + K2 * 0.04 * H.kick + 0.04 * H.cur, sag = W.veille * 0.05 + M.sag, nodY = R * 0.04 * K2 * H.nod - R * 0.07 * H.hop;
     const tf = (x, y) => {
       const a = x * cr0 - y * sr0, b = x * sr0 + y * cr0, dd = a * ux + b * uy;
       return [a + (cs - 1) * dd * ux, b + (cs - 1) * dd * uy];
     };
     for (let k = 0; k < 2; k++) {
-      const Nk = NB[k], ox = cx + H.gx * R * OF[k] * K, oy = cy + H.gy * R * OF[k] * K + R * sag + nodY * (k ? 1.25 : 1), base = RB[k] * sc * (1 + (k ? 1 : -1) * 0.04 * H.blink * K);
+      const Nk = NB[k], ox = cx + H.gx * R * OF[k] * K2, oy = cy + H.gy * R * OF[k] * K2 + R * sag + nodY * (k ? 1.25 : 1), base = RB[k] * sc * (1 + (k ? 1 : -1) * 0.04 * H.blink * K2);
       for (let i = 0; i < Nk; i++) {
         const a = i / Nk * TAU2, ctx = { k, i, N: Nk, t, P, nz: nz1(i * 0.3 + t * 0.8, k), a0: a, H };
         let e = 0, dsp = 0;
@@ -2790,8 +2923,8 @@ function corps() {
         }
         dsp += H.yawn * (k ? -0.05 : 0.09) + H.shiv * 0.012 * Math.sin(a * 14 + t * 45);
         e += H.yawn * 0.3;
-        e = e * M.en + K * H.hes * 0.3 * W.reflexion + 0.35 * H.flash * (0.5 + 0.5 * ctx.nz);
-        const ga = K * H.mag * Math.pow(Math.max(0, Math.cos(a - gAng)), 2) * 0.55;
+        e = e * M.en + K2 * H.hes * 0.3 * W.reflexion + 0.35 * H.flash * (0.5 + 0.5 * ctx.nz);
+        const ga = K2 * H.mag * Math.pow(Math.max(0, Math.cos(a - gAng)), 2) * 0.55;
         e += ga;
         e = Math.min(1.3, e);
         const kk = 60 + hs(i, k) * 50, cc = 6 + hs(i, k + 9) * 5, n = Math.max(1, Math.ceil(dt / 8e-3)), hh = dt / n;
@@ -2800,7 +2933,7 @@ function corps() {
           ev[k][i] += evv[k][i] * hh;
         }
         e = Math.max(0, ev[k][i]);
-        const len = R * (0.012 + GN[k] * e) * (1 - 0.85 * H.blink * K), r = R * (base + dsp), ex = r + DR[k] * len, ca_ = Math.cos(a), sa_ = Math.sin(a);
+        const len = R * (0.012 + GN[k] * e) * (1 - 0.85 * H.blink * K2), r = R * (base + dsp), ex = r + DR[k] * len, ca_ = Math.cos(a), sa_ = Math.sin(a);
         const [x1, y1] = tf(r * sx * ca_, r * sy * sa_), [x2, y2] = tf(ex * sx * ca_, ex * sy * sa_), j = k ? 60 + i : i, hot = e > 0.5 || ga > 0.1 || Math.abs(dsp) > 0.03;
         rx[j] = ox + (x1 + x2) / 2;
         ry[j] = oy + (y1 + y2) / 2;
@@ -2817,7 +2950,7 @@ function corps() {
     if (A.sc) {
       const lt = (P.lts && P.lts[id] != null ? P.lts[id] : t) * 1.15 * (0.85 + 0.2 * M.en), rec = mkRec(), sr = ro + 0.014 * M.jit * Math.sin(t * 0.6), cs_ = Math.cos(sr), sn_ = Math.sin(sr), rp = (x, y) => [x * cs_ - y * sn_, x * sn_ + y * cs_];
       SC[id](rec, lt, mkK(id, lt), o);
-      const S = R * 0.72 * (o.extra || 1) * (1 + 0.02 * H.b * K) * (1 + (snap ? 0 : 0.07 * Math.exp(-tsw * 3.2) * Math.cos(tsw * 9))), offx = cx + H.gx * R * 0.05 * K, offy = cy + H.gy * R * 0.04 * K + R * sag + nodY * 0.6, sp0 = 0;
+      const S = R * 0.72 * (o.extra || 1) * (1 + 0.02 * H.b * K2) * (1 + (snap ? 0 : 0.07 * Math.exp(-tsw * 3.2) * Math.cos(tsw * 9))), offx = cx + H.gx * R * 0.05 * K2, offy = cy + H.gy * R * 0.04 * K2 + R * sag + nodY * 0.6, sp0 = 0;
       const inf = rec.els.map((e) => {
         if (e.k === "d") return { e, l: 0, n: 1 };
         let l = 0;
@@ -3648,18 +3781,8 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__etat-humeur{position:absolute;left:0;top:0;transform:translateX(-50%);display:flex;align-items:center;gap:.4rem;padding:.25rem .7rem;border-radius:999px;border:1px solid color-mix(in srgb,var(--lia-point,var(--lia-accent)) 55%,var(--lia-border));background:var(--lia-glass);color:color-mix(in srgb,var(--lia-point,var(--lia-accent)) 70%,var(--lia-text));font-size:.8rem;line-height:1.2;white-space:nowrap;pointer-events:none;transition:border-color 1.2s ease,color 1.2s ease}
 .lia-ui__etat-humeur[hidden]{display:none}
 .lia-ui__etat-humeur i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--lia-point,var(--lia-accent))}
-.lia-ui__cadre{position:absolute;pointer-events:none;opacity:0;transform:scale(1.05);transition:opacity .35s ease,transform .45s cubic-bezier(.2,.8,.2,1);background:color-mix(in srgb,var(--lia-cadre,#2DD4BF) 6%,transparent);border-radius:6px;--lia-cadre:#2DD4BF;--lia-cadre2:#22D3EE}
-.lia-ui__cadre[hidden]{display:none}
-.lia-ui__cadre--pose{opacity:1;transform:none}
-.lia-ui__coin{position:absolute;width:22px;height:22px;border:0 solid var(--lia-cadre);border-radius:4px}
-.lia-ui__coin--hg{left:0;top:0;border-top-width:3px;border-left-width:3px}
-.lia-ui__coin--hd{right:0;top:0;border-top-width:3px;border-right-width:3px}
-.lia-ui__coin--bg{left:0;bottom:0;border-bottom-width:3px;border-left-width:3px}
-.lia-ui__coin--bd{right:0;bottom:0;border-bottom-width:3px;border-right-width:3px}
-.lia-ui__balai{position:absolute;left:6px;right:6px;top:0;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--lia-cadre2),transparent);box-shadow:0 0 10px var(--lia-cadre2);animation:lia-ui-balaye 1.8s ease-in-out infinite alternate}
-@keyframes lia-ui-balaye{from{top:0}to{top:calc(100% - 2px)}}
-.lia-ui__cadre--fixe,.lia-ui__cadre--fixe .lia-ui__balai{transition:none;animation:none}
-.lia-ui__cadre--fixe .lia-ui__balai{top:50%}
+.lia-ui__nano{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;--lia-cadre:#2DD4BF;--lia-cadre2:#22D3EE}
+.lia-ui__nano[hidden]{display:none}
 .lia-ui__sep{height:1px;background:var(--lia-border);margin:.3rem .4rem}
 .lia-ui__menu-titre{margin:0;padding:.5rem .8rem .4rem;font-size:.85rem;line-height:1.3;color:var(--lia-soft);overflow-wrap:anywhere;max-width:min(320px,100%)}
 .lia-ui__menu:not(.lia-ui__menu--element){min-width:264px}
@@ -4546,39 +4669,123 @@ function mountLia(options = {}) {
     if (!reperee.isConnected) return cesserDeReperer();
     const r = reperee.getBoundingClientRect();
     const c = couche.getBoundingClientRect();
-    repere.hidden = false;
+    repere.hidden = !!essaim && !essaim.rentre && essaimSur === reperee;
+    if (repere.hidden) return;
     repere.style.left = `${(r.left - c.left - 4).toFixed(1)}px`;
     repere.style.top = `${(r.top - c.top - 4).toFixed(1)}px`;
     repere.style.width = `${(r.width + 8).toFixed(1)}px`;
     repere.style.height = `${(r.height + 8).toFixed(1)}px`;
   };
-  const cadre = el("div", "lia-ui__cadre");
-  cadre.hidden = true;
-  cadre.setAttribute("aria-hidden", "true");
-  for (const c of ["hg", "hd", "bg", "bd"]) cadre.appendChild(el("i", `lia-ui__coin lia-ui__coin--${c}`));
-  cadre.appendChild(el("b", "lia-ui__balai"));
-  couche.appendChild(cadre);
-  let cadreSur = null;
-  const masquerCadre = () => {
-    cadre.hidden = true;
-    cadre.classList.remove("lia-ui__cadre--pose");
-    cadreSur = null;
+  const toileNano = el("canvas", "lia-ui__nano");
+  toileNano.hidden = true;
+  toileNano.setAttribute("aria-hidden", "true");
+  couche.insertBefore(toileNano, corpsEl);
+  let essaim = null;
+  let essaimSur = null;
+  let essaimZone = null;
+  const couleurNano = (nom, defaut) => {
+    try {
+      const v = getComputedStyle(toileNano).getPropertyValue(nom).trim();
+      const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(v);
+      if (m) return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+    } catch {
+    }
+    return defaut;
   };
-  const majCadre = () => {
-    const cible2 = analysePour ?? (etat === "analyse" ? reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde : null);
+  const arreterEssaim = () => {
+    essaim = null;
+    essaimSur = null;
+    essaimZone = null;
+    toileNano.hidden = true;
+  };
+  const cibleAnalyse = () => {
     if (analysePour && !analysePour.isConnected) analysePour = null;
-    if (!cible2 || !cible2.isConnected || couche.contains(cible2)) return masquerCadre();
+    const cible2 = analysePour ?? (etat === "analyse" ? reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde : null);
+    if (!cible2 || !cible2.isConnected || couche.contains(cible2)) return null;
+    return cible2;
+  };
+  const dessinerNano = (e, zone, c) => {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(1, Math.round(c.width * dpr));
+    const h = Math.max(1, Math.round(c.height * dpr));
+    if (toileNano.width !== w || toileNano.height !== h) {
+      toileNano.width = w;
+      toileNano.height = h;
+    }
+    let ctx2 = null;
+    try {
+      ctx2 = toileNano.getContext("2d");
+    } catch {
+    }
+    if (!ctx2) return;
+    ctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx2.clearRect(0, 0, c.width, c.height);
+    const [r1, g1, b1] = couleurNano("--lia-cadre", [45, 212, 191]);
+    const [r2, g2, b2] = couleurNano("--lia-cadre2", [34, 211, 238]);
+    ctx2.lineCap = "round";
+    const lumiere = [];
+    for (let i = 0; i < e.bots.length; i++) lumiere.push(eclat(e, i, zone));
+    ctx2.lineWidth = 0.8;
+    for (let i = 1; i < e.bots.length; i++) {
+      const a = e.bots[i - 1];
+      const b = e.bots[i];
+      if (!a || !b || !a.sorti || !b.sorti || a.rentre || b.rentre) continue;
+      const l = Math.min(lumiere[i] ?? 0, lumiere[i - 1] ?? 0);
+      if (l < 0.12 || Math.hypot(a.x - b.x, a.y - b.y) > 64) continue;
+      ctx2.strokeStyle = `rgba(${r2},${g2},${b2},${(0.25 + 0.5 * l).toFixed(2)})`;
+      ctx2.beginPath();
+      ctx2.moveTo(a.x, a.y);
+      ctx2.lineTo(b.x, b.y);
+      ctx2.stroke();
+    }
+    for (let i = 0; i < e.bots.length; i++) {
+      const b = e.bots[i];
+      if (!b || !b.sorti || b.rentre) continue;
+      const l = lumiere[i] ?? 0;
+      const vite = Math.hypot(b.vx, b.vy);
+      const queue = Math.min(0.06, 0.02 + vite * 8e-5);
+      ctx2.strokeStyle = `rgba(${l > 0.5 ? r2 : r1},${l > 0.5 ? g2 : g1},${l > 0.5 ? b2 : b1},${(0.72 + 0.28 * l).toFixed(2)})`;
+      ctx2.lineWidth = 1.6 + 1.4 * l;
+      ctx2.beginPath();
+      ctx2.moveTo(b.x - b.vx * queue, b.y - b.vy * queue);
+      ctx2.lineTo(b.x, b.y);
+      ctx2.stroke();
+      ctx2.fillStyle = ctx2.strokeStyle;
+      ctx2.beginPath();
+      ctx2.arc(b.x, b.y, 1.5 + 2.2 * l, 0, Math.PI * 2);
+      ctx2.fill();
+    }
+  };
+  const rectAnalyse = (cible2) => {
     const r = cible2.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return masquerCadre();
+    if (cible2.children.length > 0 || !cible2.firstChild) return r;
+    try {
+      const g = document.createRange();
+      g.selectNodeContents(cible2);
+      const t2 = g.getBoundingClientRect();
+      if (t2.width >= 2 && t2.height >= 2) return t2;
+    } catch {
+    }
+    return r;
+  };
+  const majEssaim = (dt) => {
+    const cible2 = cibleAnalyse();
+    const r = cible2 ? rectAnalyse(cible2) : void 0;
     const c = couche.getBoundingClientRect();
-    cadre.style.left = `${(r.left - c.left - 6).toFixed(1)}px`;
-    cadre.style.top = `${(r.top - c.top - 6).toFixed(1)}px`;
-    cadre.style.width = `${(r.width + 12).toFixed(1)}px`;
-    cadre.style.height = `${(r.height + 12).toFixed(1)}px`;
-    cadre.classList.toggle("lia-ui__cadre--fixe", sansMouvement || doux);
-    if (cadre.hidden) cadre.hidden = false;
-    if (cadreSur === cible2) cadre.classList.add("lia-ui__cadre--pose");
-    else cadreSur = cible2;
+    if (!cible2 || !r || r.width < 2 || r.height < 2) {
+      if (!essaim) return;
+      if (!essaim.rentre) rappeler(essaim);
+    } else {
+      essaimZone = { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height };
+      if (!essaim || essaim.rentre) essaim = creerEssaim(essaimZone, { x: pos.x, y: pos.y }, Math.random, sansMouvement ? "fixe" : doux ? "doux" : "complet");
+      essaimSur = cible2;
+    }
+    if (!essaim) return;
+    if (!essaimZone) return arreterEssaim();
+    avancerEssaim(essaim, dt, essaimZone, { x: pos.x, y: pos.y });
+    if (termine(essaim)) return arreterEssaim();
+    toileNano.hidden = false;
+    dessinerNano(essaim, essaimZone, c);
   };
   const decrireElement = (cible2) => {
     try {
@@ -4594,7 +4801,8 @@ function mountLia(options = {}) {
     clearTimeout(attenteElement);
     const baseMode = { expliquer: "analyse", changer: "planifie", regarder: "lit", question: "reflexion" }[mode];
     analysePour = baseMode === "analyse" ? cible2 : null;
-    if (analysePour) majCadre();
+    if (analysePour) majEssaim(0);
+    const debutAnalyse = Date.now();
     const demarrer = () => {
       if (detruit || !cible2.isConnected) return;
       reperee = cible2;
@@ -4609,7 +4817,7 @@ function mountLia(options = {}) {
         const fini = cible2;
         setTimeout(() => {
           if (analysePour === fini) analysePour = null;
-        }, 1200);
+        }, Math.max(1200, 4500 - (Date.now() - debutAnalyse)));
       });
     };
     if (!allerVoir(cible2, 8, baseMode)) return demarrer();
@@ -5624,7 +5832,7 @@ function mountLia(options = {}) {
     }
     if (chat) placerAutour(chat);
     majRepere();
-    majCadre();
+    majEssaim(dt);
   };
   function dessinerUneFois() {
     if (!detruit) dessinerImage(true, 0);
@@ -5724,6 +5932,13 @@ function mountLia(options = {}) {
     },
     journal: () => faits.map((f) => ({ ...f })),
     partage: () => ({ actif: !!hote, lu: lectureFaite, version: versionVue, maj: majVue }),
+    nanobots: () => ({
+      actif: !!essaim && !essaim.rentre,
+      total: essaim?.bots.length ?? 0,
+      sortis: essaim?.bots.filter((b) => b.sorti && !b.rentre).length ?? 0,
+      surCible: essaim && essaimZone ? surLaCible(essaim, essaimZone) : 0,
+      cible: essaimZone ? { ...essaimZone } : null
+    }),
     envoyer: envoyerVers,
     geste,
     activite,

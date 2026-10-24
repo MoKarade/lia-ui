@@ -1,6 +1,10 @@
 import {
   mountLia
+<<<<<<< HEAD
 } from "./chunk-EQJRCQEM.mjs";
+=======
+} from "./chunk-RRXFR6GI.mjs";
+>>>>>>> 1d58b8a (fix: nanobots plus visibles, zone du texte, analyse d'au moins 4,5 s)
 
 // src/boot.ts
 var ESSAIS_MAX = 5;

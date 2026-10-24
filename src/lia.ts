@@ -1126,8 +1126,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const b = e.bots[i];
       if (!a || !b || !a.sorti || !b.sorti || a.rentre || b.rentre) continue;
       const l = Math.min(lumiere[i] ?? 0, lumiere[i - 1] ?? 0);
-      if (l < 0.25 || Math.hypot(a.x - b.x, a.y - b.y) > 46) continue;
-      ctx.strokeStyle = `rgba(${r2},${g2},${b2},${(0.35 * l).toFixed(2)})`;
+      if (l < 0.12 || Math.hypot(a.x - b.x, a.y - b.y) > 64) continue;
+      ctx.strokeStyle = `rgba(${r2},${g2},${b2},${(0.25 + 0.5 * l).toFixed(2)})`;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -1138,22 +1138,36 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (!b || !b.sorti || b.rentre) continue;
       const l = lumiere[i] ?? 0;
       const vite = Math.hypot(b.vx, b.vy);
-      const queue = Math.min(0.045, 0.012 + vite * 0.00006);
-      ctx.strokeStyle = `rgba(${l > 0.5 ? r2 : r1},${l > 0.5 ? g2 : g1},${l > 0.5 ? b2 : b1},${(0.5 + 0.5 * l).toFixed(2)})`;
-      ctx.lineWidth = 1.3 + 1.3 * l;
+      const queue = Math.min(0.06, 0.02 + vite * 0.00008);
+      ctx.strokeStyle = `rgba(${l > 0.5 ? r2 : r1},${l > 0.5 ? g2 : g1},${l > 0.5 ? b2 : b1},${(0.72 + 0.28 * l).toFixed(2)})`;
+      ctx.lineWidth = 1.6 + 1.4 * l;
       ctx.beginPath();
       ctx.moveTo(b.x - b.vx * queue, b.y - b.vy * queue);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
       ctx.fillStyle = ctx.strokeStyle;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, 1 + 1.6 * l, 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, 1.5 + 2.2 * l, 0, Math.PI * 2);
       ctx.fill();
     }
   };
+  /** Le rectangle à analyser : pour un élément qui ne contient que du texte, le texte lui-même (pas toute la largeur de son bloc). */
+  const rectAnalyse = (cible: Element): DOMRect => {
+    const r = cible.getBoundingClientRect();
+    if (cible.children.length > 0 || !cible.firstChild) return r;
+    try {
+      const g = document.createRange();
+      g.selectNodeContents(cible);
+      const t = g.getBoundingClientRect();
+      if (t.width >= 2 && t.height >= 2) return t;
+    } catch {
+      /* pas de mesure de texte (rendu hors navigateur) : l'élément entier */
+    }
+    return r;
+  };
   const majEssaim = (dt: number): void => {
     const cible = cibleAnalyse();
-    const r = cible?.getBoundingClientRect();
+    const r = cible ? rectAnalyse(cible) : undefined;
     const c = couche.getBoundingClientRect();
     if (!cible || !r || r.width < 2 || r.height < 2) {
       // Plus rien à analyser : ils rentrent dans son corps, puis l'essaim disparaît.
@@ -1195,6 +1209,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     // Le cadre d'analyse apparaît tout de suite, sans attendre qu'elle soit arrivée ni que le modèle réponde.
     analysePour = baseMode === "analyse" ? cible : null;
     if (analysePour) majEssaim(0);
+    const debutAnalyse = Date.now();
     const demarrer = (): void => {
       if (detruit || !cible.isConnected) return;
       reperee = cible;
@@ -1206,11 +1221,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }
       impulsion(reseau, "demande");
       void poser(etiquetteMessage(mode, d), composerQuestion(mode, d), baseMode).finally(() => {
-        // La réponse est arrivée (ou a échoué) : le cadre se retire après un instant, sauf si une autre demande l'a repris.
+        // La réponse est arrivée (ou a échoué) : ses nanobots rentrent après un instant, sauf si une autre demande les a repris.
+        // Même une réponse instantanée leur laisse le temps de se répartir et de lire (4,5 s depuis la demande).
         const fini = cible;
         setTimeout(() => {
           if (analysePour === fini) analysePour = null;
-        }, 1200);
+        }, Math.max(1200, 4500 - (Date.now() - debutAnalyse)));
       });
     };
     if (!allerVoir(cible, 8, baseMode)) return demarrer();
