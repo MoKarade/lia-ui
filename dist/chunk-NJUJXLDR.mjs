@@ -646,13 +646,8 @@ function poidsActuel(s, maintenant) {
 }
 function ajouterSouvenir(liste, s, maintenant) {
   const base = (Array.isArray(liste) ? liste : []).filter(estSouvenir).map((x) => ({ quand: x.quand, genre: x.genre, poids: x.poids }));
-  const brut2 = s;
-  const poidsBrut = brut2 && typeof brut2 === "object" ? brut2["poids"] : void 0;
-  const quandBrut = brut2 && typeof brut2 === "object" ? brut2["quand"] : void 0;
-  const genre = brut2 && typeof brut2 === "object" ? brut2["genre"] : void 0;
-  if (!estGenreSouvenir(genre) || typeof poidsBrut !== "number" || typeof quandBrut !== "number" || !Number.isFinite(poidsBrut) || !Number.isFinite(quandBrut) || !Number.isFinite(maintenant)) {
-    return base.sort(parAge);
-  }
+  const { poids: poidsBrut, quand: quandBrut, genre } = typeof s === "object" && s !== null ? s : {};
+  if (!estGenreSouvenir(genre) || typeof poidsBrut !== "number" || typeof quandBrut !== "number" || !Number.isFinite(poidsBrut) || !Number.isFinite(quandBrut) || !Number.isFinite(maintenant)) return base.sort(parAge);
   const poids = borne01(poidsBrut);
   const quand = Math.min(quandBrut, maintenant);
   if (poids <= 0 || quand <= 0) return base.sort(parAge);
@@ -739,29 +734,17 @@ function candidates(souvenirs, absenceMs, maintenant) {
   const recent = souvenirs.filter((s) => s.genre === dominant && poidsActuel(s, maintenant) > 0).reduce((m, s) => Math.max(m, Math.min(s.quand, maintenant)), 0);
   const jour = jourDe(recent, maintenant);
   const apaise = fond.rancune < SEUIL_APAISE;
-  let propres;
-  switch (dominant) {
-    case "brusque":
-    case "ton":
-      propres = apaise ? DURS[jour].apaise : DURS[jour].rude;
-      break;
-    case "panne":
-      propres = PANNE[jour];
-      break;
-    case "isolement":
-      propres = apaise ? ISOLEMENT.apaise : ISOLEMENT.rude;
-      break;
-    case "gentil":
-      propres = GENTIL2[jour];
-      break;
-    case "compliment":
-      propres = COMPLIMENT[jour];
-      break;
-    case "retour":
-      propres = RETOUR;
-      break;
-  }
-  return [...propres, absenceMs >= 24 * 3600 * 1e3 ? "\xC7a faisait longtemps." : "Te revoil\xE0."];
+  const dur = apaise ? DURS[jour].apaise : DURS[jour].rude;
+  const parGenre = {
+    brusque: dur,
+    ton: dur,
+    panne: PANNE[jour],
+    isolement: apaise ? ISOLEMENT.apaise : ISOLEMENT.rude,
+    gentil: GENTIL2[jour],
+    compliment: COMPLIMENT[jour],
+    retour: RETOUR
+  };
+  return [...parGenre[dominant], absenceMs >= 24 * 3600 * 1e3 ? "\xC7a faisait longtemps." : "Te revoil\xE0."];
 }
 function phraseDeRetour(souvenirs, absenceMs, rand, maintenant, dejaDitAujourdhui, derniere) {
   if (!Number.isFinite(absenceMs) || absenceMs <= ABSENCE_RETOUR_MS) return null;
@@ -5828,4 +5811,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-ROZWLGGU.mjs.map
+//# sourceMappingURL=chunk-NJUJXLDR.mjs.map

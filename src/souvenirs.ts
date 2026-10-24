@@ -64,17 +64,7 @@ export function estGenreSouvenir(g: unknown): g is GenreSouvenir {
 export function estSouvenir(s: unknown): s is Souvenir {
   if (typeof s !== "object" || s === null) return false;
   const { quand, genre, poids } = s as Record<string, unknown>;
-  return (
-    estGenreSouvenir(genre) &&
-    typeof quand === "number" &&
-    Number.isFinite(quand) &&
-    quand > 0 &&
-    quand <= QUAND_MAX &&
-    typeof poids === "number" &&
-    Number.isFinite(poids) &&
-    poids >= 0 &&
-    poids <= 1
-  );
+  return estGenreSouvenir(genre) && typeof quand === "number" && Number.isFinite(quand) && quand > 0 && quand <= QUAND_MAX && typeof poids === "number" && Number.isFinite(poids) && poids >= 0 && poids <= 1;
 }
 
 /** Ce que l'hôte rend est une donnée : on ne garde que les souvenirs conformes (jamais d'autre clé), les 40 derniers. */
@@ -104,13 +94,8 @@ export function poidsActuel(s: Readonly<Souvenir>, maintenant: number): number {
  */
 export function ajouterSouvenir(liste: readonly Souvenir[], s: Souvenir, maintenant: number): Souvenir[] {
   const base = (Array.isArray(liste) ? liste : []).filter(estSouvenir).map((x) => ({ quand: x.quand, genre: x.genre, poids: x.poids }));
-  const brut = s as unknown as Record<string, unknown> | null;
-  const poidsBrut = brut && typeof brut === "object" ? brut["poids"] : undefined;
-  const quandBrut = brut && typeof brut === "object" ? brut["quand"] : undefined;
-  const genre = brut && typeof brut === "object" ? brut["genre"] : undefined;
-  if (!estGenreSouvenir(genre) || typeof poidsBrut !== "number" || typeof quandBrut !== "number" || !Number.isFinite(poidsBrut) || !Number.isFinite(quandBrut) || !Number.isFinite(maintenant)) {
-    return base.sort(parAge);
-  }
+  const { poids: poidsBrut, quand: quandBrut, genre } = (typeof s === "object" && s !== null ? s : {}) as Record<string, unknown>;
+  if (!estGenreSouvenir(genre) || typeof poidsBrut !== "number" || typeof quandBrut !== "number" || !Number.isFinite(poidsBrut) || !Number.isFinite(quandBrut) || !Number.isFinite(maintenant)) return base.sort(parAge);
   const poids = borne01(poidsBrut);
   const quand = Math.min(quandBrut, maintenant);
   if (poids <= 0 || quand <= 0) return base.sort(parAge);
@@ -228,29 +213,17 @@ function candidates(souvenirs: readonly Souvenir[], absenceMs: number, maintenan
   const recent = souvenirs.filter((s) => s.genre === dominant && poidsActuel(s, maintenant) > 0).reduce((m, s) => Math.max(m, Math.min(s.quand, maintenant)), 0);
   const jour = jourDe(recent, maintenant);
   const apaise = fond.rancune < SEUIL_APAISE;
-  let propres: readonly string[];
-  switch (dominant) {
-    case "brusque":
-    case "ton":
-      propres = apaise ? DURS[jour].apaise : DURS[jour].rude;
-      break;
-    case "panne":
-      propres = PANNE[jour];
-      break;
-    case "isolement":
-      propres = apaise ? ISOLEMENT.apaise : ISOLEMENT.rude;
-      break;
-    case "gentil":
-      propres = GENTIL[jour];
-      break;
-    case "compliment":
-      propres = COMPLIMENT[jour];
-      break;
-    case "retour":
-      propres = RETOUR;
-      break;
-  }
-  return [...propres, absenceMs >= 24 * 3600 * 1000 ? "Ça faisait longtemps." : "Te revoilà."];
+  const dur = apaise ? DURS[jour].apaise : DURS[jour].rude;
+  const parGenre: Readonly<Record<GenreSouvenir, readonly string[]>> = {
+    brusque: dur,
+    ton: dur,
+    panne: PANNE[jour],
+    isolement: apaise ? ISOLEMENT.apaise : ISOLEMENT.rude,
+    gentil: GENTIL[jour],
+    compliment: COMPLIMENT[jour],
+    retour: RETOUR,
+  };
+  return [...parGenre[dominant], absenceMs >= 24 * 3600 * 1000 ? "Ça faisait longtemps." : "Te revoilà."];
 }
 
 /**
