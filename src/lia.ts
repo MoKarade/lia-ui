@@ -19,6 +19,7 @@ import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, vieillir, garder as garderInterieur, type Stimulus } from "./interieur.js";
 import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
 import { auRepos, avancerBalle, BALLE_DEFAUT, BALLE_LIBRE, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Ecrasement } from "./physique.js";
+import { deriveAuRepos, planifierTrajet, pointDuTrajet, prochainPetitPas, type Trajet } from "./allure.js";
 import { avancerEssaim, creerEssaim, eclat, rappeler as rappelerEssaim, surLaCible, termine as essaimTermine, type Essaim } from "./nano.js";
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
@@ -294,6 +295,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let dernierDeplacement = 0;
   let ancreDeplacement = { x: 0, y: 0 };
   let errance = { jusqua: 0 };
+  /** Son allure de promenade : le trajet en cours (arc, vitesse en cloche, hésitation), et le prochain petit pas de côté au repos. */
+  let trajet: { tr: Trajet; t0: number; but: { x: number; y: number }; petit: boolean } | null = null;
+  let prochainPetit = false;
+  /** Le point où elle s'est posée : ses petits pas de côté tournent autour de lui (ils ne l'éloignent jamais de plus de leur longueur). */
+  let attache: { x: number; y: number } | null = null;
+  let petitPas: { quand: number; dx: number; dy: number } | null = null;
+  const graineAllure = Math.random() * 100;
   /** Ce qu'elle suit ou regarde en ce moment (rien = elle fait sa vie). Jamais de défilement de la page. */
   type Attention =
     | { type: "curseur"; jusqua: number }
@@ -2230,16 +2238,62 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       const demande = attention?.type === "element" && !attention.colle;
       const suit = attention?.type === "curseur";
       const balade = !glisse && !demande && !suit && !colle;
+      // Sa promenade a une allure humaine (`allure.ts`) : le ressort ne vise pas le but tout droit mais un point qui suit un arc, à une
+      // vitesse en cloche propre à ce trajet, avec parfois une hésitation ou un dépassement ; au repos elle dérive et fait un petit pas de côté.
+      let visee = cc;
+      if (balade && !still && vie) {
+        const reste = Math.hypot(cc.x - pos.x, cc.y - pos.y);
+        if (trajet ? Math.hypot(trajet.but.x - cc.x, trajet.but.y - cc.y) > 3 : reste > 14 || prochainPetit) {
+          const petit = prochainPetit;
+          prochainPetit = false;
+          if (!petit) attache = null;
+          trajet =
+            reste > 14 || petit
+              ? {
+                  tr: planifierTrajet({ x: pos.x, y: pos.y }, cc, Math.random, { energie: envies.energie, nervosite: Math.max(interieur.sensibilite, interieur.douleur) }),
+                  t0: t,
+                  but: { x: cc.x, y: cc.y },
+                  petit,
+                }
+              : null;
+        }
+        if (trajet) {
+          const p = pointDuTrajet(trajet.tr, t - trajet.t0);
+          visee = { x: p.x, y: p.y };
+          if (p.fini && t - trajet.t0 > trajet.tr.total + 0.4) {
+            trajet = null;
+            petitPas = null;
+          }
+        } else {
+          const d = deriveAuRepos(t, graineAllure, 2.5 + 2.5 * envies.energie);
+          visee = { x: cc.x + d.x, y: cc.y + d.y };
+          // Un petit pas de côté, de temps en temps (jamais pendant que Marc lui parle ou choisit dans un menu).
+          if (!chatOuvert && !menuOuvert && !parle && !perchage && !dort) {
+            if (!petitPas) {
+              const n = prochainPetitPas(Math.random, envies.energie);
+              petitPas = { quand: t + n.delai, dx: n.dx, dy: n.dy };
+            } else if (t >= petitPas.quand) {
+              attache ??= { x: pos.x, y: pos.y };
+              cible = dansZone(z, attache.x + petitPas.dx, attache.y + petitPas.dy, rayon * 0.6);
+              prochainPetit = true;
+              petitPas = null;
+            }
+          }
+        }
+      } else if (!balade) {
+        trajet = null;
+      }
+      const marche = !!trajet;
       // Posée contre un élément : un ressort raide, amorti juste ce qu'il faut, qui la garde dessus quand la page défile sans jamais la faire sauter.
-      const k = colle ? 1600 : glisse ? 260 : demande ? 70 : suit ? 30 : 8;
-      const zeta = 2 * Math.sqrt(k) * (colle ? 1 : glisse ? 0.9 : demande ? 0.8 : suit ? 0.7 : 0.62);
-      const vmax = colle ? 2500 : balade ? 520 : demande ? 1100 : 900;
-      const amax = colle ? 20000 : glisse ? 9000 : balade ? 1500 : 3500;
+      const k = colle ? 1600 : glisse ? 260 : demande ? 70 : suit ? 30 : marche ? 34 : 8;
+      const zeta = 2 * Math.sqrt(k) * (colle ? 1 : glisse ? 0.9 : demande ? 0.8 : suit ? 0.7 : marche ? 0.85 : 0.62);
+      const vmax = colle ? 2500 : balade ? (marche ? 700 : 520) : demande ? 1100 : 900;
+      const amax = colle ? 20000 : glisse ? 9000 : balade ? (marche ? 2200 : 1500) : 3500;
       const n = Math.max(1, Math.ceil(dt / 0.008));
       const h = dt / n;
       for (let q = 0; q < n; q++) {
-        let ax = k * (cc.x - pos.x) - zeta * pos.vx;
-        let ay = k * (cc.y - pos.y) - zeta * pos.vy;
+        let ax = k * (visee.x - pos.x) - zeta * pos.vx;
+        let ay = k * (visee.y - pos.y) - zeta * pos.vy;
         const a = Math.hypot(ax, ay);
         if (a > amax) {
           ax *= amax / a;
@@ -2263,6 +2317,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       phys.vxPrec = pos.vx;
       phys.vyPrec = pos.vy;
     }
+    // Un petit pas de côté ne compte pas comme un déplacement : l'envie de bouger ne retombe pas pour si peu.
+    if (trajet?.petit) ancreDeplacement = { x: pos.x, y: pos.y };
     // Elle a vraiment bougé quand elle s'écarte de plus d'un demi-rayon du dernier point où elle s'est posée.
     if (Math.hypot(pos.x - ancreDeplacement.x, pos.y - ancreDeplacement.y) > rayon * 0.5) {
       ancreDeplacement = { x: pos.x, y: pos.y };
