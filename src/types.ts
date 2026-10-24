@@ -223,6 +223,13 @@ export interface OptionsLia {
    * côté client : le refus du modèle et l'état de la pause se vérifient côté serveur, chez l'hôte.
    */
   pause?: () => boolean;
+  /**
+   * Le geste de la personne pour la mettre en pause ou la ramener : si l'hôte le fournit, le menu de son corps a une entrée
+   * « Mets-toi en pause » (« Reviens » quand `pause()` est vrai). Elle l'appelle avec la valeur voulue ; la promesse doit se résoudre
+   * une fois la pause écrite, de sorte que `pause()` rende alors cette valeur. Un rejet, ou une `pause()` qui ne suit pas, laisse
+   * l'état tel quel et elle dit qu'elle n'a pas pu. Sans cette option, pas d'entrée.
+   */
+  basculerPause?: (enPause: boolean) => Promise<void>;
   /** Plafond de TOUTES ses paroles spontanées par jour local (mémorisé dans le navigateur), au-delà : plus rien jusqu'au lendemain. Défaut : aucun. */
   plafondSpontaneesParJour?: number;
   /**

@@ -4809,6 +4809,21 @@ function mountLia(options = {}) {
       }
       if (reduit && !sansMouvement) menu.appendChild(caseAnimations());
       menu.appendChild(item(vie ? "La laisser tranquille" : "La laisser vivre", () => setVieAutonome(!vie)));
+      const basculer = options.basculerPause;
+      if (basculer) {
+        const voulu = !enPause();
+        menu.appendChild(
+          item(voulu ? "Mets-toi en pause" : "Reviens", () => {
+            void Promise.resolve().then(() => basculer(voulu)).then(() => {
+              if (enPause() !== voulu) throw new Error("la pause n'a pas suivi");
+              dire(voulu ? "Je me mets en pause." : "Me revoil\xE0.");
+            }).catch((e) => {
+              console.error("LIA : changer sa pause a \xE9chou\xE9, l'\xE9tat reste", e);
+              dire("Je n'ai pas pu changer ma pause.");
+            });
+          })
+        );
+      }
     }
     const actions = element ? [] : options.actions ?? [];
     if (actions.length) {
