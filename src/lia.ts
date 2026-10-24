@@ -279,6 +279,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const selecteurElements = optElements?.selecteur ?? SELECTEUR_ELEMENTS;
   let contexteQuestion: { d: ElementDecrit } | null = null;
   let reperee: Element | null = null;
+  /** L'élément qu'elle analyse à la demande de Marc : le cadre se dessine dès le clic et reste jusqu'à la fin de la réponse (même si elle est encore en route). */
+  let analysePour: Element | null = null;
   let attenteElement: ReturnType<typeof setTimeout> | undefined;
   let relache = 0;
   let glisse: { x: number; y: number; x0: number; y0: number; deplace: boolean } | null = null;
@@ -1011,6 +1013,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   function cesserDeReperer(): void {
     if (regarde && regarde === reperee && !(attention?.type === "element" && attention.el === regarde)) retirerRegard();
     reperee = null;
+    analysePour = null;
     repere.hidden = true;
   }
 
@@ -1044,7 +1047,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     cadreSur = null;
   };
   const majCadre = (): void => {
-    const cible = etat === "analyse" ? (reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde) : null;
+    const cible = analysePour ?? (etat === "analyse" ? (reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde) : null);
+    if (analysePour && !analysePour.isConnected) analysePour = null;
     if (!cible || !cible.isConnected || couche.contains(cible)) return masquerCadre();
     const r = cible.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return masquerCadre();
@@ -1080,6 +1084,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     clearTimeout(attenteElement);
     // Ce qu'elle fait de la demande : expliquer et regarder avec lui = analyser et lire ; que changer = planifier.
     const baseMode = { expliquer: "analyse", changer: "planifie", regarder: "lit", question: "reflexion" }[mode];
+    // Le cadre d'analyse apparaît tout de suite, sans attendre qu'elle soit arrivée ni que le modèle réponde.
+    analysePour = baseMode === "analyse" ? cible : null;
+    if (analysePour) majCadre();
     const demarrer = (): void => {
       if (detruit || !cible.isConnected) return;
       reperee = cible;
@@ -1090,7 +1097,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         return;
       }
       impulsion(reseau, "demande");
-      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d), baseMode);
+      void poser(etiquetteMessage(mode, d), composerQuestion(mode, d), baseMode).finally(() => {
+        // La réponse est arrivée (ou a échoué) : le cadre se retire après un instant, sauf si une autre demande l'a repris.
+        const fini = cible;
+        setTimeout(() => {
+          if (analysePour === fini) analysePour = null;
+        }, 1200);
+      });
     };
     if (!allerVoir(cible, 8, baseMode)) return demarrer();
     let essais = 0;

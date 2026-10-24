@@ -87,6 +87,27 @@ describe("clic droit sur un élément de la page", () => {
     expect(carte.hasAttribute("data-regard")).toBe(false);
   });
 
+  it("« Explique-moi ça » : le cadre d'analyse se dessine tout de suite, sans attendre qu'elle arrive ni la réponse, puis se retire après elle", async () => {
+    let repondre: (r: ReponseLia) => void = () => undefined;
+    const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockReturnValue(new Promise((ok) => (repondre = ok)));
+    lia = mountLia({ vieAutonome: false, ask });
+    const cadre = document.querySelector<HTMLElement>(".lia-ui__cadre") as HTMLElement;
+    expect(cadre.hidden).toBe(true);
+    clicDroit(carte);
+    choisir("Explique-moi ça");
+    // Dès le clic : le cadre est posé autour de la carte (100..400 × 300..500, 6 px de marge), alors que la question n'est même pas partie.
+    expect(cadre.hidden).toBe(false);
+    expect(cadre.style.left).toBe("94px");
+    expect(cadre.style.width).toBe("312px");
+    expect(ask).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(ask).toHaveBeenCalled(), { timeout: 8000 });
+    // Pendant qu'elle attend le modèle, il reste là, posé.
+    await vi.waitFor(() => expect(cadre.classList.contains("lia-ui__cadre--pose")).toBe(true), { timeout: 2000 });
+    expect(cadre.hidden).toBe(false);
+    repondre({ text: "Voilà." });
+    await vi.waitFor(() => expect(cadre.hidden).toBe(true), { timeout: 4000 });
+  }, 20000);
+
   it("pendant qu'elle réfléchit à l'élément, elle garde l'air de lire et son marqueur reste posé", async () => {
     const ask = vi.fn<(q: string, s: AbortSignal) => Promise<ReponseLia>>().mockReturnValue(new Promise(() => undefined));
     lia = mountLia({ vieAutonome: false, ask });
