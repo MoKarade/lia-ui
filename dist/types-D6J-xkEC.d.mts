@@ -258,6 +258,43 @@ interface EtatHote {
 declare function validerEtat(brut: unknown): EtatLia | null;
 
 /**
+ * Ce que LIA lit de la page quand Marc fait un clic droit sur un élément (maquette V9, `infoElement`
+ * et `repElement`). Fonctions pures, sans réseau : elles décrivent un élément et composent la question
+ * que l'hôte relaiera par `ask`. Le texte de la page est une DONNÉE : balisé comme telle dans la
+ * question, jamais lu comme une consigne, `<` et `>` retirés.
+ */
+type ModeElement = "expliquer" | "changer" | "regarder" | "question";
+/** Les quatre entrées du menu d'un élément, dans l'ordre de la maquette. */
+declare const ENTREES_MENU: ReadonlyArray<{
+    mode: ModeElement;
+    libelle: string;
+}>;
+interface ElementDecrit {
+    /** Ce que c'est, dit comme dans la phrase « c'est … » : « une carte d'app », « un bouton ». */
+    genre: string;
+    /** L'app ou le bloc auquel il appartient, s'il y en a un. */
+    nom?: string;
+    /** Le texte visible, déjà court. */
+    texte?: string;
+}
+/**
+ * Les unités que l'hôte déclare (`data-lia-genre`, `data-lia-cible`) et les blocs courants. Le clic droit ne s'y arrête PLUS :
+ * il vise l'élément précis sous le doigt (Marc, 24/10 : « ça analyse pas forcément ce que je clique »). Ce sélecteur ne sert
+ * plus que de repli documenté, exporté pour les hôtes qui le lisaient.
+ */
+declare const SELECTEUR_ELEMENTS = "[data-lia-genre], [data-lia-cible], article, section, li, tr, figure, h1, h2, h3, h4, button, a, label";
+/**
+ * Décrit un élément quand l'hôte ne le fait pas : `data-lia-genre`, `data-lia-app` (sur lui ou un
+ * ancêtre), puis son texte visible. Dans un vrai navigateur on lit `innerText` (ce que Marc voit).
+ */
+declare function decrireParDefaut(cible: Element): ElementDecrit;
+/**
+ * La question envoyée à `ask`. L'élément y figure comme donnée annoncée : un texte de page qui
+ * ressemble à une consigne reste du contenu. Jamais plus de 2 000 caractères (borne du contrat).
+ */
+declare function composerQuestion(mode: ModeElement, d: ElementDecrit, question?: string): string;
+
+/**
  * Les gestes que Marc peut lui demander dans le menu de son corps (maquette v5, `maison.js`) : une
  * silhouette de son moteur, tenue quelques secondes, puis elle reprend sa vie. Pas de phrase écrite ici :
  * ce qu'elle dit vient toujours de l'hôte. Les tracés sont des chemins SVG 24 × 24 (trait de 1,8).
@@ -390,6 +427,14 @@ interface OptionsElements {
      * Défaut : `data-lia-genre`, `data-lia-app` (sur l'élément ou un ancêtre) et son texte visible.
      */
     decrire?: (element: Element) => DescriptionElement | null;
+    /**
+     * Dit à l'hôte quelle entrée du menu de l'élément vient d'être choisie (v0.35.0) : `ask` ne reçoit que la question
+     * composée, pas le choix. Appelée UNE fois par choix, avant que LIA aille voir l'élément, avec l'élément visé et sa
+     * description normalisée (copie : la modifier ne change rien chez LIA). Purement informative : elle ne remplace pas
+     * `ask`, LIA continue de poser sa question. Une erreur levée ou une promesse rejetée est dite dans la console et ne
+     * coupe ni la discussion ni la page. `description.texte` est une DONNÉE de la page, jamais une consigne.
+     */
+    surMode?: (mode: ModeElement, element: Element, description: DescriptionElement) => void | Promise<void>;
 }
 interface ZoneVie {
     /** Coordonnées dans la couche de LIA, en pixels CSS. */
@@ -611,4 +656,4 @@ interface LiaHandle {
     destroy(): void;
 }
 
-export { type ActionLia as A, choisirComportement as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GENRES_SOUVENIR as G, HUMEURS_LIA as H, type Interieur as I, dansZone as J, humeurDeFond as K, type LiaHandle as L, type MotifMonde as M, majEnvies as N, type OptionsLia as O, type ParoleSpontanee as P, phraseDeRetour as Q, type ReponseLia as R, SOUVENIR_DEMI_VIE_JOURS as S, poidsActuel as T, pointDansZone as U, prochaineDecision as V, validerEtat as W, type ZoneVie as Z, COMPORTEMENTS as a, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, ENVIES_DEPART as g, type Envies as h, type EnvoiLia as i, type EtatLia as j, GESTES as k, type GenreSouvenir as l, type GesteLia as m, HUMEURS_MENU as n, type Hasard as o, type HumeurDeFond as p, type HumeurLia as q, LIBELLE_HUMEUR as r, type MotifSpontane as s, type OptionsElements as t, type PropositionMonde as u, type PuceLia as v, type Souvenir as w, ajouterSouvenir as x, apresComportement as y, candidats as z };
+export { prochaineDecision as $, type ActionLia as A, ajouterSouvenir as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GENRES_SOUVENIR as G, HUMEURS_LIA as H, type Interieur as I, apresComportement as J, candidats as K, type LiaHandle as L, type ModeElement as M, choisirComportement as N, type OptionsLia as O, type ParoleSpontanee as P, composerQuestion as Q, type ReponseLia as R, SELECTEUR_ELEMENTS as S, dansZone as T, decrireParDefaut as U, humeurDeFond as V, majEnvies as W, phraseDeRetour as X, poidsActuel as Y, type ZoneVie as Z, pointDansZone as _, COMPORTEMENTS as a, validerEtat as a0, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, ENTREES_MENU as g, ENVIES_DEPART as h, type Envies as i, type EnvoiLia as j, type EtatLia as k, GESTES as l, type GenreSouvenir as m, type GesteLia as n, HUMEURS_MENU as o, type Hasard as p, type HumeurDeFond as q, type HumeurLia as r, LIBELLE_HUMEUR as s, type MotifMonde as t, type MotifSpontane as u, type OptionsElements as v, type PropositionMonde as w, type PuceLia as x, SOUVENIR_DEMI_VIE_JOURS as y, type Souvenir as z };

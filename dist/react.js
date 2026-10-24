@@ -4812,7 +4812,12 @@ function mountLia(options = {}) {
       menu.classList.add("lia-ui__menu--element");
       menu.appendChild(el("p", "lia-ui__menu-titre", titreMenu(element.d)));
       for (const { mode, libelle } of ENTREES_MENU) {
-        menu.appendChild(item(libelle, () => surElement(element.cible, element.d, mode)));
+        menu.appendChild(
+          item(libelle, () => {
+            annoncerMode(mode, element.cible, element.d);
+            surElement(element.cible, element.d, mode);
+          })
+        );
       }
     } else {
       menu.appendChild(el("p", "lia-ui__menu-titre", "LIA"));
@@ -5021,6 +5026,16 @@ function mountLia(options = {}) {
     } catch (e) {
       console.error("LIA : elements.decrire a \xE9chou\xE9, le clic droit n'est pas pris", e);
       return null;
+    }
+  };
+  const annoncerMode = (mode, cible2, d) => {
+    const surMode = optElements?.surMode;
+    if (!surMode) return;
+    const echec = (e) => console.error("LIA : elements.surMode a \xE9chou\xE9, sa demande continue", e);
+    try {
+      void Promise.resolve(surMode(mode, cible2, { ...d })).catch(echec);
+    } catch (e) {
+      echec(e);
     }
   };
   function surElement(cible2, d, mode) {

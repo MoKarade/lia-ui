@@ -1,5 +1,6 @@
 import type { Envies, FaitLia, MotifMonde } from "./cerveau.js";
 import type { EtatHote } from "./etat.js";
+import type { ModeElement } from "./ecran.js";
 import type { GesteLia } from "./gestes.js";
 
 export type { MotifMonde };
@@ -121,6 +122,14 @@ export interface OptionsElements {
    * Défaut : `data-lia-genre`, `data-lia-app` (sur l'élément ou un ancêtre) et son texte visible.
    */
   decrire?: (element: Element) => DescriptionElement | null;
+  /**
+   * Dit à l'hôte quelle entrée du menu de l'élément vient d'être choisie (v0.35.0) : `ask` ne reçoit que la question
+   * composée, pas le choix. Appelée UNE fois par choix, avant que LIA aille voir l'élément, avec l'élément visé et sa
+   * description normalisée (copie : la modifier ne change rien chez LIA). Purement informative : elle ne remplace pas
+   * `ask`, LIA continue de poser sa question. Une erreur levée ou une promesse rejetée est dite dans la console et ne
+   * coupe ni la discussion ni la page. `description.texte` est une DONNÉE de la page, jamais une consigne.
+   */
+  surMode?: (mode: ModeElement, element: Element, description: DescriptionElement) => void | Promise<void>;
 }
 
 export interface ZoneVie {
