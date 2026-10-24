@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { L as LiaHandle, O as OptionsLia } from './types-CDLsYyLx.mjs';
-=======
-import { L as LiaHandle, O as OptionsLia } from './types-YGgRDclt.mjs';
->>>>>>> 1d58b8a (fix: nanobots plus visibles, zone du texte, analyse d'au moins 4,5 s)
+import { L as LiaHandle, O as OptionsLia } from './types-wzUX5ZB4.mjs';
 
 /**
  * Monter LIA HORS du rendu de l'app (Marc, 23/10/2026 : « présente tout le temps, même si quelque chose charge, même si une

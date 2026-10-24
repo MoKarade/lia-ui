@@ -7,26 +7,15 @@
  * il y tourne en petit cercle, plus large et plus lumineux quand l'onde de lecture passe sur lui.
  */
 
-export interface Zone {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+export interface Zone { x: number; y: number; w: number; h: number }
 
-export interface Point {
-  x: number;
-  y: number;
-}
+export interface Point { x: number; y: number }
 
 /** « complet » : ils sortent de son corps et voyagent ; « doux » : ils naissent sur l'élément (elle ne traverse jamais l'écran) ; « fixe » : image unique, sans mouvement. */
 export type ModeEssaim = "complet" | "doux" | "fixe";
 
 export interface Nano {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
+  x: number; y: number; vx: number; vy: number;
   /** Secondes d'attente avant de quitter son corps (ils sortent en filet, pas d'un coup). */
   retard: number;
   /** A quitté son corps. */
@@ -34,12 +23,9 @@ export interface Nano {
   /** Rentré dans son corps (n'est plus dessiné). */
   rentre: boolean;
   /** Jitter de sa place dans sa cellule, 0..1. */
-  jx: number;
-  jy: number;
+  jx: number; jy: number;
   /** Orbite : phase, vitesse angulaire (rad/s, signe = sens), rayon de base (px). */
-  ph: number;
-  om: number;
-  rr: number;
+  ph: number; om: number; rr: number;
 }
 
 export interface Essaim {

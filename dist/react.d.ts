@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { O as OptionsLia, L as LiaHandle } from './types-CDLsYyLx.js';
-=======
-import { O as OptionsLia, L as LiaHandle } from './types-YGgRDclt.js';
->>>>>>> 1d58b8a (fix: nanobots plus visibles, zone du texte, analyse d'au moins 4,5 s)
+import { O as OptionsLia, L as LiaHandle } from './types-wzUX5ZB4.js';
 
 interface LiaProps extends OptionsLia {
     /** Reçoit la poignée une fois LIA montée (et `null` au démontage). */

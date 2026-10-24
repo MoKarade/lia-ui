@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { E as EtatHote } from './types-CDLsYyLx.js';
-=======
-import { E as EtatHote } from './types-YGgRDclt.js';
->>>>>>> 1d58b8a (fix: nanobots plus visibles, zone du texte, analyse d'au moins 4,5 s)
+import { E as EtatHote } from './types-wzUX5ZB4.js';
 
 /**
  * Le seul module du paquet qui appelle le réseau : un `fetch` vers la MÊME origine que la page (GET pour lire, PUT pour écrire),
