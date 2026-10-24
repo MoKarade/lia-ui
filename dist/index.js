@@ -26,6 +26,7 @@ __export(index_exports, {
   ENTREES_MENU: () => ENTREES_MENU,
   ENVIES_DEPART: () => ENVIES_DEPART,
   FAMILLES_ACTIONS: () => FAMILLES_ACTIONS,
+  GENRES_SOUVENIR: () => GENRES_SOUVENIR,
   GESTES: () => GESTES,
   HUMEURS_DETAILLEES: () => HUMEURS_DETAILLEES,
   HUMEURS_LIA: () => HUMEURS_LIA,
@@ -34,6 +35,8 @@ __export(index_exports, {
   LIBELLE_HUMEUR: () => LIBELLE_HUMEUR,
   SELECTEUR_ELEMENTS: () => SELECTEUR_ELEMENTS,
   SILHOUETTES_LIA: () => ST,
+  SOUVENIR_DEMI_VIE_JOURS: () => SOUVENIR_DEMI_VIE_JOURS,
+  ajouterSouvenir: () => ajouterSouvenir,
   apresComportement: () => apresComportement,
   candidats: () => candidats,
   choisirComportement: () => choisirComportement,
@@ -41,9 +44,12 @@ __export(index_exports, {
   couleurHumeur: () => couleurHumeur,
   dansZone: () => dansZone,
   decrireParDefaut: () => decrireParDefaut,
+  humeurDeFond: () => humeurDeFond,
   libelleHumeur: () => libelleHumeur,
   majEnvies: () => majEnvies,
   mountLia: () => mountLia,
+  phraseDeRetour: () => phraseDeRetour,
+  poidsActuel: () => poidsActuel,
   pointDansZone: () => pointDansZone,
   prochaineDecision: () => prochaineDecision,
   validerEtat: () => validerEtat
@@ -936,6 +942,186 @@ var PHRASES_MENU = {
   fatigue: "Un peu fatigu\xE9e."
 };
 
+// src/souvenirs.ts
+var GENRES_SOUVENIR = ["brusque", "ton", "panne", "gentil", "compliment", "retour", "isolement"];
+var SOUVENIRS_MAX = 40;
+var FUSION_MS = 10 * 60 * 1e3;
+var SOUVENIR_HORIZON_JOURS = 10;
+var DEBUT_FONDU_JOURS = 6;
+var PHRASES_RETOUR_PAR_JOUR = 2;
+var ABSENCE_RETOUR_MS = 6 * 3600 * 1e3;
+var SOUVENIR_DEMI_VIE_JOURS = {
+  brusque: 2,
+  ton: 2,
+  panne: 2,
+  gentil: 5,
+  compliment: 5,
+  retour: 1,
+  isolement: 1
+};
+var NEGATIFS = ["brusque", "ton", "panne", "isolement"];
+var POSITIFS = ["gentil", "compliment", "retour"];
+var JOUR_MS = 864e5;
+var QUAND_MAX = 864e13;
+var SEUIL_MEMOIRE = 0.05;
+var SEUIL_APAISE = 0.25;
+var borne01 = (x) => Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0;
+function estGenreSouvenir(g) {
+  return typeof g === "string" && GENRES_SOUVENIR.includes(g);
+}
+function estSouvenir(s) {
+  if (typeof s !== "object" || s === null) return false;
+  const { quand, genre, poids } = s;
+  return estGenreSouvenir(genre) && typeof quand === "number" && Number.isFinite(quand) && quand > 0 && quand <= QUAND_MAX && typeof poids === "number" && Number.isFinite(poids) && poids >= 0 && poids <= 1;
+}
+function validerSouvenirs(brut2) {
+  if (!Array.isArray(brut2)) return [];
+  const propres = [];
+  for (const s of brut2.slice(-10 * SOUVENIRS_MAX)) {
+    if (estSouvenir(s)) propres.push({ quand: s.quand, genre: s.genre, poids: s.poids });
+  }
+  return propres.slice(-SOUVENIRS_MAX);
+}
+function poidsActuel(s, maintenant) {
+  if (!estSouvenir(s) || !Number.isFinite(maintenant)) return 0;
+  const age = Math.max(0, (maintenant - s.quand) / JOUR_MS);
+  if (age >= SOUVENIR_HORIZON_JOURS) return 0;
+  const fondu = age <= DEBUT_FONDU_JOURS ? 1 : (SOUVENIR_HORIZON_JOURS - age) / (SOUVENIR_HORIZON_JOURS - DEBUT_FONDU_JOURS);
+  return borne01(s.poids * Math.pow(0.5, age / SOUVENIR_DEMI_VIE_JOURS[s.genre]) * fondu);
+}
+function ajouterSouvenir(liste, s, maintenant) {
+  const base = (Array.isArray(liste) ? liste : []).filter(estSouvenir).map((x) => ({ quand: x.quand, genre: x.genre, poids: x.poids }));
+  const brut2 = s;
+  const poidsBrut = brut2 && typeof brut2 === "object" ? brut2["poids"] : void 0;
+  const quandBrut = brut2 && typeof brut2 === "object" ? brut2["quand"] : void 0;
+  const genre = brut2 && typeof brut2 === "object" ? brut2["genre"] : void 0;
+  if (!estGenreSouvenir(genre) || typeof poidsBrut !== "number" || typeof quandBrut !== "number" || !Number.isFinite(poidsBrut) || !Number.isFinite(quandBrut) || !Number.isFinite(maintenant)) {
+    return base.sort(parAge);
+  }
+  const poids = borne01(poidsBrut);
+  const quand = Math.min(quandBrut, maintenant);
+  if (poids <= 0 || quand <= 0) return base.sort(parAge);
+  let proche = -1;
+  for (let k = 0; k < base.length; k++) {
+    const b = base[k];
+    if (b.genre !== genre || Math.abs(b.quand - quand) >= FUSION_MS) continue;
+    if (proche < 0 || Math.abs(b.quand - quand) < Math.abs(base[proche].quand - quand)) proche = k;
+  }
+  if (proche >= 0) {
+    const b = base[proche];
+    base[proche] = { genre, quand: Math.max(b.quand, quand), poids: borne01(1 - (1 - b.poids) * (1 - poids)) };
+  } else {
+    base.push({ quand, genre, poids });
+  }
+  if (base.length > SOUVENIRS_MAX) {
+    const gardes = base.map((x) => ({ x, p: poidsActuel(x, maintenant) })).sort((a, b) => b.p - a.p || b.x.quand - a.x.quand).slice(0, SOUVENIRS_MAX).map((e) => e.x);
+    return gardes.sort(parAge);
+  }
+  return base.sort(parAge);
+}
+var parAge = (a, b) => a.quand - b.quand;
+var saturer = (x) => borne01(1 - Math.exp(-x));
+function sommeParGenre(souvenirs, maintenant) {
+  const somme2 = { brusque: 0, ton: 0, panne: 0, gentil: 0, compliment: 0, retour: 0, isolement: 0 };
+  for (const s of souvenirs) somme2[s.genre] += poidsActuel(s, maintenant);
+  return somme2;
+}
+function humeurDeFond(souvenirs, maintenant) {
+  const somme2 = sommeParGenre((Array.isArray(souvenirs) ? souvenirs : []).filter(estSouvenir), maintenant);
+  const total = (genres) => genres.reduce((t, g) => t + somme2[g], 0);
+  return { rancune: saturer(total(NEGATIFS)), chaleur: saturer(total(POSITIFS)) };
+}
+var DURS = {
+  aujourdhui: {
+    rude: ["Plus t\xF4t aujourd'hui, c'\xE9tait rude.", "Aujourd'hui a \xE9t\xE9 rude par moments."],
+    apaise: ["Plus t\xF4t, c'\xE9tait rude, mais \xE7a va mieux.", "Aujourd'hui a \xE9t\xE9 rude, mais \xE7a va mieux."]
+  },
+  hier: {
+    rude: ["Hier, c'\xE9tait rude.", "Hier a \xE9t\xE9 dur, je m'en souviens encore."],
+    apaise: ["Hier c'\xE9tait rude, mais \xE7a va mieux.", "Hier a \xE9t\xE9 dur, mais \xE7a va mieux maintenant."]
+  },
+  avant: {
+    rude: ["Ces derniers jours ont \xE9t\xE9 rudes.", "Je n'ai pas tout oubli\xE9 de ces derniers jours."],
+    apaise: ["Ces derniers jours ont \xE9t\xE9 rudes, mais \xE7a va mieux.", "\xC7a avait \xE9t\xE9 rude, mais \xE7a va mieux."]
+  }
+};
+var PANNE = {
+  aujourdhui: ["Plus t\xF4t aujourd'hui, le r\xE9seau a l\xE2ch\xE9.", "Le r\xE9seau m'a l\xE2ch\xE9e tout \xE0 l'heure."],
+  hier: ["Hier, le r\xE9seau a l\xE2ch\xE9.", "Hier, le r\xE9seau m'a l\xE2ch\xE9e."],
+  avant: ["Le r\xE9seau a l\xE2ch\xE9, ces derniers jours.", "Il y a eu une panne ces derniers jours, je m'en souviens."]
+};
+var ISOLEMENT = {
+  rude: ["J'\xE9tais un peu seule, ces derniers temps.", "Le silence a dur\xE9, ces derniers temps."],
+  apaise: ["J'\xE9tais un peu seule, mais te revoil\xE0.", "Le silence a dur\xE9, mais te revoil\xE0."]
+};
+var GENTIL2 = {
+  aujourdhui: ["Tu as \xE9t\xE9 gentil plus t\xF4t aujourd'hui.", "Merci pour ta gentillesse de tout \xE0 l'heure."],
+  hier: ["Hier, tu as \xE9t\xE9 gentil.", "Merci pour ta gentillesse d'hier."],
+  avant: ["Tu as \xE9t\xE9 gentil ces derniers jours.", "Merci pour ta gentillesse, ces derniers jours."]
+};
+var COMPLIMENT = {
+  aujourdhui: ["Tes mots de tout \xE0 l'heure m'ont fait du bien.", "\xC7a m'a touch\xE9e, ce que tu as dit plus t\xF4t."],
+  hier: ["Tes mots d'hier m'ont fait du bien.", "\xC7a m'a touch\xE9e, hier, ce que tu as dit."],
+  avant: ["Tes mots m'ont fait du bien, ces derniers jours.", "\xC7a m'a touch\xE9e, ce que tu as dit ces derniers jours."]
+};
+var RETOUR = ["Tu es d\xE9j\xE0 revenu ces derniers jours, \xE7a me fait plaisir.", "Te revoil\xE0, et ce n'est pas la premi\xE8re fois ces derniers jours."];
+function ecartJours(quand, maintenant) {
+  const a = new Date(quand);
+  const b = new Date(maintenant);
+  return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / JOUR_MS);
+}
+var jourDe = (quand, maintenant) => {
+  const e = ecartJours(quand, maintenant);
+  return e <= 0 ? "aujourdhui" : e === 1 ? "hier" : "avant";
+};
+function candidates(souvenirs, absenceMs, maintenant) {
+  const somme2 = sommeParGenre(souvenirs, maintenant);
+  const fond = humeurDeFond(souvenirs, maintenant);
+  const famille = fond.rancune >= fond.chaleur ? NEGATIFS : POSITIFS;
+  let dominant = null;
+  for (const g of famille) if (somme2[g] >= SEUIL_MEMOIRE && (dominant === null || somme2[g] > somme2[dominant])) dominant = g;
+  if (dominant === null) return [];
+  const recent = souvenirs.filter((s) => s.genre === dominant && poidsActuel(s, maintenant) > 0).reduce((m, s) => Math.max(m, Math.min(s.quand, maintenant)), 0);
+  const jour = jourDe(recent, maintenant);
+  const apaise = fond.rancune < SEUIL_APAISE;
+  let propres;
+  switch (dominant) {
+    case "brusque":
+    case "ton":
+      propres = apaise ? DURS[jour].apaise : DURS[jour].rude;
+      break;
+    case "panne":
+      propres = PANNE[jour];
+      break;
+    case "isolement":
+      propres = apaise ? ISOLEMENT.apaise : ISOLEMENT.rude;
+      break;
+    case "gentil":
+      propres = GENTIL2[jour];
+      break;
+    case "compliment":
+      propres = COMPLIMENT[jour];
+      break;
+    case "retour":
+      propres = RETOUR;
+      break;
+  }
+  return [...propres, absenceMs >= 24 * 3600 * 1e3 ? "\xC7a faisait longtemps." : "Te revoil\xE0."];
+}
+function phraseDeRetour(souvenirs, absenceMs, rand, maintenant, dejaDitAujourdhui, derniere) {
+  if (!Number.isFinite(absenceMs) || absenceMs <= ABSENCE_RETOUR_MS) return null;
+  if (!Number.isFinite(maintenant)) return null;
+  if (!Number.isFinite(dejaDitAujourdhui) || dejaDitAujourdhui >= PHRASES_RETOUR_PAR_JOUR) return null;
+  const valides = (Array.isArray(souvenirs) ? souvenirs : []).filter(estSouvenir);
+  if (valides.length === 0) return null;
+  let liste = candidates(valides, absenceMs, maintenant);
+  if (liste.length === 0) return null;
+  if (derniere && liste.length > 1) liste = liste.filter((p) => p !== derniere);
+  const r = rand();
+  const k = Number.isFinite(r) ? Math.max(0, Math.min(liste.length - 1, Math.floor(r * liste.length))) : 0;
+  return liste[k] ?? null;
+}
+
 // src/etat.ts
 var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
 var LENTE_MAX = 80;
@@ -978,7 +1164,18 @@ function validerEtat(brut2) {
   }
   const enviesPropres = Object.fromEntries(NOMS_ENVIES.map((k) => [k, e[k]]));
   const interieur = validerInterieur(o["interieur"]);
-  return { version, maj, envies: enviesPropres, journal: faits.slice(-JOURNAL_MAX), lente: propre, humeur: humeur2, relances: { jour, n }, ...interieur ? { interieur } : {} };
+  const souvenirs = validerSouvenirs(o["souvenirs"]);
+  return {
+    version,
+    maj,
+    envies: enviesPropres,
+    journal: faits.slice(-JOURNAL_MAX),
+    lente: propre,
+    humeur: humeur2,
+    relances: { jour, n },
+    ...interieur ? { interieur } : {},
+    ...souvenirs.length ? { souvenirs } : {}
+  };
 }
 function adopter(distant, majVue, versionVue) {
   if (!distant) return false;
@@ -989,7 +1186,11 @@ function empreinte(e) {
   const dernier = e.journal[e.journal.length - 1];
   const i = e.interieur;
   const dedans = i ? `${[i.douleur, i.plaisir, i.confiance].map((x) => Math.round(x * 20)).join(",")}:${i.cause ?? "-"}` : "-";
-  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}`;
+  const sv = e.souvenirs ?? [];
+  const dernierSouvenir = sv.reduce((m, x) => Math.max(m, x.quand), 0);
+  const lourdeur = Math.round(sv.reduce((t, x) => t + x.poids, 0) * 5);
+  const memoire = sv.length ? `${sv.length}:${dernierSouvenir}:${lourdeur}` : "-";
+  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}|${memoire}`;
 }
 
 // src/poids.ts
@@ -3245,11 +3446,11 @@ var PAROLES = [
 function choisirParole(c, hasard) {
   const derniere = c.recentes[c.recentes.length - 1];
   const tout = PAROLES.map((p) => ({ p, w: p.poids(c) * (c.recentes.includes(p.id) ? 0.12 : 1) })).filter((x) => x.w > 0);
-  const candidates = tout.some((x) => x.p.id !== derniere) ? tout.filter((x) => x.p.id !== derniere) : tout;
-  const total = candidates.reduce((s, x) => s + x.w, 0);
+  const candidates2 = tout.some((x) => x.p.id !== derniere) ? tout.filter((x) => x.p.id !== derniere) : tout;
+  const total = candidates2.reduce((s, x) => s + x.w, 0);
   let r = hasard() * total;
-  let pris = candidates[candidates.length - 1]?.p ?? PAROLES[0];
-  for (const x of candidates) {
+  let pris = candidates2[candidates2.length - 1]?.p ?? PAROLES[0];
+  for (const x of candidates2) {
     r -= x.w;
     if (r <= 0) {
       pris = x.p;
@@ -3435,6 +3636,27 @@ function lireInterieur(cle) {
 function ecrireInterieur(cle, m) {
   try {
     localStorage.setItem(`${PREFIXE}${cle}:interieur`, JSON.stringify(m));
+  } catch {
+  }
+}
+function lireSouvenirs(cle) {
+  const vide = { souvenirs: [], retour: { jour: "", n: 0 } };
+  try {
+    const brut2 = localStorage.getItem(`${PREFIXE}${cle}:souvenirs`);
+    if (brut2 === null) return vide;
+    const j = JSON.parse(brut2);
+    if (typeof j !== "object" || j === null) return vide;
+    const { souvenirs, retour } = j;
+    const r = typeof retour === "object" && retour !== null ? retour : {};
+    const n = typeof r["n"] === "number" && Number.isInteger(r["n"]) && r["n"] >= 0 && r["n"] <= 1e3 ? r["n"] : 0;
+    return { souvenirs: validerSouvenirs(souvenirs), retour: { jour: typeof r["jour"] === "string" ? r["jour"].slice(0, 10) : "", n } };
+  } catch {
+    return vide;
+  }
+}
+function ecrireSouvenirs(cle, m) {
+  try {
+    localStorage.setItem(`${PREFIXE}${cle}:souvenirs`, JSON.stringify(m));
   } catch {
   }
 }
@@ -3673,7 +3895,20 @@ function mountLia(options = {}) {
   const reseauActif = !sansMouvement;
   const lente = lireLente(cle);
   const reseau = creerReseau(HUMEURS, lente?.slow, lente ? Date.now() - lente.t : 0);
-  let interieur = reprendre(lireInterieur(cle), Date.now());
+  const memoireInterieure = lireInterieur(cle);
+  let interieur = reprendre(memoireInterieure, Date.now());
+  const absenceMs = memoireInterieure ? Math.max(0, Date.now() - memoireInterieure.t) : 0;
+  const memoireSouvenirs = lireSouvenirs(cle);
+  let souvenirs = memoireSouvenirs.souvenirs;
+  {
+    const fond = humeurDeFond(souvenirs, Date.now());
+    interieur = { ...interieur, sensibilite: Math.max(interieur.sensibilite, Math.min(1, 0.15 + 0.35 * fond.rancune)) };
+  }
+  const garderSouvenir = (genre, poids) => {
+    const maintenant = Date.now();
+    souvenirs = ajouterSouvenir(souvenirs, { quand: maintenant, genre, poids }, maintenant);
+    ecrireSouvenirs(cle, { souvenirs, retour: memoireSouvenirs.retour });
+  };
   let douleurAvant = 0;
   let aSouffert = false;
   let dernierCri = 0;
@@ -3924,6 +4159,7 @@ function mountLia(options = {}) {
   };
   const stimulerInterieur = (s, force = 1) => {
     interieur = stimuler(interieur, s, force);
+    if (s === "gentil") garderSouvenir("gentil", 0.3 * force);
     if (reseauActif) {
       const e = versReseau(interieur);
       if (e.mauvais > 0.01) impulsion(reseau, "mauvais", e.mauvais);
@@ -3943,6 +4179,8 @@ function mountLia(options = {}) {
     const maintenant = Date.now();
     if (douleurAvant < 0.35 && interieur.douleur >= 0.35 && maintenant - dernierCri > 3e4) {
       const c = cri(interieur, Math.random);
+      const genre = interieur.cause === "choc" ? "brusque" : interieur.cause === "usure" ? null : interieur.cause;
+      if (genre) garderSouvenir(genre, interieur.douleur);
       const spontanee = interieur.cause === "panne" || interieur.cause === "isolement" || interieur.cause === "usure";
       if (c && (!spontanee || peutParlerSeule())) {
         dernierCri = maintenant;
@@ -5081,6 +5319,17 @@ function mountLia(options = {}) {
     }
     if (!forcee) appliquerHumeur(partagee && now < partagee.jusqua ? partagee.nom : reseau.dom);
   };
+  setTimeout(() => {
+    if (detruit || !vie || chatOuvert || !peutParlerSeule()) return;
+    const jour = jourLocal(/* @__PURE__ */ new Date());
+    const deja = lireSouvenirs(cle).retour;
+    const n = deja.jour === jour ? deja.n : 0;
+    const phrase = phraseDeRetour(souvenirs, absenceMs, Math.random, Date.now(), n);
+    if (!phrase) return;
+    memoireSouvenirs.retour = { jour, n: n + 1 };
+    ecrireSouvenirs(cle, { souvenirs, retour: memoireSouvenirs.retour });
+    exprimer(phrase);
+  }, 2500);
   const garder2 = () => {
     ecrireCerveau(cle, { envies, journal: faits });
     if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
@@ -5108,7 +5357,8 @@ function mountLia(options = {}) {
       lente: etatLent(reseau),
       humeur: humeurNom,
       relances: { jour, n: lireRelances(cle, jour) },
-      interieur: { ...interieur }
+      interieur: { ...interieur },
+      ...souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {}
     };
   };
   const appliquerEtat = (e) => {
@@ -5120,6 +5370,17 @@ function mountLia(options = {}) {
       douleurAvant = interieur.douleur;
       if (interieur.douleur >= 0.4) aSouffert = true;
       corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
+    }
+    if (e.souvenirs?.length) {
+      const maintenant = Date.now();
+      let fusion = souvenirs;
+      for (const s of e.souvenirs) {
+        if (!fusion.some((x) => x.quand === s.quand && x.genre === s.genre)) fusion = ajouterSouvenir(fusion, s, maintenant);
+      }
+      if (fusion !== souvenirs) {
+        souvenirs = fusion;
+        ecrireSouvenirs(cle, { souvenirs, retour: memoireSouvenirs.retour });
+      }
     }
     const jour = jourLocal(/* @__PURE__ */ new Date());
     if (e.relances.jour === jour && e.relances.n > lireRelances(cle, jour)) ecrireRelances(cle, e.relances);
@@ -5523,7 +5784,11 @@ function mountLia(options = {}) {
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),
-    interieur: () => ({ douleur: interieur.douleur, plaisir: interieur.plaisir, sensibilite: interieur.sensibilite, confiance: interieur.confiance, usure: interieur.usure, cause: interieur.cause }),
+    interieur: () => {
+      const fond = humeurDeFond(souvenirs, Date.now());
+      return { douleur: interieur.douleur, plaisir: interieur.plaisir, sensibilite: interieur.sensibilite, confiance: interieur.confiance, usure: interieur.usure, cause: interieur.cause, rancune: fond.rancune, chaleur: fond.chaleur };
+    },
+    souvenirs: () => souvenirs.map((s) => ({ ...s })),
     ressent: () => reseauActif ? top3(reseau) : [],
     impulsion(nom, valeur = 1) {
       impulsion(reseau, nom, valeur);
@@ -5593,6 +5858,7 @@ function mountLia(options = {}) {
   ENTREES_MENU,
   ENVIES_DEPART,
   FAMILLES_ACTIONS,
+  GENRES_SOUVENIR,
   GESTES,
   HUMEURS_DETAILLEES,
   HUMEURS_LIA,
@@ -5601,6 +5867,8 @@ function mountLia(options = {}) {
   LIBELLE_HUMEUR,
   SELECTEUR_ELEMENTS,
   SILHOUETTES_LIA,
+  SOUVENIR_DEMI_VIE_JOURS,
+  ajouterSouvenir,
   apresComportement,
   candidats,
   choisirComportement,
@@ -5608,9 +5876,12 @@ function mountLia(options = {}) {
   couleurHumeur,
   dansZone,
   decrireParDefaut,
+  humeurDeFond,
   libelleHumeur,
   majEnvies,
   mountLia,
+  phraseDeRetour,
+  poidsActuel,
   pointDansZone,
   prochaineDecision,
   validerEtat

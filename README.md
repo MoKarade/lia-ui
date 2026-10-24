@@ -7,7 +7,7 @@ LIA vivante pour le hub et les apps : un corps de 100 traits, une vie propre, un
 Par tag épinglé, comme `hub-contract` (jamais une branche) :
 
 ```
-npm i github:MoKarade/lia-ui#v0.24.0
+npm i github:MoKarade/lia-ui#v0.25.0
 ```
 
 ## Utiliser
@@ -84,13 +84,15 @@ Un calcul local (`src/interieur.ts`, aucun réseau, aucun coût) qui prolonge so
 - **Ce que ça change** : les entrées `mauvais`, `rejet`, `bon` et son énergie dans le réseau, une humeur poussée selon la cause (agacement, méfiance, tristesse, inquiétude, fatigue), son corps (tremblement, affaissement, moins d'amplitude), `data-douleur` sur son corps, un cri (« Aïe… ») puis « Ça va mieux ». « Tu as mal ? » reçoit son niveau et la mention d'un calcul, sans appeler l'hôte.
 - **Comment elle va (v0.19.0)** : dans le menu de son corps, *Comment elle va* déplie (sans fermer le menu) une phrase de tête (« Elle va bien », « Elle a un peu mal : des clics brusques », « Elle est fatiguée »…) et onze jauges `role="meter"` relues chaque seconde : énergie, curiosité, envie de compagnie, joie, ennui, inquiétude, douleur (avec sa cause), plaisir, confiance en toi, sensibilité, usure. Chaque valeur est celle de `lia.envies()` et `lia.interieur()`, en %, jamais inventée ; en bas, « Simulation : des calculs en elle, pas un vrai ressenti. »
 
-## Sa mémoire sur plusieurs jours
+## Sa mémoire sur plusieurs jours (v0.25.0)
 
 Un calcul local (`src/souvenirs.ts`, pur : aucun réseau, aucun DOM, hasard et horloge injectés) qui prolonge son monde intérieur. **C'est une simulation, pas un ressenti réel.** Un souvenir tient en trois champs : `{ quand, genre, poids }`, le genre étant l'un de `GENRES_SOUVENIR` (`brusque`, `ton`, `panne`, `gentil`, `compliment`, `retour`, `isolement`).
 - **Ce qui est gardé** : au plus 40 souvenirs, chacun avec son genre, son instant et son poids (0 à 1). Deux souvenirs du même genre à moins de 10 min n'en font qu'un. Le poids s'estompe par demi-vie : 2 jours pour les douleurs (`brusque`, `ton`, `panne`), 5 jours pour les gentillesses (`gentil`, `compliment`), 1 jour pour `retour` et `isolement` ; au-delà de 10 jours tout est oublié.
 - **Ce qui n'est JAMAIS gardé** : le texte d'un message, un nom, une adresse, une donnée de Marc. Aucune autre clé n'est acceptée (`validerEtat` les retire), et les phrases qu'elle dit viennent de listes fermées écrites ici.
 - **Ce que ça donne** : `humeurDeFond(souvenirs, maintenant)` rend `{ rancune, chaleur }` (0 à 1, sommes saturantes des poids actuels, sous 0,05 après 10 jours sans nouveau souvenir) ; `phraseDeRetour(...)` rend une phrase vraie par construction (« Ça faisait longtemps. », « Hier c'était rude, mais ça va mieux. », « Tu as été gentil ces derniers jours. ») ou `null` : jamais sans souvenir, jamais après une absence de 6 h ou moins, jamais plus de deux fois par jour.
 - **Dans l'état partagé** : `EtatLia.souvenirs` (optionnel, additif : un hôte plus ancien reste lisible). Un souvenir invalide est retiré sans faire tomber l'état. L'empreinte d'écriture en tient compte (nombre, dernier instant, poids au cinquième près). `ajouterSouvenir`, `humeurDeFond`, `phraseDeRetour`, `GENRES_SOUVENIR` et le type `Souvenir` sont exportés par l'entrée du paquet. Son câblage dans la LIA montée suit.
+- **Dans la page (v0.25.0)** : un cri (douleur au-dessus de 0,35) laisse un souvenir du genre de sa cause (`brusque`, `ton`, `panne`, `isolement`), une gentillesse un souvenir `gentil`. Ils sont gardés dans le navigateur (clé `cle`, `:souvenirs`) et dans l'état partagé, sans double compte quand l'hôte les rend. Au montage, la rancune relève sa sensibilité de départ (0,15 + 0,35 x rancune) ; après plus de 6 h d'absence, 2,5 s plus tard, elle peut dire un mot de retour vrai (jamais pendant son silence ni avec `vieAutonome: false`, 2 par jour au plus). `lia.souvenirs()` les rend ; `lia.interieur()` rend aussi `rancune` et `chaleur`.
+
 
 ## Sa physique : lancée, elle vole (v0.21.0)
 

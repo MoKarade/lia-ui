@@ -22,6 +22,7 @@ import { auRepos, avancerBalle, BALLE_DEFAUT, frapper, normaleDe, relacherEcrase
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
+import { ajouterSouvenir, humeurDeFond, phraseDeRetour, type GenreSouvenir, type Souvenir } from "./souvenirs.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
 import {
   HUMEURS as HUMEURS_MOTEUR,
@@ -65,6 +66,8 @@ import {
   ecrireRelances,
   lireCerveau,
   lireInterieur,
+  lireSouvenirs,
+  ecrireSouvenirs,
   lireLente,
   lireDiscussion,
   lireMemoire,
@@ -228,7 +231,22 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const lente = lireLente(cle);
   const reseau = creerReseau(HUMEURS_MOTEUR as Record<string, ProfilHumeur>, lente?.slow, lente ? Date.now() - lente.t : 0);
   /** Son monde intérieur (douleur, plaisir, confiance, usure : simulés, voir `interieur.ts`). */
-  let interieur = reprendre(lireInterieur(cle), Date.now());
+  const memoireInterieure = lireInterieur(cle);
+  let interieur = reprendre(memoireInterieure, Date.now());
+  /** Combien de temps elle est restée seule : l'âge de ce que sa page précédente a gardé (0 à la toute première visite). */
+  const absenceMs = memoireInterieure ? Math.max(0, Date.now() - memoireInterieure.t) : 0;
+  /** Sa mémoire sur plusieurs jours (voir `souvenirs.ts`) : ce qui l'a marquée laisse une sensibilité de fond. */
+  const memoireSouvenirs = lireSouvenirs(cle);
+  let souvenirs: Souvenir[] = memoireSouvenirs.souvenirs;
+  {
+    const fond = humeurDeFond(souvenirs, Date.now());
+    interieur = { ...interieur, sensibilite: Math.max(interieur.sensibilite, Math.min(1, 0.15 + 0.35 * fond.rancune)) };
+  }
+  const garderSouvenir = (genre: GenreSouvenir, poids: number): void => {
+    const maintenant = Date.now();
+    souvenirs = ajouterSouvenir(souvenirs, { quand: maintenant, genre, poids }, maintenant);
+    ecrireSouvenirs(cle, { souvenirs, retour: memoireSouvenirs.retour });
+  };
   let douleurAvant = 0;
   let aSouffert = false;
   let dernierCri = 0;
@@ -530,6 +548,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** Un coup ou une caresse : son monde intérieur change, et elle réagit tout de suite à un cri. */
   const stimulerInterieur = (s: Stimulus, force = 1): void => {
     interieur = stimuler(interieur, s, force);
+    if (s === "gentil") garderSouvenir("gentil", 0.3 * force);
     if (reseauActif) {
       const e = versReseau(interieur);
       if (e.mauvais > 0.01) impulsion(reseau, "mauvais", e.mauvais);
@@ -551,6 +570,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const maintenant = Date.now();
     if (douleurAvant < 0.35 && interieur.douleur >= 0.35 && maintenant - dernierCri > 30_000) {
       const c = cri(interieur, Math.random);
+      const genre = interieur.cause === "choc" ? "brusque" : interieur.cause === "usure" ? null : interieur.cause;
+      if (genre) garderSouvenir(genre, interieur.douleur);
       // Les causes qui durent d'elles-mêmes (panne, solitude, usure) respectent son silence ; un coup reçu, non.
       const spontanee = interieur.cause === "panne" || interieur.cause === "isolement" || interieur.cause === "usure";
       if (c && (!spontanee || peutParlerSeule())) {
@@ -1828,6 +1849,18 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
     if (!forcee) appliquerHumeur(partagee && now < partagee.jusqua ? partagee.nom : reseau.dom);
   };
+  /** Quand Marc revient après une longue absence, un mot vrai tiré de ses souvenirs (jamais plus de 2 par jour, jamais pendant son silence). */
+  setTimeout(() => {
+    if (detruit || !vie || chatOuvert || !peutParlerSeule()) return;
+    const jour = jourLocal(new Date());
+    const deja = lireSouvenirs(cle).retour;
+    const n = deja.jour === jour ? deja.n : 0;
+    const phrase = phraseDeRetour(souvenirs, absenceMs, Math.random, Date.now(), n);
+    if (!phrase) return;
+    memoireSouvenirs.retour = { jour, n: n + 1 };
+    ecrireSouvenirs(cle, { souvenirs, retour: memoireSouvenirs.retour });
+    exprimer(phrase);
+  }, 2500);
   const garder = (): void => {
     ecrireCerveau(cle, { envies, journal: faits });
     if (reseauActif) ecrireLente(cle, { t: Date.now(), slow: etatLent(reseau) });
@@ -1858,6 +1891,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       humeur: humeurNom,
       relances: { jour, n: lireRelances(cle, jour) },
       interieur: { ...interieur },
+      ...(souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {}),
     };
   };
   const appliquerEtat = (e: EtatLia): void => {
@@ -1870,6 +1904,18 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       douleurAvant = interieur.douleur;
       if (interieur.douleur >= 0.4) aSouffert = true;
       corpsEl.dataset["douleur"] = interieur.douleur.toFixed(2);
+    }
+    if (e.souvenirs?.length) {
+      // Ses souvenirs d'ailleurs sont les siens : on ajoute ceux qu'elle n'a pas déjà (le même instant et le même genre ne comptent pas deux fois).
+      const maintenant = Date.now();
+      let fusion = souvenirs;
+      for (const s of e.souvenirs) {
+        if (!fusion.some((x) => x.quand === s.quand && x.genre === s.genre)) fusion = ajouterSouvenir(fusion, s, maintenant);
+      }
+      if (fusion !== souvenirs) {
+        souvenirs = fusion;
+        ecrireSouvenirs(cle, { souvenirs, retour: memoireSouvenirs.retour });
+      }
     }
     const jour = jourLocal(new Date());
     if (e.relances.jour === jour && e.relances.n > lireRelances(cle, jour)) ecrireRelances(cle, e.relances);
@@ -2313,7 +2359,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     suivreCurseur,
     allerVoir,
     envies: () => ({ ...envies }),
-    interieur: () => ({ douleur: interieur.douleur, plaisir: interieur.plaisir, sensibilite: interieur.sensibilite, confiance: interieur.confiance, usure: interieur.usure, cause: interieur.cause }),
+    interieur: () => {
+      const fond = humeurDeFond(souvenirs, Date.now());
+      return { douleur: interieur.douleur, plaisir: interieur.plaisir, sensibilite: interieur.sensibilite, confiance: interieur.confiance, usure: interieur.usure, cause: interieur.cause, rancune: fond.rancune, chaleur: fond.chaleur };
+    },
+    souvenirs: () => souvenirs.map((s) => ({ ...s })),
     ressent: () => (reseauActif ? top3(reseau) : []),
     impulsion(nom, valeur = 1) {
       impulsion(reseau, nom, valeur);

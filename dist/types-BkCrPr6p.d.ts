@@ -177,6 +177,50 @@ interface Interieur {
 }
 
 /**
+ * Sa mémoire affective sur plusieurs jours : ce qui l'a marquée (une brusquerie, une gentillesse, une panne, un retour)
+ * s'estompe en jours et laisse une humeur de fond (`rancune`, `chaleur`). C'est une SIMULATION, comme le reste de son monde
+ * intérieur (`interieur.ts`) : un calcul, pas un ressenti réel. Pur : aucun réseau, aucun DOM, l'horloge (`maintenant`) et
+ * le hasard sont injectés.
+ *
+ * Un souvenir ne garde JAMAIS le contenu d'un message ni une donnée personnelle : seulement un genre, un instant et un poids.
+ */
+declare const GENRES_SOUVENIR: readonly ["brusque", "ton", "panne", "gentil", "compliment", "retour", "isolement"];
+type GenreSouvenir = (typeof GENRES_SOUVENIR)[number];
+interface Souvenir {
+    /** Millisecondes depuis 1970. */
+    quand: number;
+    genre: GenreSouvenir;
+    /** De 0 à 1 : l'importance à l'instant où ça s'est passé. */
+    poids: number;
+}
+/** Les douleurs durent 2 jours, les gentillesses 5, un retour ou une solitude 1. */
+declare const SOUVENIR_DEMI_VIE_JOURS: Readonly<Record<GenreSouvenir, number>>;
+/** Le poids d'un souvenir à `maintenant` : décroissance par demi-vie, puis fondu jusqu'à l'oubli à 10 jours. */
+declare function poidsActuel(s: Readonly<Souvenir>, maintenant: number): number;
+/**
+ * Ajoute un souvenir : un souvenir invalide (genre inconnu, nombre non fini, poids nul) est ignoré, le poids est borné
+ * à [0, 1] et l'instant à `maintenant`. Deux souvenirs du même genre à moins de 10 min fusionnent (poids saturants,
+ * instant le plus récent). Au-delà de 40 on élague d'abord les plus faibles APRÈS décroissance, à égalité les plus
+ * anciens. Rend toujours une NOUVELLE liste, triée du plus ancien au plus récent ; ne modifie jamais `liste`.
+ */
+declare function ajouterSouvenir(liste: readonly Souvenir[], s: Souvenir, maintenant: number): Souvenir[];
+/** Ce qui reste dans le fond de son humeur, de 0 à 1 : `rancune` (brusqueries, ton, pannes, solitude), `chaleur` (gentillesses, compliments, retours). */
+interface HumeurDeFond {
+    rancune: number;
+    chaleur: number;
+}
+/** Sommes saturantes (1 - exp(-x)) des poids actuels : les genres négatifs d'un côté, positifs de l'autre. */
+declare function humeurDeFond(souvenirs: readonly Souvenir[], maintenant: number): HumeurDeFond;
+/**
+ * Ce qu'elle dit en retrouvant Marc après une absence : une phrase d'une liste fermée, vraie par construction (elle ne
+ * parle que de ce que sa mémoire contient vraiment), jamais le contenu d'un message ni une donnée personnelle, sans
+ * émoji ; ou `null` : absence de 6 h ou moins, aucun souvenir qui compte encore, déjà deux fois aujourd'hui.
+ * `dejaDitAujourdhui` est le NOMBRE de phrases de retour déjà dites aujourd'hui. `derniere` (optionnelle) est la dernière
+ * phrase dite : elle n'est pas redite deux fois de suite quand la liste le permet.
+ */
+declare function phraseDeRetour(souvenirs: readonly Souvenir[], absenceMs: number, rand: Hasard, maintenant: number, dejaDitAujourdhui: number, derniere?: string | null): string | null;
+
+/**
  * L'état partagé de LIA : ce qui fait qu'elle est UNE seule, quel que soit l'hôte (hub, MemoryAI, apps).
  * Fonctions pures : le paquet ne touche jamais le réseau ici, c'est l'hôte qui fournit `etat.lire` / `etat.ecrire`.
  * Ce qui arrive de l'hôte est une DONNÉE : on le valide, on borne les nombres et on ne garde que des verbes de LIA.
@@ -202,6 +246,8 @@ interface EtatLia {
     relances: RelancesPartagees;
     /** Son monde intérieur SIMULÉ (v0.20.0, optionnel : un hôte plus ancien ne l'a pas). Adopté vieilli de l'âge de l'état. */
     interieur?: Interieur;
+    /** Sa mémoire affective sur plusieurs jours (optionnelle : un hôte plus ancien ne l'a pas). Au plus 40, jamais de texte. */
+    souvenirs?: Souvenir[];
 }
 /** Ce que l'hôte fournit. `ecrire` peut rendre l'état que l'hôte garde (plus récent que le nôtre), `lire` rend `null` s'il n'en a aucun. */
 interface EtatHote {
@@ -478,7 +524,15 @@ interface LiaHandle {
         confiance: number;
         usure: number;
         cause: "choc" | "brusque" | "ton" | "panne" | "isolement" | "usure" | null;
+        rancune: number;
+        chaleur: number;
     };
+    /** Ses souvenirs sur plusieurs jours (genre, instant, poids : jamais le contenu d'un message). Simulation, comme le reste. */
+    souvenirs(): {
+        quand: number;
+        genre: "brusque" | "ton" | "panne" | "gentil" | "compliment" | "retour" | "isolement";
+        poids: number;
+    }[];
     /** Force une silhouette (« lit », « cherche »…) ; `null` la rend à sa vie. */
     setEtat(etat: string | null): void;
     setVieAutonome(actif: boolean): void;
@@ -519,4 +573,4 @@ interface LiaHandle {
     destroy(): void;
 }
 
-export { type ActionLia as A, validerEtat as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GESTES as G, HUMEURS_LIA as H, type Interieur as I, type LiaHandle as L, type MotifMonde as M, type OptionsLia as O, type ParoleSpontanee as P, type ReponseLia as R, type ZoneVie as Z, COMPORTEMENTS as a, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, ENVIES_DEPART as g, type Envies as h, type EnvoiLia as i, type EtatLia as j, type GesteLia as k, HUMEURS_MENU as l, type Hasard as m, type HumeurLia as n, LIBELLE_HUMEUR as o, type MotifSpontane as p, type OptionsElements as q, type PropositionMonde as r, type PuceLia as s, apresComportement as t, candidats as u, choisirComportement as v, dansZone as w, majEnvies as x, pointDansZone as y, prochaineDecision as z };
+export { type ActionLia as A, choisirComportement as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GENRES_SOUVENIR as G, HUMEURS_LIA as H, type Interieur as I, dansZone as J, humeurDeFond as K, type LiaHandle as L, type MotifMonde as M, majEnvies as N, type OptionsLia as O, type ParoleSpontanee as P, phraseDeRetour as Q, type ReponseLia as R, SOUVENIR_DEMI_VIE_JOURS as S, poidsActuel as T, pointDansZone as U, prochaineDecision as V, validerEtat as W, type ZoneVie as Z, COMPORTEMENTS as a, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, ENVIES_DEPART as g, type Envies as h, type EnvoiLia as i, type EtatLia as j, GESTES as k, type GenreSouvenir as l, type GesteLia as m, HUMEURS_MENU as n, type Hasard as o, type HumeurDeFond as p, type HumeurLia as q, LIBELLE_HUMEUR as r, type MotifSpontane as s, type OptionsElements as t, type PropositionMonde as u, type PuceLia as v, type Souvenir as w, ajouterSouvenir as x, apresComportement as y, candidats as z };
