@@ -62,4 +62,19 @@ describe("la discussion est fine : elle ne cache plus la page", () => {
     expect(journal().getAttribute("aria-label")).toBe("Historique de la discussion");
     expect(journal().getAttribute("role")).toBe("log");
   });
+
+  it("cadre subtil : bordure fondue, ombre douce, anneau de focus de 2 px sans halo, champ teinté par le texte", () => {
+    const regle = (sel: string): string => CSS.split("\n").find((l) => l.startsWith(sel)) ?? "";
+    const chat = regle(".lia-ui__chat{background");
+    expect(chat).toContain("border-color:color-mix(in srgb,var(--lia-border) 40%,transparent)");
+    expect(chat).not.toMatch(/box-shadow:0 8px 28px/);
+    const focus = regle(".lia-ui__champ:focus-visible{");
+    expect(focus).toContain("inset 0 0 0 2px color-mix(in srgb,var(--lia-accent) 78%,transparent)");
+    expect(focus).not.toMatch(/0 0 0 3px/); // plus de halo autour du champ
+    expect(focus).not.toContain("outline:2px"); // l'anneau est dans la boîte, pas un deuxième contour
+    // Le champ ne se teinte plus de noir (gris sale en thème clair) : il suit la couleur du texte de l'hôte.
+    const champ = regle(".lia-ui__champ{");
+    expect(champ).toContain("background:color-mix(in srgb,var(--lia-text) 7%,transparent)");
+    expect(champ).not.toContain("rgba(0,0,0");
+  });
 });

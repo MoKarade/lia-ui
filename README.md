@@ -164,6 +164,10 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 />
 ```
 
+### Cadre de la discussion plus subtil (v0.37.1)
+
+La bordure de la fenêtre est fondue (40 % de `--lia-border`), son ombre plus douce, le séparateur au-dessus du champ plus léger, et le bas de l'historique s'estompe comme le haut. Le champ n'est plus teinté de noir (gris sale en thème clair) : il se teinte de la couleur du texte de l'hôte (`--lia-text` à 7 %). Au clavier, l'anneau de focus est un trait de 2 px dans la boîte (`--lia-accent` à 78 %), sans halo autour : contraste mesuré sur les captures, au moins 3,4:1 (sombre 4,6:1, clair 3,5:1).
+
 ### Discussion plus grande, historique qui défile (v0.37.0)
 
 La fenêtre de discussion fait jusqu'à 440 px de large et 720 px de haut (bornée à l'écran, 16 px de marge) ; son historique atteint 62 % de la hauteur de l'écran (540 px au plus). Sur téléphone, quand elle se pose au-dessus ou en dessous de LIA, elle garde au moins 240 px de haut. L'historique défile à la molette et au doigt (`touch-action: pan-y`, `overscroll-behavior: contain` : la page derrière ne bouge pas) et au clavier (le journal est focusable, flèches et Page haut/bas).
