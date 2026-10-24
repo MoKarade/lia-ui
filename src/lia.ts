@@ -19,6 +19,7 @@ import { entreesLocales, type EchangeMarc } from "./entrees.js";
 import { apaisement, cri, evoluer, humeurDeDouleur, moduler, questionSurSaDouleur, reponseDouleur, reprendre, stimuler, ton, versReseau, vieillir, garder as garderInterieur, type Stimulus } from "./interieur.js";
 import { jauges, MENTION_SIMULATION, phraseCommentVa } from "./commentva.js";
 import { auRepos, avancerBalle, BALLE_DEFAUT, BALLE_LIBRE, frapper, normaleDe, relacherEcrasement, vitessePourBond, type Ecrasement } from "./physique.js";
+import { avancerEssaim, creerEssaim, eclat, rappeler as rappelerEssaim, surLaCible, termine as essaimTermine, type Essaim } from "./nano.js";
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
 import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
@@ -1051,7 +1052,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (!reperee.isConnected) return cesserDeReperer();
     const r = reperee.getBoundingClientRect();
     const c = couche.getBoundingClientRect();
-    repere.hidden = false;
+    // Tant que ses nanobots analysent cet élément, aucun cadre de plus autour de lui.
+    repere.hidden = !!essaim && !essaim.rentre && essaimSur === reperee;
+    if (repere.hidden) return;
     repere.style.left = `${(r.left - c.left - 4).toFixed(1)}px`;
     repere.style.top = `${(r.top - c.top - 4).toFixed(1)}px`;
     repere.style.width = `${(r.width + 8).toFixed(1)}px`;
@@ -1059,38 +1062,128 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
 
   /**
-   * Quand elle analyse, le carré de son animation (quatre coins, un balayage) se dessine tout autour de ce qu'elle regarde :
-   * la carte que Marc a désignée, celle qu'elle visite ou celle qu'elle regarde avec lui. Dans sa couche, la page n'est
-   * jamais modifiée ; jamais de cadre sans élément réel à encadrer.
+   * Quand elle analyse, ce sont ses propres traits, les nanobots, qui sortent de son corps, se répartissent sur ce qu'elle regarde
+   * (la carte que Marc a désignée, celle qu'elle visite ou qu'elle regarde avec lui), le balayent d'une onde de lecture, puis
+   * rentrent (Marc, 24/10 : « c'est les nanobots eux-mêmes qui doivent analyser le truc, pas un carré de plus »). Dans sa couche,
+   * la page n'est jamais modifiée ; jamais d'essaim sans élément réel à analyser.
    */
-  const cadre = el("div", "lia-ui__cadre");
-  cadre.hidden = true;
-  cadre.setAttribute("aria-hidden", "true");
-  for (const c of ["hg", "hd", "bg", "bd"]) cadre.appendChild(el("i", `lia-ui__coin lia-ui__coin--${c}`));
-  cadre.appendChild(el("b", "lia-ui__balai"));
-  couche.appendChild(cadre);
-  let cadreSur: Element | null = null;
-  const masquerCadre = (): void => {
-    cadre.hidden = true;
-    cadre.classList.remove("lia-ui__cadre--pose");
-    cadreSur = null;
+  const toileNano = el("canvas", "lia-ui__nano") as HTMLCanvasElement;
+  toileNano.hidden = true;
+  toileNano.setAttribute("aria-hidden", "true");
+  couche.insertBefore(toileNano, corpsEl);
+  let essaim: Essaim | null = null;
+  let essaimSur: Element | null = null;
+  let essaimZone: { x: number; y: number; w: number; h: number } | null = null;
+  const couleurNano = (nom: string, defaut: [number, number, number]): [number, number, number] => {
+    try {
+      const v = getComputedStyle(toileNano).getPropertyValue(nom).trim();
+      const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(v);
+      if (m) return [parseInt(m[1] as string, 16), parseInt(m[2] as string, 16), parseInt(m[3] as string, 16)];
+    } catch {
+      /* styles indisponibles : couleurs par défaut */
+    }
+    return defaut;
   };
-  const majCadre = (): void => {
-    const cible = analysePour ?? (etat === "analyse" ? (reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde) : null);
+  const arreterEssaim = (): void => {
+    essaim = null;
+    essaimSur = null;
+    essaimZone = null;
+    toileNano.hidden = true;
+  };
+  /** La cible de l'analyse : ce que Marc vient de désigner, sinon ce qu'elle analyse d'elle-même. */
+  const cibleAnalyse = (): Element | null => {
     if (analysePour && !analysePour.isConnected) analysePour = null;
-    if (!cible || !cible.isConnected || couche.contains(cible)) return masquerCadre();
+    const cible = analysePour ?? (etat === "analyse" ? (reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde) : null);
+    if (!cible || !cible.isConnected || couche.contains(cible)) return null;
+    return cible;
+  };
+  const dessinerNano = (e: Essaim, zone: { x: number; y: number; w: number; h: number }, c: DOMRect): void => {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(1, Math.round(c.width * dpr));
+    const h = Math.max(1, Math.round(c.height * dpr));
+    if (toileNano.width !== w || toileNano.height !== h) {
+      toileNano.width = w;
+      toileNano.height = h;
+    }
+    let ctx: CanvasRenderingContext2D | null = null;
+    try {
+      ctx = toileNano.getContext("2d");
+    } catch {
+      /* pas de canvas (rendu hors navigateur) : l'essaim vit, il ne se dessine pas */
+    }
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, c.width, c.height);
+    const [r1, g1, b1] = couleurNano("--lia-cadre", [45, 212, 191]);
+    const [r2, g2, b2] = couleurNano("--lia-cadre2", [34, 211, 238]);
+    ctx.lineCap = "round";
+    const lumiere: number[] = [];
+    for (let i = 0; i < e.bots.length; i++) lumiere.push(eclat(e, i, zone));
+    // Les liens : deux nanobots voisins que l'onde éclaire se tiennent par un fil (le réseau qui lit).
+    ctx.lineWidth = 0.8;
+    for (let i = 1; i < e.bots.length; i++) {
+      const a = e.bots[i - 1];
+      const b = e.bots[i];
+      if (!a || !b || !a.sorti || !b.sorti || a.rentre || b.rentre) continue;
+      const l = Math.min(lumiere[i] ?? 0, lumiere[i - 1] ?? 0);
+      if (l < 0.12 || Math.hypot(a.x - b.x, a.y - b.y) > 64) continue;
+      ctx.strokeStyle = `rgba(${r2},${g2},${b2},${(0.25 + 0.5 * l).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    for (let i = 0; i < e.bots.length; i++) {
+      const b = e.bots[i];
+      if (!b || !b.sorti || b.rentre) continue;
+      const l = lumiere[i] ?? 0;
+      const vite = Math.hypot(b.vx, b.vy);
+      const queue = Math.min(0.06, 0.02 + vite * 0.00008);
+      ctx.strokeStyle = `rgba(${l > 0.5 ? r2 : r1},${l > 0.5 ? g2 : g1},${l > 0.5 ? b2 : b1},${(0.72 + 0.28 * l).toFixed(2)})`;
+      ctx.lineWidth = 1.6 + 1.4 * l;
+      ctx.beginPath();
+      ctx.moveTo(b.x - b.vx * queue, b.y - b.vy * queue);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 1.5 + 2.2 * l, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  /** Le rectangle à analyser : pour un élément qui ne contient que du texte, le texte lui-même (pas toute la largeur de son bloc). */
+  const rectAnalyse = (cible: Element): DOMRect => {
     const r = cible.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return masquerCadre();
+    if (cible.children.length > 0 || !cible.firstChild) return r;
+    try {
+      const g = document.createRange();
+      g.selectNodeContents(cible);
+      const t = g.getBoundingClientRect();
+      if (t.width >= 2 && t.height >= 2) return t;
+    } catch {
+      /* pas de mesure de texte (rendu hors navigateur) : l'élément entier */
+    }
+    return r;
+  };
+  const majEssaim = (dt: number): void => {
+    const cible = cibleAnalyse();
+    const r = cible ? rectAnalyse(cible) : undefined;
     const c = couche.getBoundingClientRect();
-    cadre.style.left = `${(r.left - c.left - 6).toFixed(1)}px`;
-    cadre.style.top = `${(r.top - c.top - 6).toFixed(1)}px`;
-    cadre.style.width = `${(r.width + 12).toFixed(1)}px`;
-    cadre.style.height = `${(r.height + 12).toFixed(1)}px`;
-    cadre.classList.toggle("lia-ui__cadre--fixe", sansMouvement || doux);
-    if (cadre.hidden) cadre.hidden = false;
-    // Les coins se posent : un premier tour dessine le cadre agrandi, le suivant le fait arriver sur l'élément.
-    if (cadreSur === cible) cadre.classList.add("lia-ui__cadre--pose");
-    else cadreSur = cible;
+    if (!cible || !r || r.width < 2 || r.height < 2) {
+      // Plus rien à analyser : ils rentrent dans son corps, puis l'essaim disparaît.
+      if (!essaim) return;
+      if (!essaim.rentre) rappelerEssaim(essaim);
+    } else {
+      essaimZone = { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height };
+      if (!essaim || essaim.rentre) essaim = creerEssaim(essaimZone, { x: pos.x, y: pos.y }, Math.random, sansMouvement ? "fixe" : doux ? "doux" : "complet");
+      essaimSur = cible;
+    }
+    if (!essaim) return;
+    if (!essaimZone) return arreterEssaim();
+    avancerEssaim(essaim, dt, essaimZone, { x: pos.x, y: pos.y });
+    if (essaimTermine(essaim)) return arreterEssaim();
+    toileNano.hidden = false;
+    dessinerNano(essaim, essaimZone, c);
   };
 
   const decrireElement = (cible: Element): ElementDecrit | null => {
@@ -1115,7 +1208,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const baseMode = { expliquer: "analyse", changer: "planifie", regarder: "lit", question: "reflexion" }[mode];
     // Le cadre d'analyse apparaît tout de suite, sans attendre qu'elle soit arrivée ni que le modèle réponde.
     analysePour = baseMode === "analyse" ? cible : null;
-    if (analysePour) majCadre();
+    if (analysePour) majEssaim(0);
+    const debutAnalyse = Date.now();
     const demarrer = (): void => {
       if (detruit || !cible.isConnected) return;
       reperee = cible;
@@ -1127,11 +1221,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       }
       impulsion(reseau, "demande");
       void poser(etiquetteMessage(mode, d), composerQuestion(mode, d), baseMode).finally(() => {
-        // La réponse est arrivée (ou a échoué) : le cadre se retire après un instant, sauf si une autre demande l'a repris.
+        // La réponse est arrivée (ou a échoué) : ses nanobots rentrent après un instant, sauf si une autre demande les a repris.
+        // Même une réponse instantanée leur laisse le temps de se répartir et de lire (4,5 s depuis la demande).
         const fini = cible;
         setTimeout(() => {
           if (analysePour === fini) analysePour = null;
-        }, 1200);
+        }, Math.max(1200, 4500 - (Date.now() - debutAnalyse)));
       });
     };
     if (!allerVoir(cible, 8, baseMode)) return demarrer();
@@ -2265,7 +2360,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
     if (chat) placerAutour(chat);
     majRepere();
-    majCadre();
+    majEssaim(dt);
   };
 
   function dessinerUneFois(): void {
@@ -2375,6 +2470,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     },
     journal: () => faits.map((f) => ({ ...f })),
     partage: () => ({ actif: !!hote, lu: lectureFaite, version: versionVue, maj: majVue }),
+    nanobots: () => ({
+      actif: !!essaim && !essaim.rentre,
+      total: essaim?.bots.length ?? 0,
+      sortis: essaim?.bots.filter((b) => b.sorti && !b.rentre).length ?? 0,
+      surCible: essaim && essaimZone ? surLaCible(essaim, essaimZone) : 0,
+      cible: essaimZone ? { ...essaimZone } : null,
+    }),
     envoyer: envoyerVers,
     geste,
     activite,

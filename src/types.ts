@@ -278,6 +278,11 @@ export interface LiaHandle {
   journal(): FaitLia[];
   /** Où en est son état partagé (`etat`) : branché, lu au moins une fois, et la dernière version/date vue ou écrite. */
   partage(): { actif: boolean; lu: boolean; version: number; maj: number };
+  /**
+   * Ses nanobots quand elle analyse un élément (v0.27.0) : `actif` tant qu'ils travaillent, `total` leur nombre, `sortis` ceux qui ont quitté
+   * son corps, `surCible` la part (0 à 1) qui est sur l'élément, `cible` le rectangle analysé (dans sa couche). Pour la preuve et l'hôte.
+   */
+  nanobots(): { actif: boolean; total: number; sortis: number; surCible: number; cible: { x: number; y: number; w: number; h: number } | null };
   /** Vient près du curseur (s'il a bougé récemment) ou sur le bord de l'écran, pour que l'hôte la fasse parler. */
   venirPres(): boolean;
   /** Arrête de suivre ou de regarder : elle reste où elle est. */
