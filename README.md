@@ -105,6 +105,15 @@ Dans 3 promenades sur 10, elle ne glisse pas : elle s'accroupit 0,18 s (écrasem
 
 Dans la moitié de ses bonds, si une carte `[data-lia-cible]` visible et assez large (3,2 rayons au moins) est à sa portée, elle ne retombe pas au sol : elle s'accroupit, bondit et atterrit SUR le bord haut de la carte (rebond amorti, écrasement), pendant que l'ombre se pose sur la carte. Elle y reste 8 à 15 s, suit la carte au défilement, puis redescend d'un petit saut, ou plus tôt si la carte disparaît ou bouge de plus de 40 px dans la page. Un appui, le menu, la discussion, une demande de l'hôte (`envoyer`, `allerVoir`, `venirPres`, `suivreCurseur`) ou le mouvement réduit (« doux », « fixe ») l'annulent. `data-perche="1"` sur le corps vaut tant qu'elle est posée ; `choisirPerchoir` (module pur `src/perchoir.ts`) choisit la carte.
 
+## Sa démarche : irrégulière mais naturelle (v0.28.0)
+
+Quand elle se promène, elle ne glisse plus d'un point à l'autre à vitesse constante (Marc, 24/10 : « faut qu'elle bouge de façon humaine, pas régulier mais naturel »). Module pur `src/allure.ts` (hasard injecté) :
+- **Un trajet est un arc** : le but est joint par une courbe qui s'écarte d'un côté ou de l'autre (jusqu'à 16 % de sa longueur, 60 px au plus), presque droite sur une courte distance.
+- **La vitesse est en cloche** (profil « jerk minimal ») : départ lent, pointe au milieu, arrivée lente ; la vitesse de croisière est propre à chaque trajet (autour de 230 px/s, plus vive quand son énergie est haute).
+- **Elle hésite et se corrige** : parfois une pause en chemin (de 0,18 à 0,6 s, plus souvent quand elle est nerveuse, que sa douleur ou sa sensibilité est haute), parfois un petit dépassement du but suivi d'une correction.
+- **Au repos elle ne reste jamais figée** : un balancement lent qui ne se répète pas (sinusoïdes de périodes premières entre elles, de 2,5 à 5 px) et, de temps en temps, un petit pas de côté de 7 à 22 px à des intervalles très inégaux (de 2 s à plus d'une minute, médiane autour de 9 s). Jamais pendant qu'elle parle, que le menu est ouvert, qu'elle est perchée ou qu'elle dort.
+Ne touche ni la vie autonome coupée (`vieAutonome: false`), ni le mode « fixe » (elle ne bouge pas), ni les gestes qu'on lui demande (suivre, venir voir, être lancée ou glissée).
+
 ## Le menu de son corps
 
 Un clic droit sur LIA elle-même (ou la touche Menu, ou un appui long) ouvre, comme la maquette : *Lui parler*, *Comment elle va* (v0.19.0), six humeurs (curieuse, calme, joyeuse, concentrée, espiègle, fatiguée ; la sienne est cochée), huit gestes (*Salue*, *Content*, *Fredonne*, *Merci*, *Surpris*, *Se concentre*, *Apprend*, *Dort*), puis *La laisser tranquille* ou *La laisser vivre*, et les `actions` de l'hôte. Un geste prend la silhouette correspondante 3 secondes puis elle reprend sa vie ; la rangée des gestes n'existe pas seulement en mode « fixe » de `prefers-reduced-motion`. Flèches haut, bas, gauche et droite parcourent le menu, cibles de 44 px. Ce qu'elle dit des projets et de Marc vient de l'hôte, jamais de ce paquet.
