@@ -286,17 +286,25 @@ export function questionSurSonHumeur(question: string): boolean {
   );
 }
 
+/** Vrai quand Marc lui demande POURQUOI elle va comme elle va (« pourquoi tu es triste ? », « qu'est-ce qui ne va pas ? »). */
+export function questionPourquoi(question: string): boolean {
+  const q = sansAccent(question).replace(/['’]/g, " ").replace(/\s+/g, " ").trim();
+  if (q.length === 0 || q.length > 80) return false;
+  return /\bpourquoi (tu |t )?(es|vas|te sens|as l air|fais la tete|boudes)\b/.test(q) || /\bqu est[- ]?ce (qui (ne )?va pas|que tu as)\b/.test(q);
+}
+
 /**
  * Sa réponse quand on lui demande son humeur : la sienne (une phrase de la maquette), le nom de l'humeur, et ce qui vient
  * juste derrière. Vrai par construction : rien que son propre état, aucun fait sur Marc.
  */
-export function reponseHumeur(humeur: string, ressent: ReadonlyArray<readonly [string, number]>): string {
+export function reponseHumeur(humeur: string, ressent: ReadonlyArray<readonly [string, number]>, melange: string | null = null): string {
   const nom = LIBELLES_HUMEURS[humeur] ?? humeur;
   const phrase = PHRASES_HUMEUR[humeur] ?? "";
   const derriere = ressent
     .filter(([h, v]) => h !== humeur && v > 0.25 && LIBELLES_HUMEURS[h])
     .slice(0, 2)
     .map(([h]) => LIBELLES_HUMEURS[h]);
-  const suite = derriere.length ? ` Juste derrière : ${derriere.join(" et ")}.` : "";
+  // Deux humeurs presque aussi fortes : elle dit qu'elle sent les deux, au lieu de les ranger l'une derrière l'autre.
+  const suite = melange ? ` ${melange}` : derriere.length ? ` Juste derrière : ${derriere.join(" et ")}.` : "";
   return `En ce moment, mon humeur est « ${nom} ». ${phrase}${suite}`.replace(/\s+/g, " ").trim();
 }
