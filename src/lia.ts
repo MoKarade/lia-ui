@@ -1,6 +1,6 @@
 import { estRegarde, estVisible, pointPresDeLElement, pointPresDuCurseur, rangDe } from "./attache.js";
 import { dansZone, enSilence, jourLocal, pointDansZone } from "./autonomie.js";
-import { placeSansRecouvrir, type Boite } from "./placement.js";
+import { placeSansRecouvrir, surfaceRecouverte, type Boite } from "./placement.js";
 import {
   ENVIES_DEPART,
   MOTIFS_MONDE,
@@ -572,7 +572,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       m.append(ligne);
     }
     journal?.appendChild(m);
-    if (journal) journal.scrollTop = journal.scrollHeight;
+    defilerBas(de === "moi");
     return m;
   };
 
@@ -634,7 +634,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       s.append(el("i"), el("i"), el("i"));
       points.appendChild(s);
       journal.appendChild(points);
-      journal.scrollTop = journal.scrollHeight;
+      defilerBas();
     } else if (!actifPts && points) {
       points.remove();
       points = null;
@@ -740,25 +740,51 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
   };
 
-  const placerAutour = (boite: HTMLElement): void => {
+  /** La zone vraiment visible : celle de LIA, rognée par le viewport visuel (clavier du téléphone, barres du navigateur). */
+  const zoneVisible = (): ZoneVie => {
     const z = zoneVie();
-    boite.style.maxHeight = "";
+    const vv = window.visualViewport;
+    if (!vv) return z;
+    const c = couche.getBoundingClientRect();
+    const x = Math.max(z.x, vv.offsetLeft - c.left);
+    const y = Math.max(z.y, vv.offsetTop - c.top);
+    const w = Math.min(z.x + z.w, vv.offsetLeft - c.left + vv.width) - x;
+    const h = Math.min(z.y + z.h, vv.offsetTop - c.top + vv.height) - y;
+    return w > 0 && h > 0 ? { x, y, w, h } : z;
+  };
+
+  /** Où la discussion est posée : sert à la garder en place quand seule sa taille change (elle grandit vers le bas, ou vers le haut si elle est au-dessus de LIA). */
+  let assise: { y: number; h: number; bas: boolean } | null = null;
+  /** Empreinte de ce qui décide de sa place (LIA, zone visible, élément regardé), par cases de 24 px : elle ne bouge pas pour un souffle. */
+  let cleChat = "";
+  let chatTaille = false;
+
+  const cleDePlace = (z: ZoneVie): string => {
+    const e = reperee ? zoneElement(reperee) : null;
+    const q = (n: number): number => Math.round(n / 24);
+    return [q(pos.x), q(pos.y), q(z.x), q(z.y), q(z.w), q(z.h), e ? `${q(e.x)}:${q(e.y)}:${q(e.w)}:${q(e.h)}` : "-"].join("|");
+  };
+
+  const placerAutour = (boite: HTMLElement, z: ZoneVie): void => {
+    // Un plafond stable : la discussion grandit jusqu'à lui, puis le journal défile dedans.
+    boite.style.maxHeight = `${Math.max(160, Math.floor(Math.min(720, z.h - 16)))}px`;
     let w = boite.offsetWidth;
     let h = boite.offsetHeight;
     const aDroite = pos.x + rayon * 0.9 + w + 8 <= z.x + z.w;
     const aGauche = pos.x - rayon * 0.9 - w - 8 >= z.x;
     if (!aDroite && !aGauche) {
-      // Écran étroit (téléphone) : rien à côté d'elle, alors au-dessus ou en dessous, jamais sur son corps ni sa pastille d'humeur.
+      // Écran étroit (téléphone) : rien à côté d'elle, alors au-dessus ou en dessous, jamais sur son corps ni sur sa pastille d'humeur.
       const haut = Math.max(0, pos.y - rayon * 1.1 - (z.y + 8));
       const bas = Math.max(0, z.y + z.h - 8 - (pos.y + rayon * 1.1 + 26));
       const enBas = bas >= haut;
       const place = Math.max(240, Math.floor(enBas ? bas : haut));
-      boite.style.maxHeight = `${place}px`;
+      boite.style.maxHeight = `${Math.min(place, Math.max(160, Math.floor(Math.min(720, z.h - 16))))}px`;
       h = Math.min(boite.offsetHeight || h, place);
       w = boite.offsetWidth;
-      const y = enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h;
+      const y = limiter(enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
       boite.style.left = `${limiter(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
-      boite.style.top = `${limiter(y, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
+      boite.style.top = `${y}px`;
+      assise = { y, h, bas: !enBas };
       return;
     }
     const yCentre = limiter(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
@@ -774,6 +800,71 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const choix = placeSansRecouvrir(cotes, reperee ? zoneElement(reperee) : null);
     boite.style.left = `${choix.x}px`;
     boite.style.top = `${choix.y}px`;
+    assise = { y: choix.y, h, bas: choix === dessus };
+  };
+
+  /** Seule la taille a changé : la discussion garde sa place (le bord fixe reste fixe) et ne fait que rester dans l'écran visible. */
+  const reajusterChat = (boite: HTMLElement, z: ZoneVie): void => {
+    if (!assise) return placerAutour(boite, z);
+    const h = boite.offsetHeight;
+    const brut = assise.bas ? assise.y + assise.h - h : assise.y;
+    const y = limiter(brut, z.y + 8, Math.max(z.y + 8, z.y + z.h - 8 - h));
+    const e = reperee ? zoneElement(reperee) : null;
+    const x = parseFloat(boite.style.left) || 0;
+    // En grandissant elle recouvre l'élément regardé : on la replace en entier.
+    if (e && surfaceRecouverte({ x, y, w: boite.offsetWidth, h }, e) > 0) return placerAutour(boite, z);
+    boite.style.top = `${y}px`;
+    assise = { y, h, bas: assise.bas };
+  };
+
+  /** Appelé à chaque image, mais ne touche à la place que si quelque chose de décisif a changé. */
+  const suivreChat = (): void => {
+    if (!chat) return;
+    const z = zoneVisible();
+    const cle = cleDePlace(z);
+    if (cle !== cleChat) {
+      cleChat = cle;
+      chatTaille = false;
+      placerAutour(chat, z);
+    } else if (chatTaille) {
+      chatTaille = false;
+      reajusterChat(chat, z);
+    }
+  };
+
+  /** Le journal reste collé en bas tant que Marc ne remonte pas lire ; un message de Marc le recolle toujours. */
+  let colle = true;
+  const defilerBas = (force = false): void => {
+    if (journal && (colle || force)) journal.scrollTop = journal.scrollHeight;
+  };
+  let finSuiviChat: (() => void) | null = null;
+  const installerSuiviChat = (boite: HTMLElement): void => {
+    const surChangement = (): void => {
+      chatTaille = true;
+      suivreChat();
+    };
+    const vv = window.visualViewport;
+    const sur = (cible: EventTarget | null, nom: string): void => {
+      cible?.addEventListener(nom, surChangement);
+    };
+    sur(window, "resize");
+    sur(vv, "resize");
+    sur(vv, "scroll");
+    let obs: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      obs = new ResizeObserver(() => {
+        surChangement();
+        defilerBas();
+      });
+      obs.observe(boite);
+    }
+    finSuiviChat = () => {
+      window.removeEventListener("resize", surChangement);
+      vv?.removeEventListener("resize", surChangement);
+      vv?.removeEventListener("scroll", surChangement);
+      obs?.disconnect();
+      finSuiviChat = null;
+    };
   };
 
   /** La boîte de l'élément dans les coordonnées de sa couche. */
@@ -845,8 +936,23 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         fermerChat();
       }
     });
+    colle = true;
+    journal.addEventListener(
+      "scroll",
+      () => {
+        if (journal) colle = journal.scrollHeight - journal.scrollTop - journal.clientHeight < 48;
+      },
+      { passive: true },
+    );
     couche.appendChild(chat);
-    placerAutour(chat);
+    const zOuverture = zoneVisible();
+    cleChat = cleDePlace(zOuverture);
+    chatTaille = false;
+    assise = null;
+    placerAutour(chat, zOuverture);
+    // Après la première pose seulement : l'ouverture n'arrive pas en glissant depuis le coin, les déplacements suivants si.
+    chat.classList.add("lia-ui__chat--glisse");
+    installerSuiviChat(chat);
     choisir("ecoute");
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
@@ -859,6 +965,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (!chatOuvert) return;
     enCours?.abort();
     enCours = null;
+    finSuiviChat?.();
+    assise = null;
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
@@ -2603,7 +2711,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       bulle.style.left = `${limiter(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
-    if (chat) placerAutour(chat);
+    if (chat) suivreChat();
     majRepere();
     majEssaim(dt);
   };
@@ -2737,6 +2845,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (detruit) return;
       detruit = true;
       retirerRegard();
+      finSuiviChat?.();
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
       clearInterval(minuterieEnvies);
