@@ -24,7 +24,7 @@ import { deriveAuRepos, planifierTrajet, pointDuTrajet, prochainPetitPas, type T
 import { avancerEssaim, COINS, creerEssaim, eclat, LIGNE, PAR_COIN, rappeler as rappelerEssaim, surLaCible, termine as essaimTermine, type Essaim } from "./nano.js";
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
-import { adopter, DISCUSSION_MSGS_MAX, empreinte, validerEtat, type DiscussionPartagee, type EtatLia } from "./etat.js";
+import { adopter, bornerDiscussion, empreinte, validerEtat, type DiscussionPartagee, type EtatLia } from "./etat.js";
 import { ambivalence, raisons as raisonsDeSonEtat, reponsePourquoi, rythmeDuJour, teinter, type ContextePensee } from "./pensee.js";
 import { ajouterSouvenir, humeurDeFond, phraseDeRetour, type GenreSouvenir, type Souvenir } from "./souvenirs.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
@@ -551,7 +551,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (garder) {
       trace.push({ de, texte });
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
-      discussionEtat = { ouvert: true, quand: Date.now(), msgs: trace.slice(-DISCUSSION_MSGS_MAX).map((m) => ({ ...m })) };
+      discussionEtat = { ouvert: true, quand: Date.now(), msgs: bornerDiscussion(trace) };
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);

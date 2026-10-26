@@ -1291,7 +1291,19 @@ function phraseDeRetour(souvenirs, absenceMs, rand, maintenant, dejaDitAujourdhu
 
 // src/etat.ts
 var DISCUSSION_MSGS_MAX = 20;
-var DISCUSSION_TEXTE_MAX = 4e3;
+var DISCUSSION_TEXTE_MAX = 600;
+var DISCUSSION_TOTAL_MAX = 4e3;
+function bornerDiscussion(msgs) {
+  const gardes = [];
+  let total = 0;
+  for (const m of msgs.slice(-DISCUSSION_MSGS_MAX).reverse()) {
+    const texte = m.texte.slice(0, DISCUSSION_TEXTE_MAX);
+    if (total + texte.length > DISCUSSION_TOTAL_MAX) break;
+    total += texte.length;
+    gardes.unshift({ de: m.de, texte });
+  }
+  return gardes;
+}
 var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
 var LENTE_MAX = 80;
 var VERSION_MAX = 1e9;
@@ -1314,10 +1326,10 @@ function validerDiscussion(brut2) {
     if (typeof m !== "object" || m === null) continue;
     const { de: de2, texte } = m;
     if ((de2 === "lia" || de2 === "moi") && typeof texte === "string" && texte.trim() !== "") {
-      propres.push({ de: de2, texte: texte.slice(0, DISCUSSION_TEXTE_MAX) });
+      propres.push({ de: de2, texte });
     }
   }
-  return { ouvert, quand, msgs: ouvert ? propres.slice(-DISCUSSION_MSGS_MAX) : [] };
+  return { ouvert, quand, msgs: ouvert ? bornerDiscussion(propres) : [] };
 }
 function validerEtat(brut2) {
   if (typeof brut2 !== "object" || brut2 === null) return null;
@@ -4471,7 +4483,7 @@ function mountLia(options = {}) {
     if (garder3) {
       trace.push({ de: de2, texte });
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
-      discussionEtat = { ouvert: true, quand: Date.now(), msgs: trace.slice(-DISCUSSION_MSGS_MAX).map((m2) => ({ ...m2 })) };
+      discussionEtat = { ouvert: true, quand: Date.now(), msgs: bornerDiscussion(trace) };
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);

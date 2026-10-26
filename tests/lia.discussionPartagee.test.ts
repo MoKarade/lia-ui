@@ -55,7 +55,18 @@ describe("validerDiscussion : ce que l'hôte rend est une donnée", () => {
     const d = validerDiscussion({ ouvert: true, quand: 5, msgs: [...beaucoup, { de: "pirate", texte: "x" }, { de: "lia", texte: "   " }, { de: "lia", texte: "y".repeat(9000) }, 3, null] });
     expect(d?.msgs.length).toBe(20);
     expect(d?.msgs.every((m) => m.de === "moi" || m.de === "lia")).toBe(true);
-    expect(d?.msgs[d.msgs.length - 1]?.texte.length).toBe(4000);
+    expect(d?.msgs[d.msgs.length - 1]?.texte.length).toBe(600);
+  });
+
+  it("le total reste sous 4 000 caractères : les plus anciens messages tombent, l'état tient sous 16 Ko", () => {
+    const longs = Array.from({ length: 20 }, (_, i) => ({ de: i % 2 ? ("lia" as const) : ("moi" as const), texte: `${i}:`.padEnd(600, "é") }));
+    const d = validerDiscussion({ ouvert: true, quand: 5, msgs: longs });
+    const total = d?.msgs.reduce((t, m) => t + m.texte.length, 0) ?? 0;
+    expect(total).toBeLessThanOrEqual(4000);
+    expect(d?.msgs[d.msgs.length - 1]?.texte.startsWith("19:")).toBe(true);
+    expect(d?.msgs[0]?.texte.startsWith("14:")).toBe(true);
+    const octets = new TextEncoder().encode(JSON.stringify(etat(d ? { discussion: d } : {}))).length;
+    expect(octets).toBeLessThan(16 * 1024);
   });
 
   it("rejette ce qui n'est pas une discussion (l'état, lui, reste valide sans elle)", () => {

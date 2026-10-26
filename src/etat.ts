@@ -13,9 +13,26 @@ export interface RelancesPartagees {
   n: number;
 }
 
-/** Au plus ce nombre de messages et de caractères par message passent d'une app à l'autre (même borne que la discussion de l'onglet). */
+/**
+ * Ce qui passe d'une app à l'autre : au plus 20 messages, 600 caractères chacun et 4 000 au total (les plus récents). L'état entier doit
+ * rester sous les 16 Ko que le hub et MemoryAI acceptent ; la discussion de l'onglet, elle, garde ses 20 messages de 4 000 caractères.
+ */
 export const DISCUSSION_MSGS_MAX = 20;
-export const DISCUSSION_TEXTE_MAX = 4000;
+export const DISCUSSION_TEXTE_MAX = 600;
+export const DISCUSSION_TOTAL_MAX = 4000;
+
+/** Garde la fin de la discussion dans ces bornes : texte coupé, puis les plus anciens messages retirés tant que le total dépasse. */
+export function bornerDiscussion(msgs: ReadonlyArray<{ de: "lia" | "moi"; texte: string }>): Array<{ de: "lia" | "moi"; texte: string }> {
+  const gardes: Array<{ de: "lia" | "moi"; texte: string }> = [];
+  let total = 0;
+  for (const m of msgs.slice(-DISCUSSION_MSGS_MAX).reverse()) {
+    const texte = m.texte.slice(0, DISCUSSION_TEXTE_MAX);
+    if (total + texte.length > DISCUSSION_TOTAL_MAX) break;
+    total += texte.length;
+    gardes.unshift({ de: m.de, texte });
+  }
+  return gardes;
+}
 
 /**
  * La fin de sa discussion avec Marc, pour qu'elle le suive d'une app à l'autre (v0.39.0, optionnelle : un hôte qui ne la garde pas reste
@@ -83,11 +100,11 @@ export function validerDiscussion(brut: unknown): DiscussionPartagee | undefined
     if (typeof m !== "object" || m === null) continue;
     const { de, texte } = m as Record<string, unknown>;
     if ((de === "lia" || de === "moi") && typeof texte === "string" && texte.trim() !== "") {
-      propres.push({ de, texte: texte.slice(0, DISCUSSION_TEXTE_MAX) });
+      propres.push({ de, texte });
     }
   }
   // Une discussion fermée ne porte aucun texte : rien de Marc ne traîne chez l'hôte une fois qu'il l'a fermée.
-  return { ouvert, quand, msgs: ouvert ? propres.slice(-DISCUSSION_MSGS_MAX) : [] };
+  return { ouvert, quand, msgs: ouvert ? bornerDiscussion(propres) : [] };
 }
 
 /** `null` si ce que l'hôte rend n'est pas un état valide : LIA garde alors le sien. Les clés inconnues sont retirées. */
