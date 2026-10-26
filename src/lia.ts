@@ -800,7 +800,20 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const choix = placeSansRecouvrir(cotes, reperee ? zoneElement(reperee) : null);
     boite.style.left = `${choix.x}px`;
     boite.style.top = `${choix.y}px`;
-    assise = { y: choix.y, h, bas: choix === dessus };
+    // Dans la moitié basse de l'écran, à côté d'elle, c'est son bord du bas qui reste fixe : la discussion grandit vers le haut, jamais hors de l'écran.
+    const aCote = choix !== dessus && choix !== dessous;
+    assise = { y: choix.y, h, bas: choix === dessus || (aCote && pos.y > z.y + z.h / 2) };
+  };
+
+  /** Un changement de TAILLE se place d'un coup, dans la même image : seul un vrai déplacement de LIA glisse (sinon la discussion traverserait le bord de l'écran en route). */
+  const sansGlisser = (boite: HTMLElement, agir: () => void): void => {
+    const glisse = boite.classList.contains("lia-ui__chat--glisse");
+    if (glisse) boite.classList.remove("lia-ui__chat--glisse");
+    agir();
+    if (glisse) {
+      boite.getBoundingClientRect();
+      boite.classList.add("lia-ui__chat--glisse");
+    }
   };
 
   /** Seule la taille a changé : la discussion garde sa place (le bord fixe reste fixe) et ne fait que rester dans l'écran visible. */
@@ -828,7 +841,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       placerAutour(chat, z);
     } else if (chatTaille) {
       chatTaille = false;
-      reajusterChat(chat, z);
+      const boite = chat;
+      sansGlisser(boite, () => reajusterChat(boite, z));
     }
   };
 
@@ -843,9 +857,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       chatTaille = true;
       suivreChat();
     };
+    // L'écran visible change (clavier, barres, fenêtre) : la discussion se replace d'un coup, sans glisser à travers le bord.
+    const surEcran = (): void => sansGlisser(boite, surChangement);
     const vv = window.visualViewport;
     const sur = (cible: EventTarget | null, nom: string): void => {
-      cible?.addEventListener(nom, surChangement);
+      cible?.addEventListener(nom, surEcran);
     };
     sur(window, "resize");
     sur(vv, "resize");
@@ -859,9 +875,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       obs.observe(boite);
     }
     finSuiviChat = () => {
-      window.removeEventListener("resize", surChangement);
-      vv?.removeEventListener("resize", surChangement);
-      vv?.removeEventListener("scroll", surChangement);
+      window.removeEventListener("resize", surEcran);
+      vv?.removeEventListener("resize", surEcran);
+      vv?.removeEventListener("scroll", surEcran);
       obs?.disconnect();
       finSuiviChat = null;
     };

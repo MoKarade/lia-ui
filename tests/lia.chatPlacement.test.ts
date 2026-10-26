@@ -111,6 +111,8 @@ describe("la discussion reste entièrement dans l'écran", () => {
     p = place();
     expect(p.y + hauteur).toBeLessThanOrEqual(600 - 8);
     expect(parseFloat(chat().style.maxHeight)).toBeLessThanOrEqual(584);
+    // Un changement d'écran se place d'un coup : le glissement est remis aussitôt après, pour les vrais déplacements de LIA.
+    expect(chat().classList.contains("lia-ui__chat--glisse")).toBe(true);
   });
 });
 
@@ -142,7 +144,7 @@ describe("la discussion ne bouge pas pour rien", () => {
     );
     monter();
     vi.advanceTimersByTime(500);
-    poser(450, 300);
+    poser(450, 200); // moitié haute de l'écran
     largeur = 300; // assez étroite pour se poser à côté d'elle : le haut reste fixe
     hauteur = 120;
     lia?.ouvrirChat();
@@ -161,6 +163,36 @@ describe("la discussion ne bouge pas pour rien", () => {
     vi.advanceTimersByTime(100);
     expect(place().y + 580).toBeLessThanOrEqual(600 - 8);
     expect(place().x).toBe(avant.x);
+  });
+
+  it("à côté d'elle dans la moitié basse de l'écran, c'est son bord du bas qui reste fixe : elle grandit vers le haut", () => {
+    const observateurs: Array<() => void> = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          observateurs.push(cb);
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+    monter();
+    vi.advanceTimersByTime(500);
+    poser(450, 480);
+    largeur = 300;
+    hauteur = 60;
+    lia?.ouvrirChat();
+    vi.advanceTimersByTime(200);
+    const avant = place();
+    hauteur = 330; // la réponse arrive
+    observateurs[0]?.();
+    const apres = place();
+    expect(apres.x).toBe(avant.x);
+    expect(apres.y + 330).toBeCloseTo(avant.y + 60, 5); // le bord du bas n'a pas bougé
+    expect(apres.y + 330).toBeLessThanOrEqual(600 - 8);
+    // Jamais d'un trajet à travers le bord : le changement de taille se place sans glisser.
+    expect(chat().classList.contains("lia-ui__chat--glisse")).toBe(true);
   });
 
   it("posée au-dessus d'elle (écran étroit), c'est son bord du bas qui reste fixe", () => {
