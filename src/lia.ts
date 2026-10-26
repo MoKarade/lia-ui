@@ -82,6 +82,7 @@ import {
   lireRelances,
   lireSpontanees,
 } from "./stockage.js";
+import { decouperSources } from "./sources.js";
 import { CSS } from "./styles.js";
 import {
   HUMEURS_LIA,
@@ -553,7 +554,23 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
       discussionEtat = { ouvert: true, quand: Date.now(), msgs: bornerDiscussion(trace) };
     }
-    const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
+    const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`);
+    // Ce que dit le modèle est une donnée : texte brut, et les marques de source deviennent de petits liens dessous.
+    const { texte: net, sources } = de === "lia" && !erreur ? decouperSources(texte, location.href) : { texte, sources: [] as string[] };
+    m.textContent = net;
+    if (sources.length) {
+      const ligne = el("div", "lia-ui__sources");
+      ligne.append(el("span", "lia-ui__sources-titre", sources.length > 1 ? "Sources" : "Source"));
+      sources.forEach((url, i) => {
+        const a = el("a", "lia-ui__source", String(i + 1));
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.setAttribute("aria-label", `Source ${i + 1}`);
+        ligne.append(a);
+      });
+      m.append(ligne);
+    }
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
     return m;

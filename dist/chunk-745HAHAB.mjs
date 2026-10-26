@@ -760,6 +760,62 @@ function phraseDeRetour(souvenirs, absenceMs, rand, maintenant, dejaDitAujourdhu
   return liste[k] ?? null;
 }
 
+// src/sources.ts
+var LONGUEUR_MAX = 2048;
+var SOURCES_MAX = 8;
+function adresseSure(brut2, base) {
+  try {
+    const u = new URL(brut2, base);
+    const local = u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]";
+    if (u.protocol !== "https:" && !(u.protocol === "http:" && local)) return null;
+    if (u.username || u.password) return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+var estEspace = (c) => c === " " || c === "\n" || c === "	" || c === "\r" || c === "\xA0";
+function decouperSources(texte, base) {
+  const sources = [];
+  let sortie = "";
+  let i = 0;
+  while (i < texte.length) {
+    const c = texte[i];
+    const suivant = texte[i + 1];
+    if (c === "[" && (suivant === "\u2192" || suivant === "\u2197")) {
+      let fin = -1;
+      for (let k = i + 2; k < texte.length && k <= i + 2 + LONGUEUR_MAX; k++) {
+        if (texte[k] === "]") {
+          fin = k;
+          break;
+        }
+      }
+      if (fin !== -1) {
+        const brut2 = texte.slice(i + 2, fin).trim();
+        const url = brut2 && ![...brut2].some(estEspace) ? adresseSure(brut2, base) : null;
+        if (url) {
+          if (sources.length < SOURCES_MAX && !sources.includes(url)) sources.push(url);
+          let k = sortie.length;
+          while (k > 0 && estEspace(sortie[k - 1])) k--;
+          sortie = sortie.slice(0, k);
+          i = fin + 1;
+          continue;
+        }
+      }
+    }
+    sortie += c;
+    i++;
+  }
+  return { texte: sortie.trim(), sources };
+}
+function retirerMarqueCoupee(texte) {
+  const a = texte.lastIndexOf("[\u2192");
+  const b = texte.lastIndexOf("[\u2197");
+  const debut = Math.max(a, b);
+  if (debut === -1 || texte.indexOf("]", debut) !== -1) return texte;
+  return texte.slice(0, debut).trimEnd();
+}
+
 // src/etat.ts
 var DISCUSSION_MSGS_MAX = 20;
 var DISCUSSION_TEXTE_MAX = 600;
@@ -768,7 +824,8 @@ function bornerDiscussion(msgs) {
   const gardes = [];
   let total = 0;
   for (const m of msgs.slice(-DISCUSSION_MSGS_MAX).reverse()) {
-    const texte = m.texte.slice(0, DISCUSSION_TEXTE_MAX);
+    const coupe = m.texte.slice(0, DISCUSSION_TEXTE_MAX);
+    const texte = coupe.length < m.texte.length ? retirerMarqueCoupee(coupe) : coupe;
     if (total + texte.length > DISCUSSION_TOTAL_MAX) break;
     total += texte.length;
     gardes.unshift({ de: m.de, texte });
@@ -4100,6 +4157,10 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__msg--lia{align-self:flex-start;border-bottom-left-radius:6px;background:color-mix(in srgb,var(--lia-surface-2) 82%,transparent)}
 .lia-ui__msg--moi{align-self:flex-end;border-bottom-right-radius:6px;background:color-mix(in srgb,var(--lia-accent) 22%,transparent)}
 .lia-ui__msg--erreur{box-shadow:inset 0 0 0 1px rgba(229,103,91,.6)}
+.lia-ui__sources{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem;margin-top:.35rem;font-size:.78rem;opacity:.9;white-space:normal}
+.lia-ui__sources-titre{margin-inline-end:.15rem}
+.lia-ui__source{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;border-radius:999px;color:inherit;text-decoration:underline;text-underline-offset:3px}
+.lia-ui__source:focus-visible{outline:2px solid var(--lia-accent);outline-offset:-2px}
 .lia-ui__points{display:inline-flex;gap:5px;padding:.2rem 0}
 .lia-ui__points i{width:7px;height:7px;border-radius:50%;background:var(--lia-soft);animation:lia-ui-saut 1s infinite ease-in-out}
 .lia-ui__points i:nth-child(2){animation-delay:.15s}.lia-ui__points i:nth-child(3){animation-delay:.3s}
@@ -4520,7 +4581,22 @@ function mountLia(options = {}) {
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
       discussionEtat = { ouvert: true, quand: Date.now(), msgs: bornerDiscussion(trace) };
     }
-    const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
+    const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`);
+    const { texte: net, sources } = de2 === "lia" && !erreur ? decouperSources(texte, location.href) : { texte, sources: [] };
+    m.textContent = net;
+    if (sources.length) {
+      const ligne = el("div", "lia-ui__sources");
+      ligne.append(el("span", "lia-ui__sources-titre", sources.length > 1 ? "Sources" : "Source"));
+      sources.forEach((url, i) => {
+        const a = el("a", "lia-ui__source", String(i + 1));
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.setAttribute("aria-label", `Source ${i + 1}`);
+        ligne.append(a);
+      });
+      m.append(ligne);
+    }
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
     return m;
@@ -6537,4 +6613,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-YBE6MIYR.mjs.map
+//# sourceMappingURL=chunk-745HAHAB.mjs.map

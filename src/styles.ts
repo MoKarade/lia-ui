@@ -33,6 +33,10 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__msg--lia{align-self:flex-start;border-bottom-left-radius:6px;background:color-mix(in srgb,var(--lia-surface-2) 82%,transparent)}
 .lia-ui__msg--moi{align-self:flex-end;border-bottom-right-radius:6px;background:color-mix(in srgb,var(--lia-accent) 22%,transparent)}
 .lia-ui__msg--erreur{box-shadow:inset 0 0 0 1px rgba(229,103,91,.6)}
+.lia-ui__sources{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem;margin-top:.35rem;font-size:.78rem;opacity:.9;white-space:normal}
+.lia-ui__sources-titre{margin-inline-end:.15rem}
+.lia-ui__source{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;border-radius:999px;color:inherit;text-decoration:underline;text-underline-offset:3px}
+.lia-ui__source:focus-visible{outline:2px solid var(--lia-accent);outline-offset:-2px}
 .lia-ui__points{display:inline-flex;gap:5px;padding:.2rem 0}
 .lia-ui__points i{width:7px;height:7px;border-radius:50%;background:var(--lia-soft);animation:lia-ui-saut 1s infinite ease-in-out}
 .lia-ui__points i:nth-child(2){animation-delay:.15s}.lia-ui__points i:nth-child(3){animation-delay:.3s}
