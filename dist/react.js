@@ -4767,7 +4767,17 @@ function mountLia(options = {}) {
     const choix = placeSansRecouvrir(cotes, reperee ? zoneElement(reperee) : null);
     boite.style.left = `${choix.x}px`;
     boite.style.top = `${choix.y}px`;
-    assise = { y: choix.y, h, bas: choix === dessus };
+    const aCote = choix !== dessus && choix !== dessous;
+    assise = { y: choix.y, h, bas: choix === dessus || aCote && pos.y > z.y + z.h / 2 };
+  };
+  const sansGlisser = (boite, agir) => {
+    const glisse2 = boite.classList.contains("lia-ui__chat--glisse");
+    if (glisse2) boite.classList.remove("lia-ui__chat--glisse");
+    agir();
+    if (glisse2) {
+      boite.getBoundingClientRect();
+      boite.classList.add("lia-ui__chat--glisse");
+    }
   };
   const reajusterChat = (boite, z) => {
     if (!assise) return placerAutour(boite, z);
@@ -4790,7 +4800,8 @@ function mountLia(options = {}) {
       placerAutour(chat, z);
     } else if (chatTaille) {
       chatTaille = false;
-      reajusterChat(chat, z);
+      const boite = chat;
+      sansGlisser(boite, () => reajusterChat(boite, z));
     }
   };
   let colle = true;
@@ -4803,9 +4814,10 @@ function mountLia(options = {}) {
       chatTaille = true;
       suivreChat();
     };
+    const surEcran = () => sansGlisser(boite, surChangement);
     const vv = window.visualViewport;
     const sur2 = (cible2, nom) => {
-      cible2?.addEventListener(nom, surChangement);
+      cible2?.addEventListener(nom, surEcran);
     };
     sur2(window, "resize");
     sur2(vv, "resize");
@@ -4819,9 +4831,9 @@ function mountLia(options = {}) {
       obs.observe(boite);
     }
     finSuiviChat = () => {
-      window.removeEventListener("resize", surChangement);
-      vv?.removeEventListener("resize", surChangement);
-      vv?.removeEventListener("scroll", surChangement);
+      window.removeEventListener("resize", surEcran);
+      vv?.removeEventListener("resize", surEcran);
+      vv?.removeEventListener("scroll", surEcran);
       obs?.disconnect();
       finSuiviChat = null;
     };
