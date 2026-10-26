@@ -5,6 +5,7 @@
  */
 import { COMPORTEMENTS, JOURNAL_MAX, type Envies, type FaitLia } from "./cerveau.js";
 import { CAUSES, type Interieur } from "./interieur.js";
+import { retirerMarqueCoupee } from "./sources.js";
 import { validerSouvenirs, type Souvenir } from "./souvenirs.js";
 
 export interface RelancesPartagees {
@@ -26,7 +27,8 @@ export function bornerDiscussion(msgs: ReadonlyArray<{ de: "lia" | "moi"; texte:
   const gardes: Array<{ de: "lia" | "moi"; texte: string }> = [];
   let total = 0;
   for (const m of msgs.slice(-DISCUSSION_MSGS_MAX).reverse()) {
-    const texte = m.texte.slice(0, DISCUSSION_TEXTE_MAX);
+    const coupe = m.texte.slice(0, DISCUSSION_TEXTE_MAX);
+    const texte = coupe.length < m.texte.length ? retirerMarqueCoupee(coupe) : coupe;
     if (total + texte.length > DISCUSSION_TOTAL_MAX) break;
     total += texte.length;
     gardes.unshift({ de: m.de, texte });

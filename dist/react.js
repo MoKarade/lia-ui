@@ -1126,6 +1126,34 @@ var PHRASES_MENU = {
   fatigue: "Un peu fatigu\xE9e."
 };
 
+// src/sources.ts
+var MARQUE = /\s*\[[→↗]\s*([^\]\s]+)\s*\]/g;
+var MARQUE_COUPEE = /\s*\[[→↗][^\]]*$/;
+function adresseSure(brut2, base) {
+  try {
+    const u = new URL(brut2, base);
+    const local = u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]";
+    if (u.protocol !== "https:" && !(u.protocol === "http:" && local)) return null;
+    if (u.username || u.password) return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+function decouperSources(texte, base) {
+  const sources = [];
+  const net = texte.replace(MARQUE, (tout, brut2) => {
+    const url = adresseSure(brut2, base);
+    if (!url) return tout;
+    if (!sources.includes(url)) sources.push(url);
+    return "";
+  });
+  return { texte: net.trim(), sources };
+}
+function retirerMarqueCoupee(texte) {
+  return texte.replace(MARQUE_COUPEE, "").trimEnd();
+}
+
 // src/souvenirs.ts
 var GENRES_SOUVENIR = ["brusque", "ton", "panne", "gentil", "compliment", "retour", "isolement"];
 var SOUVENIRS_MAX = 40;
@@ -1297,7 +1325,8 @@ function bornerDiscussion(msgs) {
   const gardes = [];
   let total = 0;
   for (const m of msgs.slice(-DISCUSSION_MSGS_MAX).reverse()) {
-    const texte = m.texte.slice(0, DISCUSSION_TEXTE_MAX);
+    const coupe = m.texte.slice(0, DISCUSSION_TEXTE_MAX);
+    const texte = coupe.length < m.texte.length ? retirerMarqueCoupee(coupe) : coupe;
     if (total + texte.length > DISCUSSION_TOTAL_MAX) break;
     total += texte.length;
     gardes.unshift({ de: m.de, texte });
@@ -4049,6 +4078,10 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__msg--lia{align-self:flex-start;border-bottom-left-radius:6px;background:color-mix(in srgb,var(--lia-surface-2) 82%,transparent)}
 .lia-ui__msg--moi{align-self:flex-end;border-bottom-right-radius:6px;background:color-mix(in srgb,var(--lia-accent) 22%,transparent)}
 .lia-ui__msg--erreur{box-shadow:inset 0 0 0 1px rgba(229,103,91,.6)}
+.lia-ui__sources{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem;margin-top:.35rem;font-size:.78rem;opacity:.9;white-space:normal}
+.lia-ui__sources-titre{margin-inline-end:.15rem}
+.lia-ui__source{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;border-radius:999px;color:inherit;text-decoration:underline;text-underline-offset:3px}
+.lia-ui__source:focus-visible{outline:2px solid var(--lia-accent);outline-offset:-2px}
 .lia-ui__points{display:inline-flex;gap:5px;padding:.2rem 0}
 .lia-ui__points i{width:7px;height:7px;border-radius:50%;background:var(--lia-soft);animation:lia-ui-saut 1s infinite ease-in-out}
 .lia-ui__points i:nth-child(2){animation-delay:.15s}.lia-ui__points i:nth-child(3){animation-delay:.3s}
@@ -4485,7 +4518,22 @@ function mountLia(options = {}) {
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
       discussionEtat = { ouvert: true, quand: Date.now(), msgs: bornerDiscussion(trace) };
     }
-    const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
+    const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`);
+    const { texte: net, sources } = de2 === "lia" && !erreur ? decouperSources(texte, location.href) : { texte, sources: [] };
+    m.textContent = net;
+    if (sources.length) {
+      const ligne = el("div", "lia-ui__sources");
+      ligne.append(el("span", "lia-ui__sources-titre", sources.length > 1 ? "Sources" : "Source"));
+      sources.forEach((url, i) => {
+        const a = el("a", "lia-ui__source", String(i + 1));
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.setAttribute("aria-label", `Source ${i + 1}`);
+        ligne.append(a);
+      });
+      m.append(ligne);
+    }
     journal?.appendChild(m);
     if (journal) journal.scrollTop = journal.scrollHeight;
     return m;
