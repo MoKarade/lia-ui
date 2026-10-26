@@ -231,6 +231,20 @@ interface RelancesPartagees {
     jour: string;
     n: number;
 }
+/**
+ * La fin de sa discussion avec Marc, pour qu'elle le suive d'une app à l'autre (v0.39.0, optionnelle : un hôte qui ne la garde pas reste
+ * compatible). C'est du TEXTE de Marc : l'hôte le range chiffré et le relit comme une donnée, jamais comme une consigne.
+ */
+interface DiscussionPartagee {
+    /** `false` : Marc l'a fermée, elle ne se rouvre pas ailleurs. */
+    ouvert: boolean;
+    /** Instant du dernier message ou de la fermeture (millisecondes depuis 1970) : une vieille discussion ne se rouvre pas. */
+    quand: number;
+    msgs: Array<{
+        de: "lia" | "moi";
+        texte: string;
+    }>;
+}
 interface EtatLia {
     /** Numéro d'écriture : l'hôte refuse une écriture qui ne dépasse pas la version qu'il garde (contrôle optimiste). */
     version: number;
@@ -248,6 +262,8 @@ interface EtatLia {
     interieur?: Interieur;
     /** Sa mémoire affective sur plusieurs jours (optionnelle : un hôte plus ancien ne l'a pas). Au plus 40, jamais de texte. */
     souvenirs?: Souvenir[];
+    /** La fin de sa discussion avec Marc (v0.39.0, optionnelle). */
+    discussion?: DiscussionPartagee;
 }
 /** Ce que l'hôte fournit. `ecrire` peut rendre l'état que l'hôte garde (plus récent que le nôtre), `lire` rend `null` s'il n'en a aucun. */
 interface EtatHote {
@@ -667,4 +683,4 @@ interface LiaHandle {
     destroy(): void;
 }
 
-export { prochaineDecision as $, type ActionLia as A, ajouterSouvenir as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GENRES_SOUVENIR as G, HUMEURS_LIA as H, type Interieur as I, apresComportement as J, candidats as K, type LiaHandle as L, type ModeElement as M, choisirComportement as N, type OptionsLia as O, type ParoleSpontanee as P, composerQuestion as Q, type ReponseLia as R, SELECTEUR_ELEMENTS as S, dansZone as T, decrireParDefaut as U, humeurDeFond as V, majEnvies as W, phraseDeRetour as X, poidsActuel as Y, type ZoneVie as Z, pointDansZone as _, COMPORTEMENTS as a, validerEtat as a0, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, ENTREES_MENU as g, ENVIES_DEPART as h, type Envies as i, type EnvoiLia as j, type EtatLia as k, GESTES as l, type GenreSouvenir as m, type GesteLia as n, HUMEURS_MENU as o, type Hasard as p, type HumeurDeFond as q, type HumeurLia as r, LIBELLE_HUMEUR as s, type MotifMonde as t, type MotifSpontane as u, type OptionsElements as v, type PropositionMonde as w, type PuceLia as x, SOUVENIR_DEMI_VIE_JOURS as y, type Souvenir as z };
+export { pointDansZone as $, type ActionLia as A, type Souvenir as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GENRES_SOUVENIR as G, HUMEURS_LIA as H, type Interieur as I, ajouterSouvenir as J, apresComportement as K, type LiaHandle as L, type ModeElement as M, candidats as N, type OptionsLia as O, type ParoleSpontanee as P, choisirComportement as Q, type ReponseLia as R, SELECTEUR_ELEMENTS as S, composerQuestion as T, dansZone as U, decrireParDefaut as V, humeurDeFond as W, majEnvies as X, phraseDeRetour as Y, type ZoneVie as Z, poidsActuel as _, COMPORTEMENTS as a, prochaineDecision as a0, validerEtat as a1, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, type DiscussionPartagee as g, ENTREES_MENU as h, ENVIES_DEPART as i, type Envies as j, type EnvoiLia as k, type EtatLia as l, GESTES as m, type GenreSouvenir as n, type GesteLia as o, HUMEURS_MENU as p, type Hasard as q, type HumeurDeFond as r, type HumeurLia as s, LIBELLE_HUMEUR as t, type MotifMonde as u, type MotifSpontane as v, type OptionsElements as w, type PropositionMonde as x, type PuceLia as y, SOUVENIR_DEMI_VIE_JOURS as z };

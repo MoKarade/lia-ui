@@ -164,6 +164,10 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 />
 ```
 
+### Sa discussion suit Marc d'une app à l'autre (v0.39.0)
+
+Marc, 26/10/2026 : relevé en production, du hub vers CarAI la discussion repartait à 0 (chaque app a sa propre origine, donc son propre `sessionStorage`). `EtatLia.discussion` (optionnel) porte la fin de la discussion : `{ ouvert, quand, msgs: [{ de: "lia" | "moi", texte }] }`, au plus 20 messages, 600 caractères chacun et 4 000 au total, les plus récents (`validerDiscussion` et `bornerDiscussion`, appliquées par `validerEtat` : l'état entier reste sous les 16 Ko que le hub et MemoryAI acceptent). Elle voyage par `etat.lire` / `etat.ecrire`, donc l'hôte qui partage déjà l'état n'a rien d'autre à brancher. **C'est du texte de Marc** : l'hôte le range chiffré, propriétaire seul, et le relit comme une donnée (jamais une consigne) ; un hôte qui ne garde pas le champ reste compatible. À la PREMIÈRE lecture après le montage, une discussion ouverte, vieille de moins de 30 minutes, se rouvre avec ses messages, sauf si Marc écrit déjà dans un champ de la page ; la relecture d'une minute n'ouvre rien de force. Une discussion fermée ne porte aucun texte et ne se rouvre pas. Une page qui n'a rien dit renvoie la discussion qu'elle a lue (elle ne l'efface pas).
+
 ### L'animation d'analyse, dessinée par les nanobots sur l'élément (v0.38.0)
 
 Marc, 24/10 21:09Z : « L'analyse carré, je veux genre l'animation, mais là où il faut ». Les 100 nanobots reprennent l'animation « analyse » du corps (quatre coins, une ligne qui balaie, des points qui s'allument à son passage) et la posent sur l'élément analysé, pas à côté d'elle : 24 tiennent les quatre coins (trois par branche, branche de 5 à 28 px), 28 forment la ligne de balayage (qui descend et remonte à 0,45 passage par seconde, sans saut), 48 sont des points de lecture qui s'allument quand la ligne les croise. Des fils relient les nanobots d'une même branche, de la ligne et les points éclairés. Rien n'est dessiné dans la page. `nanobots()` rend en plus `forme` (`coins`, `ligne`, `points`, `ligneY`).

@@ -24,7 +24,7 @@ export { GESTES, HUMEURS_MENU } from "./gestes.js";
 export { ACTIONS_LIA, FAMILLES_ACTIONS } from "./activite.js";
 export type { FamilleActions } from "./activite.js";
 export { validerEtat } from "./etat.js";
-export type { EtatHote, EtatLia } from "./etat.js";
+export type { DiscussionPartagee, EtatHote, EtatLia } from "./etat.js";
 export { CAUSES } from "./interieur.js";
 export type { Cause, Interieur } from "./interieur.js";
 export { GENRES_SOUVENIR, ajouterSouvenir, humeurDeFond, phraseDeRetour, poidsActuel, SOUVENIR_DEMI_VIE_JOURS } from "./souvenirs.js";
