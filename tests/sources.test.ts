@@ -51,6 +51,15 @@ describe("decouperSources : les marques sortent du texte", () => {
     expect(adresseSure("http://localhost:3000/x", BASE)).toBe("http://localhost:3000/x");
   });
 
+  it("un texte hostile (des milliers de marques ouvertes) se lit en temps borné", () => {
+    for (const hostile of ["[→ ".repeat(20_000), `[→${" ".repeat(60_000)}x`, "[→!".repeat(20_000) + "]"]) {
+      const t0 = performance.now();
+      const r = decouperSources(hostile, BASE);
+      expect(r.sources).toEqual([]);
+      expect(performance.now() - t0).toBeLessThan(1500);
+    }
+  });
+
   it("une marque coupée par la borne de 600 caractères est retirée", () => {
     expect(retirerMarqueCoupee("Une phrase [→https://memoire.example/fa")).toBe("Une phrase");
     expect(retirerMarqueCoupee("Rien de coupé")).toBe("Rien de coupé");

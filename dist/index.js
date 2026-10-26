@@ -1206,8 +1206,7 @@ var PHRASES_MENU = {
 };
 
 // src/sources.ts
-var MARQUE = /\s*\[[→↗]\s*([^\]\s]+)\s*\]/g;
-var MARQUE_COUPEE = /\s*\[[→↗][^\]]*$/;
+var LONGUEUR_MAX = 2048;
 function adresseSure(brut2, base) {
   try {
     const u = new URL(brut2, base);
@@ -1219,18 +1218,46 @@ function adresseSure(brut2, base) {
     return null;
   }
 }
+var estEspace = (c) => c === " " || c === "\n" || c === "	" || c === "\r" || c === "\xA0";
 function decouperSources(texte, base) {
   const sources = [];
-  const net = texte.replace(MARQUE, (tout, brut2) => {
-    const url = adresseSure(brut2, base);
-    if (!url) return tout;
-    if (!sources.includes(url)) sources.push(url);
-    return "";
-  });
-  return { texte: net.trim(), sources };
+  let sortie = "";
+  let i = 0;
+  while (i < texte.length) {
+    const c = texte[i];
+    const suivant = texte[i + 1];
+    if (c === "[" && (suivant === "\u2192" || suivant === "\u2197")) {
+      let fin = -1;
+      for (let k = i + 2; k < texte.length && k <= i + 2 + LONGUEUR_MAX; k++) {
+        if (texte[k] === "]") {
+          fin = k;
+          break;
+        }
+      }
+      if (fin !== -1) {
+        const brut2 = texte.slice(i + 2, fin).trim();
+        const url = brut2 && ![...brut2].some(estEspace) ? adresseSure(brut2, base) : null;
+        if (url) {
+          if (!sources.includes(url)) sources.push(url);
+          let k = sortie.length;
+          while (k > 0 && estEspace(sortie[k - 1])) k--;
+          sortie = sortie.slice(0, k);
+          i = fin + 1;
+          continue;
+        }
+      }
+    }
+    sortie += c;
+    i++;
+  }
+  return { texte: sortie.trim(), sources };
 }
 function retirerMarqueCoupee(texte) {
-  return texte.replace(MARQUE_COUPEE, "").trimEnd();
+  const a = texte.lastIndexOf("[\u2192");
+  const b = texte.lastIndexOf("[\u2197");
+  const debut = Math.max(a, b);
+  if (debut === -1 || texte.indexOf("]", debut) !== -1) return texte;
+  return texte.slice(0, debut).trimEnd();
 }
 
 // src/souvenirs.ts
