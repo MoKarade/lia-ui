@@ -4141,6 +4141,7 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__bulle{max-width:min(320px,calc(100% - 16px));padding:.6rem .85rem;font-size:.95rem;line-height:1.35}
 .lia-ui__bulle[hidden],.lia-ui__chat[hidden],.lia-ui__menu[hidden]{display:none}
 .lia-ui__chat{background:var(--lia-verre);border-radius:26px;border-color:color-mix(in srgb,var(--lia-border) 40%,transparent);box-shadow:0 6px 24px rgba(0,0,0,.16);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);animation:lia-ui-entre .22s cubic-bezier(.2,.8,.2,1) both}
+.lia-ui__chat--glisse{transition:left .34s cubic-bezier(.2,.8,.2,1),top .34s cubic-bezier(.2,.8,.2,1)}
 .lia-ui__puces{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
 .lia-ui__puce{min-height:44px;padding:0 .9rem;border-radius:22px;border:1px solid var(--lia-border);background:var(--lia-surface-2);color:var(--lia-text);font:inherit;font-size:.9rem;cursor:pointer}
 .lia-ui__puce:hover{border-color:var(--lia-accent)}
@@ -4157,10 +4158,12 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__msg--lia{align-self:flex-start;border-bottom-left-radius:6px;background:color-mix(in srgb,var(--lia-surface-2) 82%,transparent)}
 .lia-ui__msg--moi{align-self:flex-end;border-bottom-right-radius:6px;background:color-mix(in srgb,var(--lia-accent) 22%,transparent)}
 .lia-ui__msg--erreur{box-shadow:inset 0 0 0 1px rgba(229,103,91,.6)}
-.lia-ui__sources{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem;margin-top:.35rem;font-size:.78rem;opacity:.9;white-space:normal}
-.lia-ui__sources-titre{margin-inline-end:.15rem}
-.lia-ui__source{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;border-radius:999px;color:inherit;text-decoration:underline;text-underline-offset:3px}
-.lia-ui__source:focus-visible{outline:2px solid var(--lia-accent);outline-offset:-2px}
+.lia-ui__sources{display:flex;flex-wrap:wrap;align-items:center;gap:0;margin-top:.15rem;font-size:.78rem;color:var(--lia-soft);white-space:normal}
+.lia-ui__sources-titre{margin-inline-end:.35rem}
+.lia-ui__source{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;color:var(--lia-text);text-decoration:none;font-variant-numeric:tabular-nums}
+.lia-ui__source::before{content:"";position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:1px solid color-mix(in srgb,var(--lia-border) 90%,transparent);background:color-mix(in srgb,var(--lia-text) 5%,transparent)}
+.lia-ui__source:hover::before{border-color:var(--lia-accent)}
+.lia-ui__source:focus-visible{outline:2px solid var(--lia-accent);outline-offset:-4px;border-radius:50%}
 .lia-ui__points{display:inline-flex;gap:5px;padding:.2rem 0}
 .lia-ui__points i{width:7px;height:7px;border-radius:50%;background:var(--lia-soft);animation:lia-ui-saut 1s infinite ease-in-out}
 .lia-ui__points i:nth-child(2){animation-delay:.15s}.lia-ui__points i:nth-child(3){animation-delay:.3s}
@@ -4210,7 +4213,7 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__geste{justify-content:center;padding:0;color:var(--lia-soft)}
 .lia-ui__geste:hover,.lia-ui__geste:focus-visible{color:var(--lia-text)}
 @keyframes lia-ui-entre{from{opacity:0;transform:translateY(6px)}}
-@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__jauge-barre{transition:none}.lia-ui__ombre{transition:none}}
+@media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__chat--glisse{transition:none}.lia-ui__jauge-barre{transition:none}.lia-ui__ombre{transition:none}}
 `;
 
 // src/lia.ts
@@ -4598,7 +4601,7 @@ function mountLia(options = {}) {
       m.append(ligne);
     }
     journal?.appendChild(m);
-    if (journal) journal.scrollTop = journal.scrollHeight;
+    defilerBas(de2 === "moi");
     return m;
   };
   const exprimer = (texte) => {
@@ -4652,7 +4655,7 @@ function mountLia(options = {}) {
       s.append(el("i"), el("i"), el("i"));
       points.appendChild(s);
       journal.appendChild(points);
-      journal.scrollTop = journal.scrollHeight;
+      defilerBas();
     } else if (!actifPts && points) {
       points.remove();
       points = null;
@@ -4748,9 +4751,27 @@ function mountLia(options = {}) {
       champ?.focus();
     }
   };
-  const placerAutour = (boite) => {
+  const zoneVisible = () => {
     const z = zoneVie();
-    boite.style.maxHeight = "";
+    const vv = window.visualViewport;
+    if (!vv) return z;
+    const c = couche.getBoundingClientRect();
+    const x = Math.max(z.x, vv.offsetLeft - c.left);
+    const y = Math.max(z.y, vv.offsetTop - c.top);
+    const w = Math.min(z.x + z.w, vv.offsetLeft - c.left + vv.width) - x;
+    const h = Math.min(z.y + z.h, vv.offsetTop - c.top + vv.height) - y;
+    return w > 0 && h > 0 ? { x, y, w, h } : z;
+  };
+  let assise = null;
+  let cleChat = "";
+  let chatTaille = false;
+  const cleDePlace = (z) => {
+    const e = reperee ? zoneElement(reperee) : null;
+    const q = (n) => Math.round(n / 24);
+    return [q(pos.x), q(pos.y), q(z.x), q(z.y), q(z.w), q(z.h), e ? `${q(e.x)}:${q(e.y)}:${q(e.w)}:${q(e.h)}` : "-"].join("|");
+  };
+  const placerAutour = (boite, z) => {
+    boite.style.maxHeight = `${Math.max(160, Math.floor(Math.min(720, z.h - 16)))}px`;
     let w = boite.offsetWidth;
     let h = boite.offsetHeight;
     const aDroite = pos.x + rayon * 0.9 + w + 8 <= z.x + z.w;
@@ -4760,12 +4781,13 @@ function mountLia(options = {}) {
       const bas = Math.max(0, z.y + z.h - 8 - (pos.y + rayon * 1.1 + 26));
       const enBas = bas >= haut;
       const place2 = Math.max(240, Math.floor(enBas ? bas : haut));
-      boite.style.maxHeight = `${place2}px`;
+      boite.style.maxHeight = `${Math.min(place2, Math.max(160, Math.floor(Math.min(720, z.h - 16))))}px`;
       h = Math.min(boite.offsetHeight || h, place2);
       w = boite.offsetWidth;
-      const y = enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h;
+      const y = limiter3(enBas ? pos.y + rayon * 1.1 + 26 : pos.y - rayon * 1.1 - h, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
       boite.style.left = `${limiter3(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
-      boite.style.top = `${limiter3(y, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8))}px`;
+      boite.style.top = `${y}px`;
+      assise = { y, h, bas: !enBas };
       return;
     }
     const yCentre = limiter3(pos.y - h / 2, z.y + 8, Math.max(z.y + 8, z.y + z.h - h - 8));
@@ -4780,6 +4802,64 @@ function mountLia(options = {}) {
     const choix = placeSansRecouvrir(cotes, reperee ? zoneElement(reperee) : null);
     boite.style.left = `${choix.x}px`;
     boite.style.top = `${choix.y}px`;
+    assise = { y: choix.y, h, bas: choix === dessus };
+  };
+  const reajusterChat = (boite, z) => {
+    if (!assise) return placerAutour(boite, z);
+    const h = boite.offsetHeight;
+    const brut2 = assise.bas ? assise.y + assise.h - h : assise.y;
+    const y = limiter3(brut2, z.y + 8, Math.max(z.y + 8, z.y + z.h - 8 - h));
+    const e = reperee ? zoneElement(reperee) : null;
+    const x = parseFloat(boite.style.left) || 0;
+    if (e && surfaceRecouverte({ x, y, w: boite.offsetWidth, h }, e) > 0) return placerAutour(boite, z);
+    boite.style.top = `${y}px`;
+    assise = { y, h, bas: assise.bas };
+  };
+  const suivreChat = () => {
+    if (!chat) return;
+    const z = zoneVisible();
+    const cle2 = cleDePlace(z);
+    if (cle2 !== cleChat) {
+      cleChat = cle2;
+      chatTaille = false;
+      placerAutour(chat, z);
+    } else if (chatTaille) {
+      chatTaille = false;
+      reajusterChat(chat, z);
+    }
+  };
+  let colle = true;
+  const defilerBas = (force = false) => {
+    if (journal && (colle || force)) journal.scrollTop = journal.scrollHeight;
+  };
+  let finSuiviChat = null;
+  const installerSuiviChat = (boite) => {
+    const surChangement = () => {
+      chatTaille = true;
+      suivreChat();
+    };
+    const vv = window.visualViewport;
+    const sur2 = (cible2, nom) => {
+      cible2?.addEventListener(nom, surChangement);
+    };
+    sur2(window, "resize");
+    sur2(vv, "resize");
+    sur2(vv, "scroll");
+    let obs = null;
+    if (typeof ResizeObserver !== "undefined") {
+      obs = new ResizeObserver(() => {
+        surChangement();
+        defilerBas();
+      });
+      obs.observe(boite);
+    }
+    finSuiviChat = () => {
+      window.removeEventListener("resize", surChangement);
+      vv?.removeEventListener("resize", surChangement);
+      vv?.removeEventListener("scroll", surChangement);
+      obs?.disconnect();
+      finSuiviChat = null;
+    };
   };
   const zoneElement = (e) => {
     if (!e.isConnected) return null;
@@ -4846,8 +4926,22 @@ function mountLia(options = {}) {
         fermerChat();
       }
     });
+    colle = true;
+    journal.addEventListener(
+      "scroll",
+      () => {
+        if (journal) colle = journal.scrollHeight - journal.scrollTop - journal.clientHeight < 48;
+      },
+      { passive: true }
+    );
     couche.appendChild(chat);
-    placerAutour(chat);
+    const zOuverture = zoneVisible();
+    cleChat = cleDePlace(zOuverture);
+    chatTaille = false;
+    assise = null;
+    placerAutour(chat, zOuverture);
+    chat.classList.add("lia-ui__chat--glisse");
+    installerSuiviChat(chat);
     choisir3("ecoute");
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
@@ -4859,6 +4953,8 @@ function mountLia(options = {}) {
     if (!chatOuvert) return;
     enCours?.abort();
     enCours = null;
+    finSuiviChat?.();
+    assise = null;
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
@@ -6135,7 +6231,7 @@ function mountLia(options = {}) {
     const z = zoneVie();
     const c = glisse ? { x: glisse.x, y: glisse.y } : cible;
     const cc = dansZone(z, c.x, c.y, rayon * 0.6);
-    const colle = attention?.type === "element" && attention.colle;
+    const colle2 = attention?.type === "element" && attention.colle;
     if (balle.actif && (glisse || chatOuvert || menuOuvert || attention || sansMouvement || doux || still)) {
       balle.actif = false;
       cible = { x: pos.x, y: pos.y };
@@ -6248,7 +6344,7 @@ function mountLia(options = {}) {
     } else {
       const demande = attention?.type === "element" && !attention.colle;
       const suit = attention?.type === "curseur";
-      const balade = !glisse && !demande && !suit && !colle;
+      const balade = !glisse && !demande && !suit && !colle2;
       let visee = cc;
       if (balade && !still && vie) {
         const reste = Math.hypot(cc.x - pos.x, cc.y - pos.y);
@@ -6289,10 +6385,10 @@ function mountLia(options = {}) {
         trajet2 = null;
       }
       const marche = !!trajet2;
-      const k = colle ? 1600 : glisse ? 260 : demande ? 70 : suit ? 30 : marche ? 34 : 8;
-      const zeta = 2 * Math.sqrt(k) * (colle ? 1 : glisse ? 0.9 : demande ? 0.8 : suit ? 0.7 : marche ? 0.85 : 0.62);
-      const vmax = colle ? 2500 : balade ? marche ? 700 : 520 : demande ? 1100 : 900;
-      const amax = colle ? 2e4 : glisse ? 9e3 : balade ? marche ? 2200 : 1500 : 3500;
+      const k = colle2 ? 1600 : glisse ? 260 : demande ? 70 : suit ? 30 : marche ? 34 : 8;
+      const zeta = 2 * Math.sqrt(k) * (colle2 ? 1 : glisse ? 0.9 : demande ? 0.8 : suit ? 0.7 : marche ? 0.85 : 0.62);
+      const vmax = colle2 ? 2500 : balade ? marche ? 700 : 520 : demande ? 1100 : 900;
+      const amax = colle2 ? 2e4 : glisse ? 9e3 : balade ? marche ? 2200 : 1500 : 3500;
       const n = Math.max(1, Math.ceil(dt / 8e-3));
       const h = dt / n;
       for (let q = 0; q < n; q++) {
@@ -6411,7 +6507,7 @@ function mountLia(options = {}) {
       bulle.style.left = `${limiter3(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
-    if (chat) placerAutour(chat);
+    if (chat) suivreChat();
     majRepere();
     majEssaim(dt);
   };
@@ -6535,6 +6631,7 @@ function mountLia(options = {}) {
       if (detruit) return;
       detruit = true;
       retirerRegard();
+      finSuiviChat?.();
       clearTimeout(attenteElement);
       clearTimeout(finGeste);
       clearInterval(minuterieEnvies);
@@ -6613,4 +6710,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-745HAHAB.mjs.map
+//# sourceMappingURL=chunk-LLMN7DPU.mjs.map
