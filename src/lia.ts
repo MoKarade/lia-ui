@@ -816,10 +816,30 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     }
   };
 
+  /** La révélation en cours de la bulle (une nouvelle l'annule : on repart de la taille déjà affichée). */
+  let revelation: Animation | null = null;
+  /**
+   * La hauteur est déjà la bonne (la place finale est posée d'un coup, rien ne bouge) ; seul l'affichage la découvre en douceur depuis le bord fixe :
+   * la bulle grandit vers le haut quand son bas est fixe, vers le bas sinon. Rien en mouvement réduit ni sans `Element.animate`.
+   */
+  const reveler = (boite: HTMLElement, avant: number, apres: number, bordBas: boolean): void => {
+    if (reduit || typeof boite.animate !== "function" || avant <= 0 || apres <= avant) return;
+    const cache = `${Math.min(apres - avant, apres)}px`;
+    // Les autres côtés débordent un peu : l'ombre et le contour ne sont pas rognés pendant la révélation.
+    const debut = bordBas ? `inset(${cache} -24px -24px -24px)` : `inset(-24px -24px ${cache} -24px)`;
+    revelation?.cancel();
+    const anim = boite.animate([{ clipPath: debut }, { clipPath: "inset(-24px)" }], { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" });
+    revelation = anim;
+    anim.onfinish = anim.oncancel = () => {
+      if (revelation === anim) revelation = null;
+    };
+  };
+
   /** Seule la taille a changé : la discussion garde sa place (le bord fixe reste fixe) et ne fait que rester dans l'écran visible. */
   const reajusterChat = (boite: HTMLElement, z: ZoneVie): void => {
     if (!assise) return placerAutour(boite, z);
     const h = boite.offsetHeight;
+    const hAvant = assise.h;
     const brut = assise.bas ? assise.y + assise.h - h : assise.y;
     const y = limiter(brut, z.y + 8, Math.max(z.y + 8, z.y + z.h - 8 - h));
     const e = reperee ? zoneElement(reperee) : null;
@@ -827,6 +847,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     // En grandissant elle recouvre l'élément regardé : on la replace en entier.
     if (e && surfaceRecouverte({ x, y, w: boite.offsetWidth, h }, e) > 0) return placerAutour(boite, z);
     boite.style.top = `${y}px`;
+    reveler(boite, hAvant, h, assise.bas);
     assise = { y, h, bas: assise.bas };
   };
 
@@ -983,6 +1004,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     enCours = null;
     finSuiviChat?.();
     assise = null;
+    revelation?.cancel();
+    revelation = null;
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
