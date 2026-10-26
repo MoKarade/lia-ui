@@ -24,7 +24,7 @@ import { deriveAuRepos, planifierTrajet, pointDuTrajet, prochainPetitPas, type T
 import { avancerEssaim, COINS, creerEssaim, eclat, LIGNE, PAR_COIN, rappeler as rappelerEssaim, surLaCible, termine as essaimTermine, type Essaim } from "./nano.js";
 import { atterrir, carteToujoursPerchable, choisirPerchoir, poseeSurSurface, surfaceDeCarte, type RectCarte, type Surface } from "./perchoir.js";
 import { LIBELLES_HUMEURS, PHRASES_MENU, PROFILS_V9, couleurHumeur, libelleHumeur, type ProfilHumeur } from "./humeurs.js";
-import { adopter, empreinte, validerEtat, type EtatLia } from "./etat.js";
+import { adopter, DISCUSSION_MSGS_MAX, empreinte, validerEtat, type DiscussionPartagee, type EtatLia } from "./etat.js";
 import { ambivalence, raisons as raisonsDeSonEtat, reponsePourquoi, rythmeDuJour, teinter, type ContextePensee } from "./pensee.js";
 import { ajouterSouvenir, humeurDeFond, phraseDeRetour, type GenreSouvenir, type Souvenir } from "./souvenirs.js";
 import { ajouterImpulsion, chargerLente, creerReseau, etatLent, impulsion, multIntention, pousserHumeur, reseauPas, top3 } from "./reseau.js";
@@ -160,6 +160,8 @@ const DELAI_PAROLE_PROPRE = 28;
 const DELAI_MONDE: Record<MotifMonde | "veiller", number> = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
 /** Marc regarde un élément depuis ce temps (ms) : elle vient regarder avec lui, au plus une fois par élément toutes les 3 minutes. */
 const SURVOL_MS = 4000;
+/** Une discussion de l'état partagé plus vieille que cela ne se rouvre pas dans une autre app. */
+const DELAI_REPRISE_DISCUSSION_MS = 30 * 60_000;
 const DELAI_ACCOMPAGNER_MS = 180_000;
 const ETAT_MONDE: Record<MotifMonde, string> = { appeler: "alerte", resumer: "analyse", feliciter: "reussi", rappeler: "planifie", souvenir: "souvient", accompagner: "lit" };
 const etatSur = (etat: string): string => (ST.includes(etat) ? etat : "repos");
@@ -542,11 +544,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let activiteChat = 0;
   /** Ce qui se dit dans la discussion ouverte, gardé pour la page suivante (sans les erreurs : elles ne valent que pour l'instant). */
   const trace: Array<{ de: "lia" | "moi"; texte: string }> = [];
+  /** La fin de la discussion, telle que l'état partagé la porte (v0.39.0) : elle suit Marc d'une app à l'autre. Une page qui n'y touche pas renvoie celle qu'elle a lue. */
+  let discussionEtat: DiscussionPartagee | undefined;
   const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur): HTMLElement => {
     activiteChat = t;
     if (garder) {
       trace.push({ de, texte });
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
+      discussionEtat = { ouvert: true, quand: Date.now(), msgs: trace.slice(-DISCUSSION_MSGS_MAX).map((m) => ({ ...m })) };
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);
@@ -842,6 +847,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     chatOuvert = false;
     trace.length = 0;
     ecrireDiscussion(cle, null);
+    discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
     contexteQuestion = null;
     cesserDeReperer();
     choisir(etatForce ?? "repos");
@@ -2140,9 +2146,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       relances: { jour, n: lireRelances(cle, jour) },
       interieur: { ...interieur },
       ...(souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {}),
+      ...(discussionEtat ? { discussion: { ...discussionEtat, msgs: discussionEtat.msgs.map((m) => ({ ...m })) } } : {}),
     };
   };
   const appliquerEtat = (e: EtatLia): void => {
+    // Sa discussion d'ailleurs : seulement si cette page n'a rien dit elle-même (ce qui s'y est dit l'emporte, c'est plus frais).
+    if (trace.length === 0) discussionEtat = e.discussion;
     envies = { ...e.envies };
     faits = e.journal.map((f) => ({ ...f }));
     chargerLente(reseau, e.lente, Date.now() - e.maj);
@@ -2182,6 +2191,19 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     versionVue = e.version;
     derniereEmpreinte = empreinte(e);
   };
+  /** Une discussion commencée dans une autre app se rouvre ici, une seule fois, à la première lecture : ni vieille de plus d'une demi-heure, ni par-dessus un champ où Marc écrit. */
+  let reprisTentee = false;
+  const reprendreDiscussion = (d: EtatLia | null): void => {
+    if (reprisTentee) return;
+    reprisTentee = true;
+    const x = d?.discussion;
+    if (!x || !x.ouvert || x.msgs.length === 0 || chatOuvert || detruit) return;
+    if (Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS) return;
+    const focus = document.activeElement;
+    if (focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus)) return;
+    ouvrirChat();
+    for (const m of x.msgs) ajouterMsg(m.texte, m.de);
+  };
   const lireEtat = async (): Promise<void> => {
     if (!hote || detruit) return;
     try {
@@ -2192,6 +2214,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         appliquerEtat(d);
         retenir(d);
       }
+      reprendreDiscussion(d);
     } catch (e) {
       avertirEtat(e);
     }

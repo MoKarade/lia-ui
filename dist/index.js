@@ -1369,6 +1369,8 @@ function phraseDeRetour(souvenirs, absenceMs, rand, maintenant, dejaDitAujourdhu
 }
 
 // src/etat.ts
+var DISCUSSION_MSGS_MAX = 20;
+var DISCUSSION_TEXTE_MAX = 4e3;
 var NOMS_ENVIES = ["energie", "curiosite", "social", "inquiet", "joie", "ennui"];
 var LENTE_MAX = 80;
 var VERSION_MAX = 1e9;
@@ -1379,6 +1381,22 @@ function validerInterieur(brut2) {
   if (![douleur, sensibilite, plaisir, confiance, usure].every(estFraction)) return void 0;
   if (cause !== null && !(typeof cause === "string" && CAUSES.includes(cause))) return void 0;
   return { douleur, sensibilite, plaisir, confiance, usure, cause };
+}
+function validerDiscussion(brut2) {
+  if (typeof brut2 !== "object" || brut2 === null) return void 0;
+  const { ouvert, quand, msgs } = brut2;
+  if (typeof ouvert !== "boolean") return void 0;
+  if (typeof quand !== "number" || !Number.isFinite(quand) || quand <= 0) return void 0;
+  if (!Array.isArray(msgs)) return void 0;
+  const propres = [];
+  for (const m of msgs) {
+    if (typeof m !== "object" || m === null) continue;
+    const { de: de2, texte } = m;
+    if ((de2 === "lia" || de2 === "moi") && typeof texte === "string" && texte.trim() !== "") {
+      propres.push({ de: de2, texte: texte.slice(0, DISCUSSION_TEXTE_MAX) });
+    }
+  }
+  return { ouvert, quand, msgs: ouvert ? propres.slice(-DISCUSSION_MSGS_MAX) : [] };
 }
 function validerEtat(brut2) {
   if (typeof brut2 !== "object" || brut2 === null) return null;
@@ -1411,6 +1429,7 @@ function validerEtat(brut2) {
   const enviesPropres = Object.fromEntries(NOMS_ENVIES.map((k) => [k, e[k]]));
   const interieur = validerInterieur(o["interieur"]);
   const souvenirs = validerSouvenirs(o["souvenirs"]);
+  const discussion = validerDiscussion(o["discussion"]);
   return {
     version,
     maj,
@@ -1420,7 +1439,8 @@ function validerEtat(brut2) {
     humeur: humeur2,
     relances: { jour, n },
     ...interieur ? { interieur } : {},
-    ...souvenirs.length ? { souvenirs } : {}
+    ...souvenirs.length ? { souvenirs } : {},
+    ...discussion ? { discussion } : {}
   };
 }
 function adopter(distant, majVue, versionVue) {
@@ -1436,7 +1456,9 @@ function empreinte(e) {
   const dernierSouvenir = sv.reduce((m, x) => Math.max(m, x.quand), 0);
   const lourdeur = Math.round(sv.reduce((t, x) => t + x.poids, 0) * 5);
   const memoire = sv.length ? `${sv.length}:${dernierSouvenir}:${lourdeur}` : "-";
-  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}|${memoire}`;
+  const d = e.discussion;
+  const parle = d ? `${d.ouvert ? 1 : 0}:${d.msgs.length}:${d.quand}` : "-";
+  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}|${memoire}|${parle}`;
 }
 
 // src/pensee.ts
@@ -4218,6 +4240,7 @@ var DELAI_CHAT_OUBLIE = 120;
 var DELAI_PAROLE_PROPRE = 28;
 var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
 var SURVOL_MS = 4e3;
+var DELAI_REPRISE_DISCUSSION_MS = 30 * 6e4;
 var DELAI_ACCOMPAGNER_MS = 18e4;
 var ETAT_MONDE = { appeler: "alerte", resumer: "analyse", feliciter: "reussi", rappeler: "planifie", souvenir: "souvient", accompagner: "lit" };
 var etatSur = (etat) => ST.includes(etat) ? etat : "repos";
@@ -4535,11 +4558,13 @@ function mountLia(options = {}) {
   let derniereFocus = null;
   let activiteChat = 0;
   const trace = [];
+  let discussionEtat;
   const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur) => {
     activiteChat = t;
     if (garder3) {
       trace.push({ de: de2, texte });
       ecrireDiscussion(cle, { ouvert: true, msgs: trace });
+      discussionEtat = { ouvert: true, quand: Date.now(), msgs: trace.slice(-DISCUSSION_MSGS_MAX).map((m2) => ({ ...m2 })) };
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`, texte);
     journal?.appendChild(m);
@@ -4809,6 +4834,7 @@ function mountLia(options = {}) {
     chatOuvert = false;
     trace.length = 0;
     ecrireDiscussion(cle, null);
+    discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
     contexteQuestion = null;
     cesserDeReperer();
     choisir3(etatForce ?? "repos");
@@ -5958,10 +5984,12 @@ function mountLia(options = {}) {
       humeur: humeurNom,
       relances: { jour, n: lireRelances(cle, jour) },
       interieur: { ...interieur },
-      ...souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {}
+      ...souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {},
+      ...discussionEtat ? { discussion: { ...discussionEtat, msgs: discussionEtat.msgs.map((m) => ({ ...m })) } } : {}
     };
   };
   const appliquerEtat = (e) => {
+    if (trace.length === 0) discussionEtat = e.discussion;
     envies = { ...e.envies };
     faits = e.journal.map((f) => ({ ...f }));
     chargerLente(reseau, e.lente, Date.now() - e.maj);
@@ -5998,6 +6026,18 @@ function mountLia(options = {}) {
     versionVue = e.version;
     derniereEmpreinte = empreinte(e);
   };
+  let reprisTentee = false;
+  const reprendreDiscussion = (d) => {
+    if (reprisTentee) return;
+    reprisTentee = true;
+    const x = d?.discussion;
+    if (!x || !x.ouvert || x.msgs.length === 0 || chatOuvert || detruit) return;
+    if (Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS) return;
+    const focus = document.activeElement;
+    if (focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus)) return;
+    ouvrirChat();
+    for (const m of x.msgs) ajouterMsg(m.texte, m.de);
+  };
   const lireEtat = async () => {
     if (!hote || detruit) return;
     try {
@@ -6008,6 +6048,7 @@ function mountLia(options = {}) {
         appliquerEtat(d);
         retenir(d);
       }
+      reprendreDiscussion(d);
     } catch (e) {
       avertirEtat(e);
     }

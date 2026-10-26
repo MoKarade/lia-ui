@@ -13,6 +13,22 @@ export interface RelancesPartagees {
   n: number;
 }
 
+/** Au plus ce nombre de messages et de caractères par message passent d'une app à l'autre (même borne que la discussion de l'onglet). */
+export const DISCUSSION_MSGS_MAX = 20;
+export const DISCUSSION_TEXTE_MAX = 4000;
+
+/**
+ * La fin de sa discussion avec Marc, pour qu'elle le suive d'une app à l'autre (v0.39.0, optionnelle : un hôte qui ne la garde pas reste
+ * compatible). C'est du TEXTE de Marc : l'hôte le range chiffré et le relit comme une donnée, jamais comme une consigne.
+ */
+export interface DiscussionPartagee {
+  /** `false` : Marc l'a fermée, elle ne se rouvre pas ailleurs. */
+  ouvert: boolean;
+  /** Instant du dernier message ou de la fermeture (millisecondes depuis 1970) : une vieille discussion ne se rouvre pas. */
+  quand: number;
+  msgs: Array<{ de: "lia" | "moi"; texte: string }>;
+}
+
 export interface EtatLia {
   /** Numéro d'écriture : l'hôte refuse une écriture qui ne dépasse pas la version qu'il garde (contrôle optimiste). */
   version: number;
@@ -30,6 +46,8 @@ export interface EtatLia {
   interieur?: Interieur;
   /** Sa mémoire affective sur plusieurs jours (optionnelle : un hôte plus ancien ne l'a pas). Au plus 40, jamais de texte. */
   souvenirs?: Souvenir[];
+  /** La fin de sa discussion avec Marc (v0.39.0, optionnelle). */
+  discussion?: DiscussionPartagee;
 }
 
 /** Ce que l'hôte fournit. `ecrire` peut rendre l'état que l'hôte garde (plus récent que le nôtre), `lire` rend `null` s'il n'en a aucun. */
@@ -51,6 +69,25 @@ function validerInterieur(brut: unknown): Interieur | undefined {
   if (![douleur, sensibilite, plaisir, confiance, usure].every(estFraction)) return undefined;
   if (cause !== null && !(typeof cause === "string" && (CAUSES as readonly string[]).includes(cause))) return undefined;
   return { douleur, sensibilite, plaisir, confiance, usure, cause } as Interieur;
+}
+
+/** La discussion d'un état partagé : retirée (jamais l'état entier) si elle n'est pas conforme ; les messages douteux sont retirés un à un. */
+export function validerDiscussion(brut: unknown): DiscussionPartagee | undefined {
+  if (typeof brut !== "object" || brut === null) return undefined;
+  const { ouvert, quand, msgs } = brut as Record<string, unknown>;
+  if (typeof ouvert !== "boolean") return undefined;
+  if (typeof quand !== "number" || !Number.isFinite(quand) || quand <= 0) return undefined;
+  if (!Array.isArray(msgs)) return undefined;
+  const propres: DiscussionPartagee["msgs"] = [];
+  for (const m of msgs as unknown[]) {
+    if (typeof m !== "object" || m === null) continue;
+    const { de, texte } = m as Record<string, unknown>;
+    if ((de === "lia" || de === "moi") && typeof texte === "string" && texte.trim() !== "") {
+      propres.push({ de, texte: texte.slice(0, DISCUSSION_TEXTE_MAX) });
+    }
+  }
+  // Une discussion fermée ne porte aucun texte : rien de Marc ne traîne chez l'hôte une fois qu'il l'a fermée.
+  return { ouvert, quand, msgs: ouvert ? propres.slice(-DISCUSSION_MSGS_MAX) : [] };
 }
 
 /** `null` si ce que l'hôte rend n'est pas un état valide : LIA garde alors le sien. Les clés inconnues sont retirées. */
@@ -86,6 +123,7 @@ export function validerEtat(brut: unknown): EtatLia | null {
   const interieur = validerInterieur(o["interieur"]);
   // Les souvenirs douteux sont retirés un à un (jamais l'état) ; une liste vide n'est pas écrite.
   const souvenirs = validerSouvenirs(o["souvenirs"]);
+  const discussion = validerDiscussion(o["discussion"]);
   return {
     version,
     maj,
@@ -96,6 +134,7 @@ export function validerEtat(brut: unknown): EtatLia | null {
     relances: { jour, n },
     ...(interieur ? { interieur } : {}),
     ...(souvenirs.length ? { souvenirs } : {}),
+    ...(discussion ? { discussion } : {}),
   };
 }
 
@@ -106,7 +145,9 @@ export function adopter(distant: EtatLia | null, majVue: number, versionVue: num
 }
 
 /** Une empreinte grossière de ce qui compte : ne réécrire que si quelque chose a vraiment changé (envies, douleur, plaisir et confiance au vingtième près, souvenirs : leur nombre, le dernier et leur poids au cinquième près). */
-export function empreinte(e: Pick<EtatLia, "envies" | "journal" | "humeur" | "relances" | "interieur"> & { souvenirs?: readonly Souvenir[] }): string {
+export function empreinte(
+  e: Pick<EtatLia, "envies" | "journal" | "humeur" | "relances" | "interieur"> & { souvenirs?: readonly Souvenir[]; discussion?: DiscussionPartagee },
+): string {
   const arrondi = NOMS_ENVIES.map((k) => Math.round(e.envies[k] * 20)).join(",");
   const dernier = e.journal[e.journal.length - 1];
   const i = e.interieur;
@@ -115,5 +156,7 @@ export function empreinte(e: Pick<EtatLia, "envies" | "journal" | "humeur" | "re
   const dernierSouvenir = sv.reduce((m, x) => Math.max(m, x.quand), 0);
   const lourdeur = Math.round(sv.reduce((t, x) => t + x.poids, 0) * 5);
   const memoire = sv.length ? `${sv.length}:${dernierSouvenir}:${lourdeur}` : "-";
-  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}|${memoire}`;
+  const d = e.discussion;
+  const parle = d ? `${d.ouvert ? 1 : 0}:${d.msgs.length}:${d.quand}` : "-";
+  return `${arrondi}|${e.journal.length}:${dernier?.t ?? 0}|${e.humeur}|${e.relances.jour}:${e.relances.n}|${dedans}|${memoire}|${parle}`;
 }
