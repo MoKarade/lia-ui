@@ -4777,15 +4777,29 @@ function mountLia(options = {}) {
       boite.classList.add("lia-ui__chat--glisse");
     }
   };
+  let revelation = null;
+  const reveler = (boite, avant2, apres, bordBas) => {
+    if (reduit || typeof boite.animate !== "function" || avant2 <= 0 || apres <= avant2) return;
+    const cache = `${Math.min(apres - avant2, apres)}px`;
+    const debut2 = bordBas ? `inset(${cache} -24px -24px -24px)` : `inset(-24px -24px ${cache} -24px)`;
+    revelation?.cancel();
+    const anim = boite.animate([{ clipPath: debut2 }, { clipPath: "inset(-24px)" }], { duration: 280, easing: "cubic-bezier(.2,.8,.2,1)" });
+    revelation = anim;
+    anim.onfinish = anim.oncancel = () => {
+      if (revelation === anim) revelation = null;
+    };
+  };
   const reajusterChat = (boite, z) => {
     if (!assise) return placerAutour(boite, z);
     const h = boite.offsetHeight;
+    const hAvant = assise.h;
     const brut2 = assise.bas ? assise.y + assise.h - h : assise.y;
     const y = limiter3(brut2, z.y + 8, Math.max(z.y + 8, z.y + z.h - 8 - h));
     const e = reperee ? zoneElement(reperee) : null;
     const x = parseFloat(boite.style.left) || 0;
     if (e && surfaceRecouverte({ x, y, w: boite.offsetWidth, h }, e) > 0) return placerAutour(boite, z);
     boite.style.top = `${y}px`;
+    reveler(boite, hAvant, h, assise.bas);
     assise = { y, h, bas: assise.bas };
   };
   const suivreChat = () => {
@@ -4930,6 +4944,8 @@ function mountLia(options = {}) {
     enCours = null;
     finSuiviChat?.();
     assise = null;
+    revelation?.cancel();
+    revelation = null;
     chat?.remove();
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;

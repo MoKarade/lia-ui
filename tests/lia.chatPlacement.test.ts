@@ -246,6 +246,115 @@ describe("la discussion ne bouge pas pour rien", () => {
   });
 });
 
+describe("la hauteur de la bulle se révèle en douceur", () => {
+  const observateurs: Array<() => void> = [];
+  const animate = vi.fn();
+  const annule = vi.fn();
+  const mouvementReduit = (): void => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (q: string) => ({ matches: q.includes("prefers-reduced-motion"), media: q, addEventListener: () => undefined, removeEventListener: () => undefined }),
+    });
+  };
+  beforeEach(() => {
+    observateurs.length = 0;
+    animate.mockReset();
+    annule.mockReset();
+    animate.mockImplementation(() => ({ cancel: annule, onfinish: null, oncancel: null }));
+    Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, writable: true, value: animate });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          observateurs.push(cb);
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, "animate");
+  });
+  /** Ouvre la bulle à côté de LIA, à la hauteur de départ donnée ; LIA est posée en (450, y). */
+  const ouvrirA = (y: number, hDepart: number): void => {
+    monter();
+    vi.advanceTimersByTime(500);
+    poser(450, y);
+    largeur = 300;
+    hauteur = hDepart;
+    lia?.ouvrirChat();
+    vi.advanceTimersByTime(200);
+    animate.mockClear();
+  };
+
+  it("à côté d'elle dans la moitié basse (bord du bas fixe) : le haut de la bulle est découvert, de l'ancienne hauteur à la nouvelle", () => {
+    ouvrirA(480, 60);
+    const avant = place();
+    hauteur = 330;
+    observateurs[0]?.();
+    expect(animate).toHaveBeenCalledTimes(1);
+    const [images, duree] = animate.mock.calls[0] as [Array<{ clipPath: string }>, { duration: number; easing: string }];
+    expect(images[0]?.clipPath).toBe("inset(270px -24px -24px -24px)"); // 330 - 60 cachés en haut
+    expect(images[1]?.clipPath).toBe("inset(-24px)");
+    expect(duree.duration).toBe(280);
+    // La place finale est posée d'un coup : le bord du bas n'a pas bougé.
+    expect(place().y + 330).toBeCloseTo(avant.y + 60, 5);
+  });
+
+  it("dans la moitié haute (bord du haut fixe) : le bas de la bulle est découvert", () => {
+    ouvrirA(200, 120);
+    hauteur = 260;
+    observateurs[0]?.();
+    expect(animate).toHaveBeenCalledTimes(1);
+    const images = (animate.mock.calls[0] as [Array<{ clipPath: string }>])[0];
+    expect(images[0]?.clipPath).toBe("inset(-24px -24px 140px -24px)");
+  });
+
+  it("une taille inchangée, ou qui rétrécit, n'anime rien", () => {
+    ouvrirA(200, 200);
+    observateurs[0]?.();
+    hauteur = 120;
+    observateurs[0]?.();
+    expect(animate).not.toHaveBeenCalled();
+  });
+
+  it("une nouvelle croissance annule la révélation en cours", () => {
+    ouvrirA(200, 100);
+    hauteur = 160;
+    observateurs[0]?.();
+    hauteur = 220;
+    observateurs[0]?.();
+    expect(animate).toHaveBeenCalledTimes(2);
+    expect(annule).toHaveBeenCalledTimes(1);
+  });
+
+  it("fermer la discussion annule la révélation en cours", () => {
+    ouvrirA(200, 100);
+    hauteur = 200;
+    observateurs[0]?.();
+    lia?.fermerChat();
+    expect(annule).toHaveBeenCalledTimes(1);
+  });
+
+  it("avec prefers-reduced-motion, rien n'est animé", () => {
+    mouvementReduit();
+    ouvrirA(480, 60);
+    hauteur = 330;
+    observateurs[0]?.();
+    expect(animate).not.toHaveBeenCalled();
+  });
+
+  it("sans Element.animate, la bulle grandit quand même d'un coup (aucune erreur)", () => {
+    ouvrirA(480, 60);
+    Reflect.deleteProperty(HTMLElement.prototype, "animate");
+    hauteur = 330;
+    expect(() => observateurs[0]?.()).not.toThrow();
+    expect(parseFloat(chat().style.top) + 330).toBeLessThanOrEqual(600 - 8);
+  });
+});
+
 describe("le journal reste collé en bas, sauf si Marc remonte lire", () => {
   const brancher = (): { haut: () => number; fixer: (v: number) => void } => {
     let st = 0;
