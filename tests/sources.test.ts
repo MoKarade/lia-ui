@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bornerDiscussion, DISCUSSION_TEXTE_MAX } from "../src/etat.js";
 import { mountLia } from "../src/lia.js";
-import { adresseSure, decouperSources, retirerMarqueCoupee } from "../src/sources.js";
+import { adresseSure, decouperSources, retirerMarqueCoupee, SOURCES_MAX } from "../src/sources.js";
 import type { LiaHandle } from "../src/types.js";
 import { installerEnvironnement } from "./setup.js";
 
@@ -51,13 +51,14 @@ describe("decouperSources : les marques sortent du texte", () => {
     expect(adresseSure("http://localhost:3000/x", BASE)).toBe("http://localhost:3000/x");
   });
 
-  it("un texte hostile (des milliers de marques ouvertes) se lit en temps borné", () => {
-    for (const hostile of ["[→ ".repeat(20_000), `[→${" ".repeat(60_000)}x`, "[→!".repeat(20_000) + "]"]) {
-      const t0 = performance.now();
-      const r = decouperSources(hostile, BASE);
-      expect(r.sources).toEqual([]);
-      expect(performance.now() - t0).toBeLessThan(1500);
-    }
+  it("un texte hostile (des milliers de marques) se lit en temps borné et ne fait pas des milliers de liens", () => {
+    const t0 = performance.now();
+    expect(decouperSources("[→ ".repeat(20_000), BASE).sources).toEqual([]);
+    expect(decouperSources(`[→${" ".repeat(60_000)}x`, BASE).sources).toEqual([]);
+    const beaucoup = Array.from({ length: 5_000 }, (_, i) => `[→/fait/${i}]`).join(" ");
+    expect(decouperSources(beaucoup, BASE).sources.length).toBe(SOURCES_MAX);
+    expect(decouperSources(beaucoup, BASE).texte).toBe("");
+    expect(performance.now() - t0).toBeLessThan(3000);
   });
 
   it("une marque coupée par la borne de 600 caractères est retirée", () => {

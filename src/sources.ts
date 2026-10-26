@@ -12,6 +12,8 @@ export interface ReponseDecoupee {
 
 /** Une adresse plus longue n'est pas une source : on borne la recherche du `]` (lecture linéaire, jamais d'expression régulière sur le texte du modèle). */
 const LONGUEUR_MAX = 2048;
+/** Au plus ce nombre de liens sous un message : les marques en trop sortent du texte sans devenir des liens. */
+export const SOURCES_MAX = 8;
 
 /** L'adresse absolue si elle est sûre, sinon `null`. Une adresse relative se résout sur `base`. */
 export function adresseSure(brut: string, base: string): string | null {
@@ -48,7 +50,7 @@ export function decouperSources(texte: string, base: string): ReponseDecoupee {
         const brut = texte.slice(i + 2, fin).trim();
         const url = brut && ![...brut].some(estEspace) ? adresseSure(brut, base) : null;
         if (url) {
-          if (!sources.includes(url)) sources.push(url);
+          if (sources.length < SOURCES_MAX && !sources.includes(url)) sources.push(url);
           let k = sortie.length;
           while (k > 0 && estEspace(sortie[k - 1] as string)) k--;
           sortie = sortie.slice(0, k);

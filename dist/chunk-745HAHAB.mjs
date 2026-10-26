@@ -762,6 +762,7 @@ function phraseDeRetour(souvenirs, absenceMs, rand, maintenant, dejaDitAujourdhu
 
 // src/sources.ts
 var LONGUEUR_MAX = 2048;
+var SOURCES_MAX = 8;
 function adresseSure(brut2, base) {
   try {
     const u = new URL(brut2, base);
@@ -793,7 +794,7 @@ function decouperSources(texte, base) {
         const brut2 = texte.slice(i + 2, fin).trim();
         const url = brut2 && ![...brut2].some(estEspace) ? adresseSure(brut2, base) : null;
         if (url) {
-          if (!sources.includes(url)) sources.push(url);
+          if (sources.length < SOURCES_MAX && !sources.includes(url)) sources.push(url);
           let k = sortie.length;
           while (k > 0 && estEspace(sortie[k - 1])) k--;
           sortie = sortie.slice(0, k);
@@ -6612,4 +6613,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-U2646CXT.mjs.map
+//# sourceMappingURL=chunk-745HAHAB.mjs.map
