@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { ecrireMemoire, lireMemoire } from "../src/stockage.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ecrireDiscussion, ecrireMemoire, lireDiscussion, lireMemoire } from "../src/stockage.js";
 
 describe("mémoire locale", () => {
   it("relit ce qu'elle a écrit", () => {
@@ -36,5 +36,35 @@ describe("mémoire locale", () => {
     });
     expect(lireMemoire("hub")).toBeNull();
     expect(() => ecrireMemoire("hub", { u: 0, v: 0 })).not.toThrow();
+  });
+});
+
+describe("discussion de l'onglet (sessionStorage)", () => {
+  const cle = "t";
+  const msgs = [{ de: "moi" as const, texte: "Où en est ma recharge ?" }];
+  // Le test de la mémoire locale, plus haut, laisse son stockage simulé en panne.
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("range son vrai instant avec elle et le rend tel quel", () => {
+    sessionStorage.clear();
+    ecrireDiscussion(cle, { ouvert: true, msgs, quand: 1_700_000_000_000 });
+    expect(lireDiscussion(cle)).toEqual({ ouvert: true, msgs, quand: 1_700_000_000_000 });
+  });
+
+  it("une discussion rangée sans instant (avant v0.42.1) ou avec un instant illisible est comptée très ancienne, jamais « maintenant »", () => {
+    sessionStorage.clear();
+    sessionStorage.setItem("lia-ui:t:discussion", JSON.stringify({ ouvert: true, msgs }));
+    expect(lireDiscussion(cle)?.quand).toBe(1);
+    sessionStorage.setItem("lia-ui:t:discussion", JSON.stringify({ ouvert: true, msgs, quand: "hier" }));
+    expect(lireDiscussion(cle)?.quand).toBe(1);
+    sessionStorage.setItem("lia-ui:t:discussion", JSON.stringify({ ouvert: true, msgs, quand: -5 }));
+    expect(lireDiscussion(cle)?.quand).toBe(1);
+  });
+
+  it("fermée ou absente : rien n'est gardé", () => {
+    sessionStorage.clear();
+    ecrireDiscussion(cle, { ouvert: true, msgs, quand: 5 });
+    ecrireDiscussion(cle, { ouvert: false, msgs: [] });
+    expect(lireDiscussion(cle)).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENVIES_DEPART } from "../src/cerveau.js";
 import { validerDiscussion, validerEtat, empreinte, type DiscussionPartagee, type EtatHote, type EtatLia } from "../src/etat.js";
 import { mountLia } from "../src/lia.js";
+import { ecrireDiscussion, lireDiscussion } from "../src/stockage.js";
 import type { LiaHandle } from "../src/types.js";
 import { installerEnvironnement } from "./setup.js";
 
@@ -175,5 +176,112 @@ describe("la discussion suit Marc d'une app à l'autre", () => {
     lia = mountLia({ vieAutonome: false, cle: "c", etat: hote, ask });
     await vi.advanceTimersByTimeAsync(25_000);
     expect((garde as EtatLia | null)?.discussion).toBeDefined();
+  });
+});
+
+describe("la plus récente des deux discussions gagne (onglet ou état partagé)", () => {
+  const DEPUIS_UN_QUART_D_HEURE = 15 * 60_000;
+  const deLOnglet = [
+    { de: "moi" as const, texte: "Où en est la batterie ?" },
+    { de: "lia" as const, texte: "Elle est à 64 %." },
+  ];
+  const duHub = [
+    { de: "moi" as const, texte: "Quand est mon prochain rendez-vous ?" },
+    { de: "lia" as const, texte: "Demain à 9 h." },
+  ];
+
+  it("(a) onglet avec une vieille discussion + état partagé plus récent : la partagée s'affiche et reste dans l'état", async () => {
+    ecrireDiscussion("a", { ouvert: true, msgs: deLOnglet, quand: Date.now() - DEPUIS_UN_QUART_D_HEURE });
+    const quandHub = Date.now() - 60_000;
+    let garde: EtatLia | null = etat({ discussion: discussion({ quand: quandHub, msgs: duHub }) });
+    const ecrits: EtatLia[] = [];
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => (ecrits.push(e), (garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "a", etat: hote, ask });
+    // Avant la première lecture, c'est la discussion de l'onglet qui est rouverte, avec son vrai âge.
+    expect(messages()).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages()).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    for (const e of ecrits) expect(e.discussion?.msgs.map((m) => m.texte)).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+    // L'onglet garde maintenant la bonne discussion, avec l'instant de l'état partagé.
+    expect(lireDiscussion("a")?.msgs.map((m) => m.texte)).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+    expect(lireDiscussion("a")?.quand).toBe(quandHub);
+  });
+
+  it("(b) onglet plus récent que l'état : l'onglet gagne et c'est lui que l'état reçoit", async () => {
+    const quandOnglet = Date.now() - 60_000;
+    ecrireDiscussion("b", { ouvert: true, msgs: deLOnglet, quand: quandOnglet });
+    let garde: EtatLia | null = etat({ discussion: discussion({ quand: Date.now() - DEPUIS_UN_QUART_D_HEURE, msgs: duHub }) });
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "b", etat: hote, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages()).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    await vi.advanceTimersByTimeAsync(25_000);
+    const ecrit = garde as EtatLia | null;
+    expect(ecrit?.discussion?.msgs.map((m) => m.texte)).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    expect(ecrit?.discussion?.quand).toBe(quandOnglet);
+  });
+
+  it("(c) restauration sans nouvelle parole : l'instant ne bouge pas, ni dans l'onglet ni dans ce qui est écrit", async () => {
+    const quandOnglet = Date.now() - DEPUIS_UN_QUART_D_HEURE;
+    ecrireDiscussion("c", { ouvert: true, msgs: deLOnglet, quand: quandOnglet });
+    const ecrits: EtatLia[] = [];
+    const hote: EtatHote = { lire: async () => null, ecrire: async (e) => (ecrits.push(e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "c", etat: hote, ask });
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(lireDiscussion("c")?.quand).toBe(quandOnglet);
+    expect(ecrits.length).toBeGreaterThan(0);
+    for (const e of ecrits) expect(e.discussion?.quand).toBe(quandOnglet);
+  });
+
+  it("(c bis) sans hôte d'état, la restauration ne renouvelle pas non plus l'instant", async () => {
+    const quandOnglet = Date.now() - DEPUIS_UN_QUART_D_HEURE;
+    ecrireDiscussion("c2", { ouvert: true, msgs: deLOnglet, quand: quandOnglet });
+    lia = mountLia({ vieAutonome: false, cle: "c2", ask });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(messages()).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    expect(lireDiscussion("c2")?.quand).toBe(quandOnglet);
+  });
+
+  it("une vraie nouvelle parole la re-date, et l'onglet l'emporte alors sur un état partagé plus ancien", async () => {
+    ecrireDiscussion("n", { ouvert: true, msgs: deLOnglet, quand: Date.now() - DEPUIS_UN_QUART_D_HEURE });
+    let garde: EtatLia | null = etat({ discussion: discussion({ quand: Date.now() - 60_000, msgs: duHub }) });
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "n", etat: hote, ask });
+    // Marc répond dans l'onglet avant que l'état arrive : sa parole est la plus récente.
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
+    champ.value = "Et demain ?";
+    document.querySelector<HTMLFormElement>(".lia-ui__form")?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages().slice(0, 3)).toEqual(["Où en est la batterie ?", "Elle est à 64 %.", "Et demain ?"]);
+    expect(lireDiscussion("n")?.quand).toBe(Date.now() - 500);
+  });
+
+  it("(d) une discussion fermée dans l'état partagé ne se rouvre jamais, même plus récente que l'onglet", async () => {
+    const hote: EtatHote = { lire: async () => etat({ discussion: discussion({ ouvert: false, msgs: [], quand: Date.now() - 1_000 }) }), ecrire: async () => null };
+    lia = mountLia({ vieAutonome: false, cle: "d", etat: hote, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+    expect(lireDiscussion("d")).toBeNull();
+  });
+
+  it("la partagée ne remplace pas la discussion de l'onglet par-dessus un champ où Marc écrit", async () => {
+    document.body.innerHTML = "<p>Une page</p>";
+    ecrireDiscussion("f", { ouvert: true, msgs: deLOnglet, quand: Date.now() - DEPUIS_UN_QUART_D_HEURE });
+    const hote: EtatHote = { lire: async () => etat({ discussion: discussion({ quand: Date.now() - 60_000, msgs: duHub }) }), ecrire: async () => null };
+    lia = mountLia({ vieAutonome: false, cle: "f", etat: hote, ask });
+    document.body.insertAdjacentHTML("beforeend", '<input id="recherche">');
+    document.querySelector<HTMLInputElement>("#recherche")?.focus();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages()).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+  });
+
+  it("l'onglet d'avant v0.42.1 (sans instant) cède devant une discussion partagée récente", async () => {
+    sessionStorage.setItem("lia-ui:g:discussion", JSON.stringify({ ouvert: true, msgs: deLOnglet }));
+    const hote: EtatHote = { lire: async () => etat({ discussion: discussion({ quand: Date.now() - 60_000, msgs: duHub }) }), ecrire: async () => null };
+    lia = mountLia({ vieAutonome: false, cle: "g", etat: hote, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages()).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
   });
 });
