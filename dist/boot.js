@@ -4007,19 +4007,20 @@ function ecrireMouvement(cle, m) {
   }
 }
 var MAX_MSGS = 20;
+var QUAND_INCONNU = 1;
 function lireDiscussion(cle) {
   try {
     const brut2 = sessionStorage.getItem(`${PREFIXE}${cle}:discussion`);
     if (brut2 === null) return null;
     const j = JSON.parse(brut2);
     if (typeof j !== "object" || j === null) return null;
-    const { ouvert, msgs } = j;
+    const { ouvert, msgs, quand } = j;
     if (ouvert !== true || !Array.isArray(msgs)) return null;
     const propres = msgs.filter((m) => {
       const x = m;
       return !!x && (x["de"] === "lia" || x["de"] === "moi") && typeof x["texte"] === "string";
     }).slice(-MAX_MSGS).map((m) => ({ de: m.de, texte: m.texte.slice(0, 4e3) }));
-    return { ouvert: true, msgs: propres };
+    return { ouvert: true, msgs: propres, quand: typeof quand === "number" && Number.isFinite(quand) && quand > 0 ? quand : QUAND_INCONNU };
   } catch {
     return null;
   }
@@ -4027,7 +4028,7 @@ function lireDiscussion(cle) {
 function ecrireDiscussion(cle, d) {
   try {
     if (!d || !d.ouvert) sessionStorage.removeItem(`${PREFIXE}${cle}:discussion`);
-    else sessionStorage.setItem(`${PREFIXE}${cle}:discussion`, JSON.stringify({ ouvert: true, msgs: d.msgs.slice(-MAX_MSGS) }));
+    else sessionStorage.setItem(`${PREFIXE}${cle}:discussion`, JSON.stringify({ ouvert: true, msgs: d.msgs.slice(-MAX_MSGS), ...d.quand ? { quand: d.quand } : {} }));
   } catch {
   }
 }
@@ -4539,13 +4540,15 @@ function mountLia(options = {}) {
   let derniereFocus = null;
   let activiteChat = 0;
   const trace = [];
+  let quandDiscussion = 0;
   let discussionEtat;
-  const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur) => {
+  const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur, quand = Date.now()) => {
     activiteChat = t;
     if (garder3) {
       trace.push({ de: de2, texte });
-      ecrireDiscussion(cle, { ouvert: true, msgs: trace });
-      discussionEtat = { ouvert: true, quand: Date.now(), msgs: bornerDiscussion(trace) };
+      quandDiscussion = quand;
+      ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand });
+      discussionEtat = { ouvert: true, quand, msgs: bornerDiscussion(trace) };
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`);
     const { texte: net, sources } = de2 === "lia" && !erreur ? decouperSources(texte, location.href) : { texte, sources: [] };
@@ -4864,7 +4867,7 @@ function mountLia(options = {}) {
     derniereFocus = document.activeElement;
     chatOuvert = true;
     activiteChat = t;
-    ecrireDiscussion(cle, { ouvert: true, msgs: trace });
+    ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand: quandDiscussion });
     chat = el("div", "lia-ui__chat");
     chat.setAttribute("role", "dialog");
     chat.setAttribute("aria-label", "Discussion avec LIA");
@@ -4950,6 +4953,7 @@ function mountLia(options = {}) {
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
     trace.length = 0;
+    quandDiscussion = 0;
     ecrireDiscussion(cle, null);
     discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
     contexteQuestion = null;
@@ -6148,12 +6152,16 @@ function mountLia(options = {}) {
     if (reprisTentee) return;
     reprisTentee = true;
     const x = d?.discussion;
-    if (!x || !x.ouvert || x.msgs.length === 0 || chatOuvert || detruit) return;
+    if (!x || !x.ouvert || x.msgs.length === 0 || detruit) return;
     if (Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS) return;
+    if (chatOuvert && (trace.length === 0 || x.quand <= quandDiscussion)) return;
     const focus = document.activeElement;
     if (focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus)) return;
-    ouvrirChat();
-    for (const m of x.msgs) ajouterMsg(m.texte, m.de);
+    if (chatOuvert) {
+      trace.length = 0;
+      journal?.replaceChildren();
+    } else ouvrirChat();
+    for (const m of x.msgs) ajouterMsg(m.texte, m.de, false, true, x.quand);
   };
   const lireEtat = async () => {
     if (!hote || detruit) return;
@@ -6660,8 +6668,9 @@ function mountLia(options = {}) {
   actif = poignee;
   const avant = lireDiscussion(cle);
   if (avant) {
+    quandDiscussion = avant.quand;
     ouvrirChat();
-    for (const m of avant.msgs) ajouterMsg(m.texte, m.de);
+    for (const m of avant.msgs) ajouterMsg(m.texte, m.de, false, true, avant.quand);
   }
   return poignee;
 }

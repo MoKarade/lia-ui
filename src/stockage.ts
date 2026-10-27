@@ -171,17 +171,22 @@ export function ecrireMouvement(cle: string, m: MouvementLia): void {
 export interface DiscussionLia {
   ouvert: boolean;
   msgs: Array<{ de: "lia" | "moi"; texte: string }>;
+  /** Instant de sa dernière vraie parole (millisecondes depuis 1970), rangé avec elle : une restauration ne le renouvelle jamais. */
+  quand?: number;
 }
 
 const MAX_MSGS = 20;
 
-export function lireDiscussion(cle: string): DiscussionLia | null {
+/** Instant d'une discussion rangée avant v0.42.1 (ou illisible) : inconnu, donc compté comme très ancien pour que l'état partagé, s'il est récent, l'emporte. */
+const QUAND_INCONNU = 1;
+
+export function lireDiscussion(cle: string): (DiscussionLia & { quand: number }) | null {
   try {
     const brut = sessionStorage.getItem(`${PREFIXE}${cle}:discussion`);
     if (brut === null) return null;
     const j: unknown = JSON.parse(brut);
     if (typeof j !== "object" || j === null) return null;
-    const { ouvert, msgs } = j as Record<string, unknown>;
+    const { ouvert, msgs, quand } = j as Record<string, unknown>;
     if (ouvert !== true || !Array.isArray(msgs)) return null;
     const propres = msgs
       .filter((m): m is { de: "lia" | "moi"; texte: string } => {
@@ -190,7 +195,7 @@ export function lireDiscussion(cle: string): DiscussionLia | null {
       })
       .slice(-MAX_MSGS)
       .map((m) => ({ de: m.de, texte: m.texte.slice(0, 4000) }));
-    return { ouvert: true, msgs: propres };
+    return { ouvert: true, msgs: propres, quand: typeof quand === "number" && Number.isFinite(quand) && quand > 0 ? quand : QUAND_INCONNU };
   } catch {
     return null;
   }
@@ -199,7 +204,7 @@ export function lireDiscussion(cle: string): DiscussionLia | null {
 export function ecrireDiscussion(cle: string, d: DiscussionLia | null): void {
   try {
     if (!d || !d.ouvert) sessionStorage.removeItem(`${PREFIXE}${cle}:discussion`);
-    else sessionStorage.setItem(`${PREFIXE}${cle}:discussion`, JSON.stringify({ ouvert: true, msgs: d.msgs.slice(-MAX_MSGS) }));
+    else sessionStorage.setItem(`${PREFIXE}${cle}:discussion`, JSON.stringify({ ouvert: true, msgs: d.msgs.slice(-MAX_MSGS), ...(d.quand ? { quand: d.quand } : {}) }));
   } catch {
     /* sans stockage de session : la discussion ne survit pas au rechargement, rien d'autre ne change */
   }

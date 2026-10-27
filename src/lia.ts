@@ -545,14 +545,18 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let activiteChat = 0;
   /** Ce qui se dit dans la discussion ouverte, gardé pour la page suivante (sans les erreurs : elles ne valent que pour l'instant). */
   const trace: Array<{ de: "lia" | "moi"; texte: string }> = [];
+  /** Instant de la dernière vraie parole de la discussion de cette page (0 : aucune). Une restauration le reprend tel quel, elle ne le renouvelle pas. */
+  let quandDiscussion = 0;
   /** La fin de la discussion, telle que l'état partagé la porte (v0.39.0) : elle suit Marc d'une app à l'autre. Une page qui n'y touche pas renvoie celle qu'elle a lue. */
   let discussionEtat: DiscussionPartagee | undefined;
-  const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur): HTMLElement => {
+  /** `quand` : l'instant réel de la parole, pour une discussion rouverte (onglet ou état partagé) ; sans lui, c'est une parole d'à l'instant. */
+  const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur, quand = Date.now()): HTMLElement => {
     activiteChat = t;
     if (garder) {
       trace.push({ de, texte });
-      ecrireDiscussion(cle, { ouvert: true, msgs: trace });
-      discussionEtat = { ouvert: true, quand: Date.now(), msgs: bornerDiscussion(trace) };
+      quandDiscussion = quand;
+      ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand });
+      discussionEtat = { ouvert: true, quand, msgs: bornerDiscussion(trace) };
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`);
     // Ce que dit le modèle est une donnée : texte brut, et les marques de source deviennent de petits liens dessous.
@@ -920,7 +924,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     derniereFocus = document.activeElement;
     chatOuvert = true;
     activiteChat = t;
-    ecrireDiscussion(cle, { ouvert: true, msgs: trace });
+    ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand: quandDiscussion });
     chat = el("div", "lia-ui__chat");
     chat.setAttribute("role", "dialog");
     chat.setAttribute("aria-label", "Discussion avec LIA");
@@ -1010,6 +1014,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
     trace.length = 0;
+    quandDiscussion = 0;
     ecrireDiscussion(cle, null);
     discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
     contexteQuestion = null;
@@ -2355,18 +2360,26 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     versionVue = e.version;
     derniereEmpreinte = empreinte(e);
   };
-  /** Une discussion commencée dans une autre app se rouvre ici, une seule fois, à la première lecture : ni vieille de plus d'une demi-heure, ni par-dessus un champ où Marc écrit. */
+  /**
+   * Une discussion commencée dans une autre app se rouvre ici, une seule fois, à la première lecture : ni vieille de plus d'une demi-heure,
+   * ni par-dessus un champ où Marc écrit. Celle de l'onglet (rouverte au montage avec son vrai instant) ne cède que devant une plus récente.
+   */
   let reprisTentee = false;
   const reprendreDiscussion = (d: EtatLia | null): void => {
     if (reprisTentee) return;
     reprisTentee = true;
     const x = d?.discussion;
-    if (!x || !x.ouvert || x.msgs.length === 0 || chatOuvert || detruit) return;
+    if (!x || !x.ouvert || x.msgs.length === 0 || detruit) return;
     if (Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS) return;
+    // Une discussion ouverte mais vide (Marc vient de l'ouvrir) n'est pas à remplacer ; une avec des paroles l'est si la partagée est plus récente.
+    if (chatOuvert && (trace.length === 0 || x.quand <= quandDiscussion)) return;
     const focus = document.activeElement;
     if (focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus)) return;
-    ouvrirChat();
-    for (const m of x.msgs) ajouterMsg(m.texte, m.de);
+    if (chatOuvert) {
+      trace.length = 0;
+      journal?.replaceChildren();
+    } else ouvrirChat();
+    for (const m of x.msgs) ajouterMsg(m.texte, m.de, false, true, x.quand);
   };
   const lireEtat = async (): Promise<void> => {
     if (!hote || detruit) return;
@@ -2923,8 +2936,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   // Une discussion ouverte sur la page d'avant se rouvre telle quelle (même onglet).
   const avant = lireDiscussion(cle);
   if (avant) {
+    quandDiscussion = avant.quand;
     ouvrirChat();
-    for (const m of avant.msgs) ajouterMsg(m.texte, m.de);
+    // Avec son vrai instant : la rouvrir ne la rend pas plus récente que celle de l'état partagé.
+    for (const m of avant.msgs) ajouterMsg(m.texte, m.de, false, true, avant.quand);
   }
   return poignee;
 }
