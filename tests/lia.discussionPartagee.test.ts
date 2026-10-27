@@ -179,6 +179,82 @@ describe("la discussion suit Marc d'une app à l'autre", () => {
   });
 });
 
+describe("une parole part vers l'état partagé sans attendre 20 s (la dernière réponse ne se perd pas au changement d'app)", () => {
+  const poser = (texte: string): void => {
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
+    champ.value = texte;
+    document.querySelector<HTMLFormElement>(".lia-ui__form")?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  };
+
+  it("la question puis la réponse sont dans l'état partagé 3 s après la réponse, sans la minuterie de 20 s", async () => {
+    let garde: EtatLia | null = null;
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "p", etat: hote, ask: async () => new Promise((r) => setTimeout(() => r({ text: "Oui." }), 8_000)) });
+    await vi.advanceTimersByTimeAsync(500);
+    lia.ouvrirChat();
+    poser("Tu me suis ?");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Tu me suis ?"]);
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Tu me suis ?", "Oui."]);
+  });
+
+  it("même quand l'onglet est à l'arrière-plan à l'arrivée de la réponse", async () => {
+    let garde: EtatLia | null = null;
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "q", etat: hote, ask: async () => new Promise((r) => setTimeout(() => r({ text: "Oui." }), 8_000)) });
+    await vi.advanceTimersByTimeAsync(500);
+    lia.ouvrirChat();
+    poser("Tu me suis ?");
+    await vi.advanceTimersByTimeAsync(2_000);
+    vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Tu me suis ?", "Oui."]);
+  });
+
+  it("une écriture déjà en route n'avale pas la parole suivante : elle repart dès que la première revient", async () => {
+    let garde: EtatLia | null = null;
+    let liberer: (() => void) | undefined;
+    let appels = 0;
+    const hote: EtatHote = {
+      lire: async () => garde,
+      ecrire: async (e) => {
+        appels += 1;
+        if (appels === 1) await new Promise<void>((r) => (liberer = r));
+        garde = e;
+        return null;
+      },
+    };
+    lia = mountLia({ vieAutonome: false, cle: "r", etat: hote, ask: async () => new Promise((r) => setTimeout(() => r({ text: "Oui." }), 1_800)) });
+    await vi.advanceTimersByTimeAsync(500);
+    lia.ouvrirChat();
+    poser("Tu me suis ?");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(liberer).toBeDefined();
+    // La réponse arrive et sa demande tombe pendant que la première écriture n'est pas revenue.
+    await vi.advanceTimersByTimeAsync(3_500);
+    expect(appels).toBe(1);
+    liberer?.();
+    await vi.advanceTimersByTimeAsync(100);
+    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Tu me suis ?", "Oui."]);
+  });
+
+  it("pagehide écrit tout de suite, même si la page n'est pas encore « hidden »", async () => {
+    let garde: EtatLia | null = null;
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "s", etat: hote, ask: async () => new Promise(() => undefined) });
+    await vi.advanceTimersByTimeAsync(500);
+    lia.ouvrirChat();
+    poser("Dernier mot");
+    // Avant le délai de 1,5 s : seul pagehide peut l'envoyer.
+    await vi.advanceTimersByTimeAsync(100);
+    expect((garde as EtatLia | null)?.discussion).toBeUndefined();
+    window.dispatchEvent(new Event("pagehide"));
+    await vi.advanceTimersByTimeAsync(50);
+    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Dernier mot"]);
+  });
+});
+
 describe("la plus récente des deux discussions gagne (onglet ou état partagé)", () => {
   const DEPUIS_UN_QUART_D_HEURE = 15 * 60_000;
   const deLOnglet = [

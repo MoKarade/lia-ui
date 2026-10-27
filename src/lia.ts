@@ -549,6 +549,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let quandDiscussion = 0;
   /** La fin de la discussion, telle que l'état partagé la porte (v0.39.0) : elle suit Marc d'une app à l'autre. Une page qui n'y touche pas renvoie celle qu'elle a lue. */
   let discussionEtat: DiscussionPartagee | undefined;
+  /** Demande d'écrire l'état partagé sans attendre la minuterie de 20 s (posée avec l'hôte, plus bas) : une parole ne reste pas 20 s dans cette seule page. */
+  let pousserDiscussion: (() => void) | undefined;
   /** `quand` : l'instant réel de la parole, pour une discussion rouverte (onglet ou état partagé) ; sans lui, c'est une parole d'à l'instant. */
   const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur, quand = Date.now()): HTMLElement => {
     activiteChat = t;
@@ -557,6 +559,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       quandDiscussion = quand;
       ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand });
       discussionEtat = { ouvert: true, quand, msgs: bornerDiscussion(trace) };
+      pousserDiscussion?.();
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`);
     // Ce que dit le modèle est une donnée : texte brut, et les marques de source deviennent de petits liens dessous.
@@ -2297,6 +2300,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let lectureFaite = false;
   let derniereEmpreinte = "";
   let enEcriture = false;
+  let reecrire = false;
   let avertie = false;
   const avertirEtat = (e: unknown): void => {
     if (avertie) return;
@@ -2398,7 +2402,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   const ecrireEtat = async (hors = false): Promise<void> => {
     // Jamais avant d'avoir lu : écrire d'abord son état de départ effacerait celui d'une autre page.
-    if (!hote || detruit || !lectureFaite || enEcriture || (document.hidden && !hors)) return;
+    if (!hote || detruit || !lectureFaite || (document.hidden && !hors)) return;
+    // Une écriture est déjà partie : cette parole-ci repart dès qu'elle revient, sans attendre la minuterie.
+    if (enEcriture) {
+      reecrire = true;
+      return;
+    }
     const e = etatCourant(versionVue + 1, Date.now());
     if (empreinte(e) === derniereEmpreinte) return;
     enEcriture = true;
@@ -2414,12 +2423,26 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       avertirEtat(err);
     } finally {
       enEcriture = false;
+      if (reecrire) {
+        reecrire = false;
+        void ecrireEtat(hors);
+      }
     }
   };
+  // Une parole (de Marc ou d'elle) part vers l'état partagé dans la seconde et demie, même onglet à l'arrière-plan : changer d'app juste après
+  // une réponse ne doit pas la laisser dans cette seule page (v0.42.2 : la dernière réponse du hub manquait dans CarAI).
+  let delaiPousse: ReturnType<typeof setTimeout> | undefined;
+  if (hote) {
+    pousserDiscussion = () => {
+      clearTimeout(delaiPousse);
+      delaiPousse = setTimeout(() => void ecrireEtat(true), 1500);
+    };
+  }
   const minuterieLecture = hote ? setInterval(() => void lireEtat(), 60_000) : undefined;
   const minuterieEcriture = hote ? setInterval(() => void ecrireEtat(), 20_000) : undefined;
-  const surFermeture = (): void => {
-    if (document.visibilityState === "hidden") void ecrireEtat(true);
+  const surFermeture = (ev: Event): void => {
+    // `pagehide` part parfois AVANT que la page soit « hidden » : on écrit quand même, c'est le dernier moment avant le changement d'app.
+    if (ev.type === "pagehide" || document.visibilityState === "hidden") void ecrireEtat(true);
     else void lireEtat();
   };
   if (hote) {
@@ -2903,6 +2926,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       clearInterval(minuterieEnvies);
       clearInterval(minuterieLecture);
       clearInterval(minuterieEcriture);
+      clearTimeout(delaiPousse);
       window.removeEventListener("pagehide", surFermeture);
       document.removeEventListener("visibilitychange", surFermeture);
       garder();

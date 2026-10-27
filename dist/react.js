@@ -4544,6 +4544,7 @@ function mountLia(options = {}) {
   const trace = [];
   let quandDiscussion = 0;
   let discussionEtat;
+  let pousserDiscussion;
   const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur, quand = Date.now()) => {
     activiteChat = t;
     if (garder3) {
@@ -4551,6 +4552,7 @@ function mountLia(options = {}) {
       quandDiscussion = quand;
       ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand });
       discussionEtat = { ouvert: true, quand, msgs: bornerDiscussion(trace) };
+      pousserDiscussion?.();
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`);
     const { texte: net, sources } = de2 === "lia" && !erreur ? decouperSources(texte, location.href) : { texte, sources: [] };
@@ -6090,6 +6092,7 @@ function mountLia(options = {}) {
   let lectureFaite = false;
   let derniereEmpreinte = "";
   let enEcriture = false;
+  let reecrire = false;
   let avertie = false;
   const avertirEtat = (e) => {
     if (avertie) return;
@@ -6181,7 +6184,11 @@ function mountLia(options = {}) {
     }
   };
   const ecrireEtat = async (hors = false) => {
-    if (!hote || detruit || !lectureFaite || enEcriture || document.hidden && !hors) return;
+    if (!hote || detruit || !lectureFaite || document.hidden && !hors) return;
+    if (enEcriture) {
+      reecrire = true;
+      return;
+    }
     const e = etatCourant(versionVue + 1, Date.now());
     if (empreinte(e) === derniereEmpreinte) return;
     enEcriture = true;
@@ -6197,12 +6204,23 @@ function mountLia(options = {}) {
       avertirEtat(err);
     } finally {
       enEcriture = false;
+      if (reecrire) {
+        reecrire = false;
+        void ecrireEtat(hors);
+      }
     }
   };
+  let delaiPousse;
+  if (hote) {
+    pousserDiscussion = () => {
+      clearTimeout(delaiPousse);
+      delaiPousse = setTimeout(() => void ecrireEtat(true), 1500);
+    };
+  }
   const minuterieLecture = hote ? setInterval(() => void lireEtat(), 6e4) : void 0;
   const minuterieEcriture = hote ? setInterval(() => void ecrireEtat(), 2e4) : void 0;
-  const surFermeture = () => {
-    if (document.visibilityState === "hidden") void ecrireEtat(true);
+  const surFermeture = (ev) => {
+    if (ev.type === "pagehide" || document.visibilityState === "hidden") void ecrireEtat(true);
     else void lireEtat();
   };
   if (hote) {
@@ -6638,6 +6656,7 @@ function mountLia(options = {}) {
       clearInterval(minuterieEnvies);
       clearInterval(minuterieLecture);
       clearInterval(minuterieEcriture);
+      clearTimeout(delaiPousse);
       window.removeEventListener("pagehide", surFermeture);
       document.removeEventListener("visibilitychange", surFermeture);
       garder2();
