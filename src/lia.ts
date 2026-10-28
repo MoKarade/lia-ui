@@ -89,6 +89,7 @@ import {
   type ActionLia,
   type EnvoiLia,
   type ContexteLia,
+  type DescriptionElement,
   type HumeurLia,
   type LiaHandle,
   type MotifSpontane,
@@ -1524,21 +1525,42 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     guetter();
   }
 
-  /** Ouvre le menu de l'élément visé en (x, y) ; faux quand LIA doit laisser faire le navigateur. */
-  const menuElementEn = (x: number, y: number, vise: EventTarget | null): boolean => {
-    const cible = elementVise(cibleSousSurcouche(vise, x, y, couche), selecteurElements, couche);
+  /**
+   * Une fenêtre modale (`<dialog>.showModal()`) passe au-dessus de la page et rend tout le reste inerte : la couche de LIA y est
+   * posée tant qu'elle est ouverte, et revient dans la page à sa fermeture. Une couche dans un conteneur de l'hôte ne bouge pas.
+   */
+  const ancrer = (): void => {
+    if (conteneur || detruit || !couche.isConnected) return;
+    let haut: Element | null = null;
+    try {
+      const modales = document.querySelectorAll("dialog:modal");
+      haut = modales[modales.length - 1] ?? null;
+    } catch {
+      /* `:modal` inconnu de ce navigateur : il n'a pas non plus de fenêtre modale à suivre */
+    }
+    const voulu = haut ?? document.body;
+    if (couche.parentElement !== voulu) voulu.appendChild(couche);
+  };
+  const descriptionPage = (racine: Document): ElementDecrit => normaliser({ genre: "la page", ...(racine.title ? { texte: racine.title } : {}) });
+  /**
+   * Ouvre le menu de l'élément visé en (x, y) ; faux quand LIA doit laisser faire le navigateur. `cadre` : le point est dans le
+   * document de ce `<iframe>` de même origine (coordonnées du cadre) ; la cible rendue est alors le cadre, qui est dans la page.
+   * Le fond de la page (`body`, `html`) est lui aussi un clic droit : « la page ».
+   */
+  const menuElementEn = (x: number, y: number, vise: EventTarget | null, cadre?: HTMLIFrameElement): boolean => {
+    const racine = cadre?.contentDocument ?? document;
+    const interieur = elementVise(cibleSousSurcouche(vise, x, y, couche, racine), selecteurElements, couche, racine);
+    const fond = !interieur && (vise === racine.body || vise === racine.documentElement);
+    const cible = fond ? racine.body : interieur;
     if (!cible) return false;
-    const d = decrireElement(cible);
+    const d = fond ? descriptionPage(racine) : decrireElement(cible);
     if (!d) return false;
+    const r = cadre?.getBoundingClientRect();
     clearTimeout(appui);
     glisse = null;
-    ouvrirMenu(x, y, { cible, d });
+    ancrer();
+    ouvrirMenu(x + (r?.left ?? 0), y + (r?.top ?? 0), { cible: cadre ?? cible, d });
     return true;
-  };
-  const surClicDroitPage = (e: MouseEvent): void => {
-    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
-    clearTimeout(appuiPage);
-    if (menuElementEn(e.clientX, e.clientY, e.target)) e.preventDefault();
   };
   /* Au tactile, iOS n'envoie pas de clic droit : un appui long (0,65 s, sans bouger) sur n'importe quel élément fait la même chose. */
   let appuiPage: ReturnType<typeof setTimeout> | undefined;
@@ -1547,25 +1569,72 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     clearTimeout(appuiPage);
     departAppui = null;
   };
-  const surAppuiPage = (e: PointerEvent): void => {
-    annulerAppuiPage();
-    if (detruit || !optElements || e.pointerType !== "touch" || !e.isPrimary) return;
-    const vise = e.target;
-    departAppui = { x: e.clientX, y: e.clientY };
-    appuiPage = setTimeout(() => {
-      if (detruit || !departAppui) return;
-      const { x, y } = departAppui;
-      departAppui = null;
-      menuElementEn(x, y, vise);
-    }, 650);
+  /** Les écouteurs d'un document : la page, ou un cadre de même origine (`cadre`, coordonnées du cadre). */
+  const ecouteursClicDroit = (cadre?: HTMLIFrameElement) => {
+    const surClicDroit = (e: MouseEvent): void => {
+      if (detruit || !optElements || e.shiftKey) return;
+      clearTimeout(appuiPage);
+      // Le premier élément du chemin : un élément dans un shadow DOM n'est pas vu comme son hôte.
+      if (menuElementEn(e.clientX, e.clientY, e.composedPath()[0] ?? e.target, cadre)) e.preventDefault();
+    };
+    const surAppui = (e: PointerEvent): void => {
+      annulerAppuiPage();
+      if (detruit || !optElements || e.pointerType !== "touch" || !e.isPrimary) return;
+      const vise = e.composedPath()[0] ?? e.target;
+      departAppui = { x: e.clientX, y: e.clientY };
+      appuiPage = setTimeout(() => {
+        if (detruit || !departAppui) return;
+        const { x, y } = departAppui;
+        departAppui = null;
+        menuElementEn(x, y, vise, cadre);
+      }, 650);
+    };
+    const surBouge = (e: PointerEvent): void => {
+      if (departAppui && Math.hypot(e.clientX - departAppui.x, e.clientY - departAppui.y) > 10) annulerAppuiPage();
+    };
+    const brancher = (cible: Document | Window): void => {
+      // En phase de capture : un gestionnaire de l'hôte qui arrête la propagation ou bloque le menu natif ne prive pas LIA du clic.
+      cible.addEventListener("contextmenu", surClicDroit as EventListener, true);
+      cible.addEventListener("pointerdown", surAppui as EventListener, { capture: true, passive: true });
+      cible.addEventListener("pointermove", surBouge as EventListener, { capture: true, passive: true });
+      for (const fin of ["pointerup", "pointercancel", "scroll"]) cible.addEventListener(fin, annulerAppuiPage, { capture: true, passive: true });
+    };
+    const debrancher = (cible: Document | Window): void => {
+      cible.removeEventListener("contextmenu", surClicDroit as EventListener, true);
+      cible.removeEventListener("pointerdown", surAppui as EventListener, true);
+      cible.removeEventListener("pointermove", surBouge as EventListener, true);
+      for (const fin of ["pointerup", "pointercancel", "scroll"]) cible.removeEventListener(fin, annulerAppuiPage, true);
+    };
+    return { brancher, debrancher };
   };
-  const surBougePage = (e: PointerEvent): void => {
-    if (departAppui && Math.hypot(e.clientX - departAppui.x, e.clientY - departAppui.y) > 10) annulerAppuiPage();
+  const cliquePage = ecouteursClicDroit();
+  cliquePage.brancher(window);
+  /** Les cadres de même origine ont leur propre document : LIA y pose les mêmes écouteurs, à l'arrivée et à chaque rechargement. */
+  const cadresVus = new WeakMap<Document, () => void>();
+  const surveillerCadres = (): void => {
+    for (const f of document.querySelectorAll("iframe")) {
+      let doc: Document | null = null;
+      try {
+        doc = f.contentDocument;
+      } catch {
+        /* d'une autre origine : seul l'hôte peut relayer (`menuExterne`) */
+      }
+      if (!doc || cadresVus.has(doc) || couche.contains(f)) continue;
+      const ecouteurs = ecouteursClicDroit(f);
+      ecouteurs.brancher(doc);
+      cadresVus.set(doc, () => ecouteurs.debrancher(doc as Document));
+    }
   };
-  document.addEventListener("contextmenu", surClicDroitPage);
-  document.addEventListener("pointerdown", surAppuiPage, { capture: true, passive: true });
-  document.addEventListener("pointermove", surBougePage, { capture: true, passive: true });
-  for (const fin of ["pointerup", "pointercancel", "scroll"]) document.addEventListener(fin, annulerAppuiPage, { capture: true, passive: true });
+  /** Pour un cadre qui ne se laisse pas lire (origine opaque ou autre) : l'hôte relaie le clic droit reçu DANS le cadre. */
+  const menuExterne = (o: { cadre: Element; x: number; y: number; description: DescriptionElement }): boolean => {
+    if (detruit || !optElements || !Number.isFinite(o.x) || !Number.isFinite(o.y) || !o.cadre.isConnected || couche.contains(o.cadre)) return false;
+    const r = o.cadre.getBoundingClientRect();
+    clearTimeout(appui);
+    glisse = null;
+    ancrer();
+    ouvrirMenu(r.left + o.x, r.top + o.y, { cible: o.cadre, d: normaliser(o.description) });
+    return true;
+  };
   /** Un menu ouvert sur la page se ferme au défilement, comme un menu du navigateur. */
   const surDefilement = (): void => {
     ajouterImpulsion(reseau, "scroll", 0.2);
@@ -2839,11 +2908,17 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     } else if (survol?.el !== meilleur) survol = { el: meilleur, depuis: maintenant, centre: true };
   }, 500);
   const veilleCouche = setInterval(() => {
-    if (detruit || couche.isConnected) return;
+    if (detruit) return;
+    surveillerCadres();
+    if (couche.isConnected) return ancrer();
     const hote = conteneur?.isConnected ? conteneur : document.body;
     if (hote !== conteneur) couche.className = "lia-ui";
     hote.appendChild(couche);
+    ancrer();
   }, 500);
+  // Une fenêtre modale qui se ferme remet la couche dans la page tout de suite (sans attendre la veille).
+  document.addEventListener("close", ancrer, true);
+  surveillerCadres();
   const surVisibilite = (): void => {
     dernier = performance.now();
   };
@@ -2884,6 +2959,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     },
     suivreCurseur,
     allerVoir,
+    menuExterne,
     envies: () => ({ ...envies }),
     interieur: () => {
       const fond = humeurDeFond(souvenirs, Date.now());
@@ -2930,11 +3006,17 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       garder();
       setMelange(null);
       for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
-      document.removeEventListener("contextmenu", surClicDroitPage);
+      cliquePage.debrancher(window);
       annulerAppuiPage();
-      document.removeEventListener("pointerdown", surAppuiPage, true);
-      document.removeEventListener("pointermove", surBougePage, true);
-      for (const fin of ["pointerup", "pointercancel", "scroll"]) document.removeEventListener(fin, annulerAppuiPage, true);
+      for (const f of document.querySelectorAll("iframe")) {
+        try {
+          const doc = f.contentDocument;
+          if (doc) cadresVus.get(doc)?.();
+        } catch {
+          /* d'une autre origine : rien n'y a été posé */
+        }
+      }
+      document.removeEventListener("close", ancrer, true);
       window.removeEventListener("scroll", surDefilement, true);
       window.removeEventListener("focusin", surFocus);
       window.removeEventListener("pointerdown", surCurseur);

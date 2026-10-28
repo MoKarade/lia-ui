@@ -3657,8 +3657,11 @@ function estIcone(media) {
   const r = media.getBoundingClientRect();
   return Math.max(r.width, r.height) <= TAILLE_ICONE;
 }
+function estElement(x) {
+  return typeof x === "object" && x !== null && x.nodeType === 1;
+}
 function elementVise(cible, selecteur, couche, racine = document) {
-  if (!(cible instanceof Element)) return null;
+  if (!estElement(cible)) return null;
   if (cible === racine.documentElement || cible === racine.body) return null;
   if (couche.contains(cible)) return null;
   if (cible.closest(EXCLUS)) return null;
@@ -3679,7 +3682,7 @@ function elementVise(cible, selecteur, couche, racine = document) {
   }
 }
 function cibleSousSurcouche(cible, x, y, couche, racine = document) {
-  if (!(cible instanceof Element) || typeof racine.elementsFromPoint !== "function") return cible;
+  if (!estElement(cible) || typeof racine.elementsFromPoint !== "function") return cible;
   const contient = (e) => {
     const r = e.getBoundingClientRect();
     return x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1;
@@ -5499,20 +5502,32 @@ function mountLia(options = {}) {
     };
     guetter();
   }
-  const menuElementEn = (x, y, vise) => {
-    const cible2 = elementVise(cibleSousSurcouche(vise, x, y, couche), selecteurElements, couche);
+  const ancrer = () => {
+    if (conteneur || detruit || !couche.isConnected) return;
+    let haut = null;
+    try {
+      const modales = document.querySelectorAll("dialog:modal");
+      haut = modales[modales.length - 1] ?? null;
+    } catch {
+    }
+    const voulu = haut ?? document.body;
+    if (couche.parentElement !== voulu) voulu.appendChild(couche);
+  };
+  const descriptionPage = (racine) => normaliser({ genre: "la page", ...racine.title ? { texte: racine.title } : {} });
+  const menuElementEn = (x, y, vise, cadre) => {
+    const racine = cadre?.contentDocument ?? document;
+    const interieur2 = elementVise(cibleSousSurcouche(vise, x, y, couche, racine), selecteurElements, couche, racine);
+    const fond = !interieur2 && (vise === racine.body || vise === racine.documentElement);
+    const cible2 = fond ? racine.body : interieur2;
     if (!cible2) return false;
-    const d = decrireElement(cible2);
+    const d = fond ? descriptionPage(racine) : decrireElement(cible2);
     if (!d) return false;
+    const r = cadre?.getBoundingClientRect();
     clearTimeout(appui);
     glisse = null;
-    ouvrirMenu(x, y, { cible: cible2, d });
+    ancrer();
+    ouvrirMenu(x + (r?.left ?? 0), y + (r?.top ?? 0), { cible: cadre ?? cible2, d });
     return true;
-  };
-  const surClicDroitPage = (e) => {
-    if (detruit || !optElements || e.shiftKey || e.defaultPrevented) return;
-    clearTimeout(appuiPage);
-    if (menuElementEn(e.clientX, e.clientY, e.target)) e.preventDefault();
   };
   let appuiPage;
   let departAppui = null;
@@ -5520,25 +5535,66 @@ function mountLia(options = {}) {
     clearTimeout(appuiPage);
     departAppui = null;
   };
-  const surAppuiPage = (e) => {
-    annulerAppuiPage();
-    if (detruit || !optElements || e.pointerType !== "touch" || !e.isPrimary) return;
-    const vise = e.target;
-    departAppui = { x: e.clientX, y: e.clientY };
-    appuiPage = setTimeout(() => {
-      if (detruit || !departAppui) return;
-      const { x, y } = departAppui;
-      departAppui = null;
-      menuElementEn(x, y, vise);
-    }, 650);
+  const ecouteursClicDroit = (cadre) => {
+    const surClicDroit = (e) => {
+      if (detruit || !optElements || e.shiftKey) return;
+      clearTimeout(appuiPage);
+      if (menuElementEn(e.clientX, e.clientY, e.composedPath()[0] ?? e.target, cadre)) e.preventDefault();
+    };
+    const surAppui = (e) => {
+      annulerAppuiPage();
+      if (detruit || !optElements || e.pointerType !== "touch" || !e.isPrimary) return;
+      const vise = e.composedPath()[0] ?? e.target;
+      departAppui = { x: e.clientX, y: e.clientY };
+      appuiPage = setTimeout(() => {
+        if (detruit || !departAppui) return;
+        const { x, y } = departAppui;
+        departAppui = null;
+        menuElementEn(x, y, vise, cadre);
+      }, 650);
+    };
+    const surBouge = (e) => {
+      if (departAppui && Math.hypot(e.clientX - departAppui.x, e.clientY - departAppui.y) > 10) annulerAppuiPage();
+    };
+    const brancher = (cible2) => {
+      cible2.addEventListener("contextmenu", surClicDroit, true);
+      cible2.addEventListener("pointerdown", surAppui, { capture: true, passive: true });
+      cible2.addEventListener("pointermove", surBouge, { capture: true, passive: true });
+      for (const fin of ["pointerup", "pointercancel", "scroll"]) cible2.addEventListener(fin, annulerAppuiPage, { capture: true, passive: true });
+    };
+    const debrancher = (cible2) => {
+      cible2.removeEventListener("contextmenu", surClicDroit, true);
+      cible2.removeEventListener("pointerdown", surAppui, true);
+      cible2.removeEventListener("pointermove", surBouge, true);
+      for (const fin of ["pointerup", "pointercancel", "scroll"]) cible2.removeEventListener(fin, annulerAppuiPage, true);
+    };
+    return { brancher, debrancher };
   };
-  const surBougePage = (e) => {
-    if (departAppui && Math.hypot(e.clientX - departAppui.x, e.clientY - departAppui.y) > 10) annulerAppuiPage();
+  const cliquePage = ecouteursClicDroit();
+  cliquePage.brancher(window);
+  const cadresVus = /* @__PURE__ */ new WeakMap();
+  const surveillerCadres = () => {
+    for (const f of document.querySelectorAll("iframe")) {
+      let doc = null;
+      try {
+        doc = f.contentDocument;
+      } catch {
+      }
+      if (!doc || cadresVus.has(doc) || couche.contains(f)) continue;
+      const ecouteurs = ecouteursClicDroit(f);
+      ecouteurs.brancher(doc);
+      cadresVus.set(doc, () => ecouteurs.debrancher(doc));
+    }
   };
-  document.addEventListener("contextmenu", surClicDroitPage);
-  document.addEventListener("pointerdown", surAppuiPage, { capture: true, passive: true });
-  document.addEventListener("pointermove", surBougePage, { capture: true, passive: true });
-  for (const fin of ["pointerup", "pointercancel", "scroll"]) document.addEventListener(fin, annulerAppuiPage, { capture: true, passive: true });
+  const menuExterne = (o) => {
+    if (detruit || !optElements || !Number.isFinite(o.x) || !Number.isFinite(o.y) || !o.cadre.isConnected || couche.contains(o.cadre)) return false;
+    const r = o.cadre.getBoundingClientRect();
+    clearTimeout(appui);
+    glisse = null;
+    ancrer();
+    ouvrirMenu(r.left + o.x, r.top + o.y, { cible: o.cadre, d: normaliser(o.description) });
+    return true;
+  };
   const surDefilement = () => {
     ajouterImpulsion(reseau, "scroll", 0.2);
     dernierMarc = Date.now();
@@ -6661,11 +6717,16 @@ function mountLia(options = {}) {
     } else if (survol?.el !== meilleur) survol = { el: meilleur, depuis: maintenant, centre: true };
   }, 500);
   const veilleCouche = setInterval(() => {
-    if (detruit || couche.isConnected) return;
+    if (detruit) return;
+    surveillerCadres();
+    if (couche.isConnected) return ancrer();
     const hote2 = conteneur?.isConnected ? conteneur : document.body;
     if (hote2 !== conteneur) couche.className = "lia-ui";
     hote2.appendChild(couche);
+    ancrer();
   }, 500);
+  document.addEventListener("close", ancrer, true);
+  surveillerCadres();
   const surVisibilite = () => {
     dernier = performance.now();
   };
@@ -6704,6 +6765,7 @@ function mountLia(options = {}) {
     },
     suivreCurseur,
     allerVoir,
+    menuExterne,
     envies: () => ({ ...envies }),
     interieur: () => {
       const fond = humeurDeFond(souvenirs, Date.now());
@@ -6750,11 +6812,16 @@ function mountLia(options = {}) {
       garder2();
       setMelange(null);
       for (const ev of GESTES_MARC) window.removeEventListener(ev, surGesteMarc);
-      document.removeEventListener("contextmenu", surClicDroitPage);
+      cliquePage.debrancher(window);
       annulerAppuiPage();
-      document.removeEventListener("pointerdown", surAppuiPage, true);
-      document.removeEventListener("pointermove", surBougePage, true);
-      for (const fin of ["pointerup", "pointercancel", "scroll"]) document.removeEventListener(fin, annulerAppuiPage, true);
+      for (const f of document.querySelectorAll("iframe")) {
+        try {
+          const doc = f.contentDocument;
+          if (doc) cadresVus.get(doc)?.();
+        } catch {
+        }
+      }
+      document.removeEventListener("close", ancrer, true);
       window.removeEventListener("scroll", surDefilement, true);
       window.removeEventListener("focusin", surFocus);
       window.removeEventListener("pointerdown", surCurseur);

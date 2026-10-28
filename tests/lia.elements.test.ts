@@ -189,13 +189,10 @@ describe("clic droit sur un élément de la page", () => {
     });
   });
 
-  it("laisse le menu du navigateur sur un champ, avec Maj, ou si la page l'a déjà pris", () => {
+  it("laisse le menu du navigateur sur un champ ou avec Maj", () => {
     lia = mountLia({ vieAutonome: false });
     expect(clicDroit(document.getElementById("champ") as Element).defaultPrevented).toBe(false);
     expect(clicDroit(carte, { shiftKey: true }).defaultPrevented).toBe(false);
-    const dejaPris = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
-    document.getElementById("para")?.addEventListener("contextmenu", (e) => e.preventDefault(), { once: true });
-    document.getElementById("para")?.dispatchEvent(dejaPris);
     expect(menu()).toBeNull();
   });
 
