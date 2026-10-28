@@ -549,8 +549,6 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let quandDiscussion = 0;
   /** La fin de la discussion, telle que l'état partagé la porte (v0.39.0) : elle suit Marc d'une app à l'autre. Une page qui n'y touche pas renvoie celle qu'elle a lue. */
   let discussionEtat: DiscussionPartagee | undefined;
-  /** Demande d'écrire l'état partagé sans attendre la minuterie de 20 s (posée avec l'hôte, plus bas) : une parole ne reste pas 20 s dans cette seule page. */
-  let pousserDiscussion: (() => void) | undefined;
   /** `quand` : l'instant réel de la parole, pour une discussion rouverte (onglet ou état partagé) ; sans lui, c'est une parole d'à l'instant. */
   const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur, quand = Date.now()): HTMLElement => {
     activiteChat = t;
@@ -559,7 +557,6 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       quandDiscussion = quand;
       ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand });
       discussionEtat = { ouvert: true, quand, msgs: bornerDiscussion(trace) };
-      pousserDiscussion?.();
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de}${erreur ? " lia-ui__msg--erreur" : ""}`);
     // Ce que dit le modèle est une donnée : texte brut, et les marques de source deviennent de petits liens dessous.
@@ -2300,13 +2297,17 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let lectureFaite = false;
   let derniereEmpreinte = "";
   let enEcriture = false;
-  let reecrire = false;
   let avertie = false;
   const avertirEtat = (e: unknown): void => {
     if (avertie) return;
     avertie = true;
     console.error("LIA : son état partagé est indisponible, elle garde son état local", e);
   };
+  /** La discussion que l'hôte portait à la dernière lecture : une écriture ne la remplace jamais par une plus ancienne (l'onglet d'une autre app, resté sur une vieille discussion). */
+  let discussionDistante: DiscussionPartagee | undefined;
+  const copieDiscussion = (d: DiscussionPartagee): DiscussionPartagee => ({ ...d, msgs: d.msgs.map((m) => ({ ...m })) });
+  const discussionAEcrire = (): DiscussionPartagee | undefined =>
+    discussionEtat && discussionDistante ? (discussionDistante.quand > discussionEtat.quand ? discussionDistante : discussionEtat) : (discussionEtat ?? discussionDistante);
   const etatCourant = (version: number, maj: number): EtatLia => {
     const jour = jourLocal(new Date(maj));
     return {
@@ -2319,12 +2320,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       relances: { jour, n: lireRelances(cle, jour) },
       interieur: { ...interieur },
       ...(souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {}),
-      ...(discussionEtat ? { discussion: { ...discussionEtat, msgs: discussionEtat.msgs.map((m) => ({ ...m })) } } : {}),
+      ...(discussionAEcrire() ? { discussion: copieDiscussion(discussionAEcrire() as DiscussionPartagee) } : {}),
     };
   };
   const appliquerEtat = (e: EtatLia): void => {
-    // Sa discussion d'ailleurs : seulement si cette page n'a rien dit elle-même (ce qui s'y est dit l'emporte, c'est plus frais).
-    if (trace.length === 0) discussionEtat = e.discussion;
     envies = { ...e.envies };
     faits = e.journal.map((f) => ({ ...f }));
     chargerLente(reseau, e.lente, Date.now() - e.maj);
@@ -2365,20 +2364,36 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     derniereEmpreinte = empreinte(e);
   };
   /**
-   * Une discussion commencée dans une autre app se rouvre ici, une seule fois, à la première lecture : ni vieille de plus d'une demi-heure,
-   * ni par-dessus un champ où Marc écrit. Celle de l'onglet (rouverte au montage avec son vrai instant) ne cède que devant une plus récente.
+   * La plus récente des deux discussions gagne, à CHAQUE lecture de l'état (pas seulement la première) : celle de cette page (onglet ou dite ici)
+   * et celle que l'hôte porte (ouverte ou fermée ailleurs). Une plus récente fermée ferme celle-ci ; une plus récente ouverte la remplace
+   * (jamais par-dessus un champ où Marc écrit, ni pendant une question en route, ni dans un champ de LIA où il a déjà tapé) ; une plus
+   * ancienne n'est jamais écrite par-dessus (voir `discussionAEcrire`). Une discussion fermée de l'onglet ne s'ouvre jamais d'elle-même :
+   * seule la première lecture ouvre le chat (et pour une discussion de moins d'une demi-heure), les suivantes ne font que remplacer ou fermer.
    */
   let reprisTentee = false;
-  const reprendreDiscussion = (d: EtatLia | null): void => {
-    if (reprisTentee) return;
-    reprisTentee = true;
+  const rapprocherDiscussion = (d: EtatLia | null, premiere: boolean): void => {
     const x = d?.discussion;
-    if (!x || !x.ouvert || x.msgs.length === 0 || detruit) return;
-    if (Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS) return;
-    // Une discussion ouverte mais vide (Marc vient de l'ouvrir) n'est pas à remplacer ; une avec des paroles l'est si la partagée est plus récente.
-    if (chatOuvert && (trace.length === 0 || x.quand <= quandDiscussion)) return;
+    if (!x || detruit) return;
+    discussionDistante = x;
+    // Celle de cette page est aussi récente (ou plus) : elle reste, et c'est elle que l'état recevra.
+    if (x.quand <= (discussionEtat?.quand ?? 0)) return;
+    // Rien dit ici : cette page porte celle de l'hôte (un chat ouvert mais vide, que Marc vient d'ouvrir, n'est pas remplacé plus bas).
+    if (trace.length === 0) discussionEtat = x;
     const focus = document.activeElement;
-    if (focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus)) return;
+    const marcEcritAilleurs =
+      focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus);
+    if (!x.ouvert) {
+      // Fermée ailleurs plus récemment : celle de cette page se ferme aussi (avec l'instant de la fermeture, pas « maintenant »).
+      if (chatOuvert && trace.length > 0 && !enCours && !champ?.value && !marcEcritAilleurs) {
+        fermerChat();
+        discussionEtat = x;
+      }
+      return;
+    }
+    if (x.msgs.length === 0 || Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS || enCours) return;
+    // Un chat ouvert mais vide est à Marc ; un chat fermé ne s'ouvre qu'à la première lecture.
+    if (chatOuvert ? trace.length === 0 : !premiere) return;
+    if (marcEcritAilleurs) return;
     if (chatOuvert) {
       trace.length = 0;
       journal?.replaceChildren();
@@ -2395,19 +2410,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         appliquerEtat(d);
         retenir(d);
       }
-      reprendreDiscussion(d);
+      const premiere = !reprisTentee;
+      reprisTentee = true;
+      rapprocherDiscussion(d, premiere);
     } catch (e) {
       avertirEtat(e);
     }
   };
   const ecrireEtat = async (hors = false): Promise<void> => {
     // Jamais avant d'avoir lu : écrire d'abord son état de départ effacerait celui d'une autre page.
-    if (!hote || detruit || !lectureFaite || (document.hidden && !hors)) return;
-    // Une écriture est déjà partie : cette parole-ci repart dès qu'elle revient, sans attendre la minuterie.
-    if (enEcriture) {
-      reecrire = true;
-      return;
-    }
+    if (!hote || detruit || !lectureFaite || enEcriture || (document.hidden && !hors)) return;
     const e = etatCourant(versionVue + 1, Date.now());
     if (empreinte(e) === derniereEmpreinte) return;
     enEcriture = true;
@@ -2416,6 +2428,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (rendu && rendu.version !== e.version && adopter(rendu, majVue, versionVue)) {
         appliquerEtat(rendu);
         retenir(rendu);
+        rapprocherDiscussion(rendu, false);
       } else {
         retenir(e);
       }
@@ -2423,26 +2436,12 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       avertirEtat(err);
     } finally {
       enEcriture = false;
-      if (reecrire) {
-        reecrire = false;
-        void ecrireEtat(hors);
-      }
     }
   };
-  // Une parole (de Marc ou d'elle) part vers l'état partagé dans la seconde et demie, même onglet à l'arrière-plan : changer d'app juste après
-  // une réponse ne doit pas la laisser dans cette seule page (v0.42.2 : la dernière réponse du hub manquait dans CarAI).
-  let delaiPousse: ReturnType<typeof setTimeout> | undefined;
-  if (hote) {
-    pousserDiscussion = () => {
-      clearTimeout(delaiPousse);
-      delaiPousse = setTimeout(() => void ecrireEtat(true), 1500);
-    };
-  }
   const minuterieLecture = hote ? setInterval(() => void lireEtat(), 60_000) : undefined;
   const minuterieEcriture = hote ? setInterval(() => void ecrireEtat(), 20_000) : undefined;
-  const surFermeture = (ev: Event): void => {
-    // `pagehide` part parfois AVANT que la page soit « hidden » : on écrit quand même, c'est le dernier moment avant le changement d'app.
-    if (ev.type === "pagehide" || document.visibilityState === "hidden") void ecrireEtat(true);
+  const surFermeture = (): void => {
+    if (document.visibilityState === "hidden") void ecrireEtat(true);
     else void lireEtat();
   };
   if (hote) {
@@ -2926,7 +2925,6 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       clearInterval(minuterieEnvies);
       clearInterval(minuterieLecture);
       clearInterval(minuterieEcriture);
-      clearTimeout(delaiPousse);
       window.removeEventListener("pagehide", surFermeture);
       document.removeEventListener("visibilitychange", surFermeture);
       garder();

@@ -4544,7 +4544,6 @@ function mountLia(options = {}) {
   const trace = [];
   let quandDiscussion = 0;
   let discussionEtat;
-  let pousserDiscussion;
   const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur, quand = Date.now()) => {
     activiteChat = t;
     if (garder3) {
@@ -4552,7 +4551,6 @@ function mountLia(options = {}) {
       quandDiscussion = quand;
       ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand });
       discussionEtat = { ouvert: true, quand, msgs: bornerDiscussion(trace) };
-      pousserDiscussion?.();
     }
     const m = el("div", `lia-ui__msg lia-ui__msg--${de2}${erreur ? " lia-ui__msg--erreur" : ""}`);
     const { texte: net, sources } = de2 === "lia" && !erreur ? decouperSources(texte, location.href) : { texte, sources: [] };
@@ -6092,13 +6090,15 @@ function mountLia(options = {}) {
   let lectureFaite = false;
   let derniereEmpreinte = "";
   let enEcriture = false;
-  let reecrire = false;
   let avertie = false;
   const avertirEtat = (e) => {
     if (avertie) return;
     avertie = true;
     console.error("LIA : son \xE9tat partag\xE9 est indisponible, elle garde son \xE9tat local", e);
   };
+  let discussionDistante;
+  const copieDiscussion = (d) => ({ ...d, msgs: d.msgs.map((m) => ({ ...m })) });
+  const discussionAEcrire = () => discussionEtat && discussionDistante ? discussionDistante.quand > discussionEtat.quand ? discussionDistante : discussionEtat : discussionEtat ?? discussionDistante;
   const etatCourant = (version, maj) => {
     const jour = jourLocal(new Date(maj));
     return {
@@ -6111,11 +6111,10 @@ function mountLia(options = {}) {
       relances: { jour, n: lireRelances(cle, jour) },
       interieur: { ...interieur },
       ...souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {},
-      ...discussionEtat ? { discussion: { ...discussionEtat, msgs: discussionEtat.msgs.map((m) => ({ ...m })) } } : {}
+      ...discussionAEcrire() ? { discussion: copieDiscussion(discussionAEcrire()) } : {}
     };
   };
   const appliquerEtat = (e) => {
-    if (trace.length === 0) discussionEtat = e.discussion;
     envies = { ...e.envies };
     faits = e.journal.map((f) => ({ ...f }));
     chargerLente(reseau, e.lente, Date.now() - e.maj);
@@ -6153,15 +6152,24 @@ function mountLia(options = {}) {
     derniereEmpreinte = empreinte(e);
   };
   let reprisTentee = false;
-  const reprendreDiscussion = (d) => {
-    if (reprisTentee) return;
-    reprisTentee = true;
+  const rapprocherDiscussion = (d, premiere) => {
     const x = d?.discussion;
-    if (!x || !x.ouvert || x.msgs.length === 0 || detruit) return;
-    if (Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS) return;
-    if (chatOuvert && (trace.length === 0 || x.quand <= quandDiscussion)) return;
+    if (!x || detruit) return;
+    discussionDistante = x;
+    if (x.quand <= (discussionEtat?.quand ?? 0)) return;
+    if (trace.length === 0) discussionEtat = x;
     const focus = document.activeElement;
-    if (focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus)) return;
+    const marcEcritAilleurs = focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus);
+    if (!x.ouvert) {
+      if (chatOuvert && trace.length > 0 && !enCours && !champ?.value && !marcEcritAilleurs) {
+        fermerChat();
+        discussionEtat = x;
+      }
+      return;
+    }
+    if (x.msgs.length === 0 || Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS || enCours) return;
+    if (chatOuvert ? trace.length === 0 : !premiere) return;
+    if (marcEcritAilleurs) return;
     if (chatOuvert) {
       trace.length = 0;
       journal?.replaceChildren();
@@ -6178,17 +6186,15 @@ function mountLia(options = {}) {
         appliquerEtat(d);
         retenir(d);
       }
-      reprendreDiscussion(d);
+      const premiere = !reprisTentee;
+      reprisTentee = true;
+      rapprocherDiscussion(d, premiere);
     } catch (e) {
       avertirEtat(e);
     }
   };
   const ecrireEtat = async (hors = false) => {
-    if (!hote || detruit || !lectureFaite || document.hidden && !hors) return;
-    if (enEcriture) {
-      reecrire = true;
-      return;
-    }
+    if (!hote || detruit || !lectureFaite || enEcriture || document.hidden && !hors) return;
     const e = etatCourant(versionVue + 1, Date.now());
     if (empreinte(e) === derniereEmpreinte) return;
     enEcriture = true;
@@ -6197,6 +6203,7 @@ function mountLia(options = {}) {
       if (rendu && rendu.version !== e.version && adopter(rendu, majVue, versionVue)) {
         appliquerEtat(rendu);
         retenir(rendu);
+        rapprocherDiscussion(rendu, false);
       } else {
         retenir(e);
       }
@@ -6204,23 +6211,12 @@ function mountLia(options = {}) {
       avertirEtat(err);
     } finally {
       enEcriture = false;
-      if (reecrire) {
-        reecrire = false;
-        void ecrireEtat(hors);
-      }
     }
   };
-  let delaiPousse;
-  if (hote) {
-    pousserDiscussion = () => {
-      clearTimeout(delaiPousse);
-      delaiPousse = setTimeout(() => void ecrireEtat(true), 1500);
-    };
-  }
   const minuterieLecture = hote ? setInterval(() => void lireEtat(), 6e4) : void 0;
   const minuterieEcriture = hote ? setInterval(() => void ecrireEtat(), 2e4) : void 0;
-  const surFermeture = (ev) => {
-    if (ev.type === "pagehide" || document.visibilityState === "hidden") void ecrireEtat(true);
+  const surFermeture = () => {
+    if (document.visibilityState === "hidden") void ecrireEtat(true);
     else void lireEtat();
   };
   if (hote) {
@@ -6656,7 +6652,6 @@ function mountLia(options = {}) {
       clearInterval(minuterieEnvies);
       clearInterval(minuterieLecture);
       clearInterval(minuterieEcriture);
-      clearTimeout(delaiPousse);
       window.removeEventListener("pagehide", surFermeture);
       document.removeEventListener("visibilitychange", surFermeture);
       garder2();

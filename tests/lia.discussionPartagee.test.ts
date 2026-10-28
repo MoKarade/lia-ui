@@ -179,82 +179,6 @@ describe("la discussion suit Marc d'une app à l'autre", () => {
   });
 });
 
-describe("une parole part vers l'état partagé sans attendre 20 s (la dernière réponse ne se perd pas au changement d'app)", () => {
-  const poser = (texte: string): void => {
-    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
-    champ.value = texte;
-    document.querySelector<HTMLFormElement>(".lia-ui__form")?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
-  };
-
-  it("la question puis la réponse sont dans l'état partagé 3 s après la réponse, sans la minuterie de 20 s", async () => {
-    let garde: EtatLia | null = null;
-    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
-    lia = mountLia({ vieAutonome: false, cle: "p", etat: hote, ask: async () => new Promise((r) => setTimeout(() => r({ text: "Oui." }), 8_000)) });
-    await vi.advanceTimersByTimeAsync(500);
-    lia.ouvrirChat();
-    poser("Tu me suis ?");
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Tu me suis ?"]);
-    await vi.advanceTimersByTimeAsync(8_000);
-    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Tu me suis ?", "Oui."]);
-  });
-
-  it("même quand l'onglet est à l'arrière-plan à l'arrivée de la réponse", async () => {
-    let garde: EtatLia | null = null;
-    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
-    lia = mountLia({ vieAutonome: false, cle: "q", etat: hote, ask: async () => new Promise((r) => setTimeout(() => r({ text: "Oui." }), 8_000)) });
-    await vi.advanceTimersByTimeAsync(500);
-    lia.ouvrirChat();
-    poser("Tu me suis ?");
-    await vi.advanceTimersByTimeAsync(2_000);
-    vi.spyOn(document, "hidden", "get").mockReturnValue(true);
-    await vi.advanceTimersByTimeAsync(8_000);
-    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Tu me suis ?", "Oui."]);
-  });
-
-  it("une écriture déjà en route n'avale pas la parole suivante : elle repart dès que la première revient", async () => {
-    let garde: EtatLia | null = null;
-    let liberer: (() => void) | undefined;
-    let appels = 0;
-    const hote: EtatHote = {
-      lire: async () => garde,
-      ecrire: async (e) => {
-        appels += 1;
-        if (appels === 1) await new Promise<void>((r) => (liberer = r));
-        garde = e;
-        return null;
-      },
-    };
-    lia = mountLia({ vieAutonome: false, cle: "r", etat: hote, ask: async () => new Promise((r) => setTimeout(() => r({ text: "Oui." }), 1_800)) });
-    await vi.advanceTimersByTimeAsync(500);
-    lia.ouvrirChat();
-    poser("Tu me suis ?");
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect(liberer).toBeDefined();
-    // La réponse arrive et sa demande tombe pendant que la première écriture n'est pas revenue.
-    await vi.advanceTimersByTimeAsync(3_500);
-    expect(appels).toBe(1);
-    liberer?.();
-    await vi.advanceTimersByTimeAsync(100);
-    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Tu me suis ?", "Oui."]);
-  });
-
-  it("pagehide écrit tout de suite, même si la page n'est pas encore « hidden »", async () => {
-    let garde: EtatLia | null = null;
-    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
-    lia = mountLia({ vieAutonome: false, cle: "s", etat: hote, ask: async () => new Promise(() => undefined) });
-    await vi.advanceTimersByTimeAsync(500);
-    lia.ouvrirChat();
-    poser("Dernier mot");
-    // Avant le délai de 1,5 s : seul pagehide peut l'envoyer.
-    await vi.advanceTimersByTimeAsync(100);
-    expect((garde as EtatLia | null)?.discussion).toBeUndefined();
-    window.dispatchEvent(new Event("pagehide"));
-    await vi.advanceTimersByTimeAsync(50);
-    expect((garde as EtatLia | null)?.discussion?.msgs.map((m) => m.texte)).toEqual(["Dernier mot"]);
-  });
-});
-
 describe("la plus récente des deux discussions gagne (onglet ou état partagé)", () => {
   const DEPUIS_UN_QUART_D_HEURE = 15 * 60_000;
   const deLOnglet = [
@@ -359,5 +283,128 @@ describe("la plus récente des deux discussions gagne (onglet ou état partagé)
     lia = mountLia({ vieAutonome: false, cle: "g", etat: hote, ask });
     await vi.advanceTimersByTimeAsync(500);
     expect(messages()).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+  });
+});
+
+describe("la plus récente gagne à CHAQUE lecture de l'état, fermée ou ouverte (lia-ui#144)", () => {
+  const UN_QUART_D_HEURE = 15 * 60_000;
+  const deLOnglet = [
+    { de: "moi" as const, texte: "Où en est la batterie ?" },
+    { de: "lia" as const, texte: "Elle est à 64 %." },
+  ];
+  const duHub = [
+    { de: "moi" as const, texte: "Quand est mon prochain rendez-vous ?" },
+    { de: "lia" as const, texte: "Demain à 9 h." },
+  ];
+  const textes = (e: EtatLia | null): string[] | undefined => e?.discussion?.msgs.map((m) => m.texte);
+
+  it("(a) état partagé fermé plus récent que l'onglet : l'onglet se ferme et l'état reste fermé, l'ancienne n'est jamais écrite", async () => {
+    ecrireDiscussion("a1", { ouvert: true, msgs: deLOnglet, quand: Date.now() - UN_QUART_D_HEURE });
+    const quandFermee = Date.now() - 1_000;
+    let garde: EtatLia | null = etat({ discussion: discussion({ ouvert: false, msgs: [], quand: quandFermee }) });
+    const ecrits: EtatLia[] = [];
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => (ecrits.push(e), (garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "a1", etat: hote, ask });
+    expect(messages()).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+    expect(lireDiscussion("a1")).toBeNull();
+    await vi.advanceTimersByTimeAsync(70_000);
+    for (const e of ecrits) expect(e.discussion).toMatchObject({ ouvert: false, msgs: [], quand: quandFermee });
+    expect((garde as EtatLia | null)?.discussion).toMatchObject({ ouvert: false, msgs: [], quand: quandFermee });
+  });
+
+  it("(a bis) une fermeture plus récente ne ferme pas un chat où Marc a déjà tapé une réponse", async () => {
+    ecrireDiscussion("a2", { ouvert: true, msgs: deLOnglet, quand: Date.now() - UN_QUART_D_HEURE });
+    let garde: EtatLia | null = null;
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "a2", etat: hote, ask });
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
+    champ.value = "Un brouillon";
+    garde = etat({ discussion: discussion({ ouvert: false, msgs: [], quand: Date.now() - 1_000 }) });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(document.querySelector(".lia-ui__chat")).not.toBeNull();
+    expect(champ.value).toBe("Un brouillon");
+  });
+
+  it("(b) à une lecture suivante, une discussion ouverte plus récente est adoptée et jamais réécrasée", async () => {
+    const quandOnglet = Date.now() - 5 * 60_000;
+    ecrireDiscussion("b1", { ouvert: true, msgs: deLOnglet, quand: quandOnglet });
+    let garde: EtatLia | null = null;
+    // Comme l'hôte : une écriture qui ne dépasse pas sa version est refusée, il rend alors l'état qu'il garde.
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => (garde && e.version <= garde.version ? garde : ((garde = e), null)) };
+    lia = mountLia({ vieAutonome: false, cle: "b1", etat: hote, ask });
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(textes(garde)).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    // Pendant ce temps, Marc parle sur le hub : l'état partagé porte sa discussion, plus récente.
+    const quandHub = Date.now() - 1_000;
+    garde = etat({ version: ((garde as EtatLia | null)?.version ?? 0) + 50, maj: Date.now() + 1_000, discussion: discussion({ quand: quandHub, msgs: duHub }) });
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(messages()).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect((garde as EtatLia | null)?.discussion).toMatchObject({ ouvert: true, quand: quandHub });
+    expect(textes(garde)).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+    expect(lireDiscussion("b1")?.quand).toBe(quandHub);
+  });
+
+  it("(b bis) même si l'affichage n'est pas remplacé (champ où Marc écrit), l'état partagé garde la plus récente", async () => {
+    document.body.innerHTML = "<p>Une page</p>";
+    ecrireDiscussion("b2", { ouvert: true, msgs: deLOnglet, quand: Date.now() - UN_QUART_D_HEURE });
+    const quandHub = Date.now() - 60_000;
+    let garde: EtatLia | null = etat({ discussion: discussion({ quand: quandHub, msgs: duHub }) });
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "b2", etat: hote, ask });
+    document.body.insertAdjacentHTML("beforeend", '<input id="recherche">');
+    document.querySelector<HTMLInputElement>("#recherche")?.focus();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages()).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(textes(garde)).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+    expect((garde as EtatLia | null)?.discussion?.quand).toBe(quandHub);
+  });
+
+  it("(c) à une lecture suivante, une discussion partagée plus ancienne que celle de l'onglet ne la remplace pas", async () => {
+    const quandOnglet = Date.now() - 60_000;
+    ecrireDiscussion("c1", { ouvert: true, msgs: deLOnglet, quand: quandOnglet });
+    let garde: EtatLia | null = null;
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "c1", etat: hote, ask });
+    await vi.advanceTimersByTimeAsync(25_000);
+    garde = etat({ version: 900, maj: Date.now() + 1_000, discussion: discussion({ quand: Date.now() - UN_QUART_D_HEURE, msgs: duHub }) });
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(messages()).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(textes(garde)).toEqual(["Où en est la batterie ?", "Elle est à 64 %."]);
+    expect((garde as EtatLia | null)?.discussion?.quand).toBe(quandOnglet);
+  });
+
+  it("(d) une vraie parole après l'adoption la re-date à l'instant présent", async () => {
+    ecrireDiscussion("d1", { ouvert: true, msgs: deLOnglet, quand: Date.now() - UN_QUART_D_HEURE });
+    const quandHub = Date.now() - 60_000;
+    let garde: EtatLia | null = etat({ discussion: discussion({ quand: quandHub, msgs: duHub }) });
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "d1", etat: hote, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages()).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h."]);
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
+    champ.value = "Et après-demain ?";
+    document.querySelector<HTMLFormElement>(".lia-ui__form")?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    await vi.advanceTimersByTimeAsync(25_000);
+    const ecrit = garde as EtatLia | null;
+    expect(textes(ecrit)?.slice(0, 3)).toEqual(["Quand est mon prochain rendez-vous ?", "Demain à 9 h.", "Et après-demain ?"]);
+    expect(ecrit?.discussion?.quand).toBeGreaterThan(quandHub + 60_000);
+  });
+
+  it("une discussion fermée ici plus récemment que celle de l'état n'est pas rouverte par une lecture suivante", async () => {
+    let garde: EtatLia | null = etat({ discussion: discussion({ quand: Date.now() - 60_000, msgs: duHub }) });
+    const hote: EtatHote = { lire: async () => garde, ecrire: async (e) => ((garde = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "e1", etat: hote, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    document.querySelector<HTMLButtonElement>('[aria-label="Fermer la discussion"]')?.click();
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect((garde as EtatLia | null)?.discussion).toMatchObject({ ouvert: false, msgs: [] });
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+    expect((garde as EtatLia | null)?.discussion?.ouvert).toBe(false);
   });
 });
