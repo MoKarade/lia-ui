@@ -83,4 +83,31 @@ describe("<Lia />", () => {
     expect(e.defaultPrevented).toBe(false);
     await act(async () => r.unmount());
   });
+
+  it("atelier : le conteneur est transmis, et ask reçoit le contexte et les réglages", async () => {
+    const racine = document.createElement("div");
+    const page = document.createElement("div");
+    document.body.append(racine, page);
+    const ask = vi.fn().mockResolvedValue({ text: "ok" });
+    const r = createRoot(racine);
+    await act(async () =>
+      r.render(
+        createElement(Lia, {
+          vieAutonome: false,
+          ask,
+          atelier: { conteneur: page, options: [{ id: "n2", libelle: "Niveau 2", type: "case", valeur: true }] },
+        }),
+      ),
+    );
+    expect(page.querySelector(".lia-ui__chat--atelier")).not.toBeNull();
+    const champ = page.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
+    champ.value = "Salut";
+    await act(async () => {
+      (page.querySelector(".lia-ui__form") as HTMLFormElement).dispatchEvent(new Event("submit", { cancelable: true }));
+    });
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    expect(ask.mock.calls[0]?.[3]).toEqual({ n2: true });
+    await act(async () => r.unmount());
+    expect(page.children.length).toBe(0);
+  });
 });

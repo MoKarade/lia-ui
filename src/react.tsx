@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { mountLia } from "./lia.js";
-import type { LiaHandle, MotifSpontane, OptionsLia } from "./types.js";
+import type { ContexteLia, LiaHandle, MotifSpontane, OptionsLia, ReglagesAtelier } from "./types.js";
 
 export interface LiaProps extends OptionsLia {
   /** Reçoit la poignée une fois LIA montée (et `null` au démontage). */
@@ -12,7 +12,7 @@ export interface LiaProps extends OptionsLia {
 /**
  * LIA pour React / Next.js. Rend `null` : elle vit dans sa propre couche, montée côté navigateur
  * seulement. Les callbacks (`ask`, `actions`, `onChip`…) peuvent changer à chaque rendu sans la remonter ;
- * `onSpontane`, `entrees` et `elements.decrire` aussi ; `container`, `rayon`, `cle`, `vieAutonome`, `cibles`, `silence`,
+ * `onSpontane`, `entrees` et `elements.decrire` aussi ; `container`, `atelier`, `rayon`, `cle`, `vieAutonome`, `cibles`, `silence`,
  * `quandMouvementReduit`, `humeurVisible`, `etat`, `relancesParJour`, `parolePropre` et `elements.selecteur` ne sont lus qu'au montage.
  */
 export function Lia(props: LiaProps): null {
@@ -23,6 +23,7 @@ export function Lia(props: LiaProps): null {
     const p = derniere.current;
     const lia = mountLia({
       ...(p.container ? { container: p.container } : {}),
+      ...(p.atelier ? { atelier: p.atelier } : {}),
       ...(p.rayon !== undefined ? { rayon: p.rayon } : {}),
       ...(p.cle !== undefined ? { cle: p.cle } : {}),
       ...(p.vieAutonome !== undefined ? { vieAutonome: p.vieAutonome } : {}),
@@ -59,9 +60,9 @@ export function Lia(props: LiaProps): null {
       ...(p.bounds ? { bounds: () => derniere.current.bounds?.() ?? { x: 0, y: 0, w: 0, h: 0 } } : {}),
       ...(p.ask
         ? {
-            ask: (q: string, signal: AbortSignal) => {
+            ask: (q: string, signal: AbortSignal, contexte?: ContexteLia, reglages?: ReglagesAtelier) => {
               const ask = derniere.current.ask;
-              return ask ? ask(q, signal) : Promise.reject(new Error("LIA : ask retiré"));
+              return ask ? ask(q, signal, contexte, reglages) : Promise.reject(new Error("LIA : ask retiré"));
             },
           }
         : {}),

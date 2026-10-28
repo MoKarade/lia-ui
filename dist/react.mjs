@@ -1,7 +1,7 @@
 "use client";
 import {
   mountLia
-} from "./chunk-RT7AEITA.mjs";
+} from "./chunk-R3KXOR2H.mjs";
 
 // src/react.tsx
 import { useEffect, useRef } from "react";
@@ -12,6 +12,7 @@ function Lia(props) {
     const p = derniere.current;
     const lia = mountLia({
       ...p.container ? { container: p.container } : {},
+      ...p.atelier ? { atelier: p.atelier } : {},
       ...p.rayon !== void 0 ? { rayon: p.rayon } : {},
       ...p.cle !== void 0 ? { cle: p.cle } : {},
       ...p.vieAutonome !== void 0 ? { vieAutonome: p.vieAutonome } : {},
@@ -39,9 +40,9 @@ function Lia(props) {
       ...p.entrees ? { entrees: () => derniere.current.entrees?.() ?? {} } : {},
       ...p.bounds ? { bounds: () => derniere.current.bounds?.() ?? { x: 0, y: 0, w: 0, h: 0 } } : {},
       ...p.ask ? {
-        ask: (q, signal) => {
+        ask: (q, signal, contexte, reglages) => {
           const ask = derniere.current.ask;
-          return ask ? ask(q, signal) : Promise.reject(new Error("LIA : ask retir\xE9"));
+          return ask ? ask(q, signal, contexte, reglages) : Promise.reject(new Error("LIA : ask retir\xE9"));
         }
       } : {},
       get actions() {

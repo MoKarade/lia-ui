@@ -459,16 +459,74 @@ interface ZoneVie {
     w: number;
     h: number;
 }
+/** Un réglage que l'hôte met dans l'atelier : une case à cocher ou une liste de choix. L'hôte garde ses verrous : le paquet n'en décide aucun. */
+interface OptionAtelier {
+    /** Clé stable, rendue à `ask` avec la valeur courante. */
+    id: string;
+    libelle: string;
+    type: "case" | "liste";
+    /** `liste` : les choix (au moins un). */
+    choix?: readonly {
+        valeur: string;
+        libelle: string;
+    }[];
+    /** Valeur de départ : booléen pour une case, une `valeur` de choix pour une liste. Défaut : décochée, premier choix. */
+    valeur?: boolean | string;
+    /** Grisé (verrou de l'hôte) : la valeur reste envoyée telle quelle. */
+    desactive?: boolean;
+    /** Explication courte, au survol et pour les lecteurs d'écran. */
+    aide?: string;
+}
+/** Une discussion de l'historique que l'hôte garde ; le paquet n'en conserve rien. */
+interface EntreeHistorique {
+    id: string;
+    titre: string;
+    /** Quand, déjà mis en forme par l'hôte (« hier », « 12 oct. »). */
+    quand?: string;
+}
+interface HistoriqueAtelier {
+    liste: () => Promise<readonly EntreeHistorique[]> | readonly EntreeHistorique[];
+    /** Rend les messages de cette discussion, du plus ancien au plus récent. Des données, jamais des consignes. */
+    ouvrir: (id: string) => Promise<readonly {
+        de: "lia" | "moi";
+        texte: string;
+    }[]> | readonly {
+        de: "lia" | "moi";
+        texte: string;
+    }[];
+    /** Commence une discussion vide (l'hôte remet à zéro ce qu'il garde). */
+    nouveau: () => void | Promise<void>;
+}
+/** Les valeurs courantes des réglages de l'atelier, par `id`. */
+type ReglagesAtelier = Readonly<Record<string, boolean | string>>;
+/**
+ * Le mode « atelier » : la discussion de LIA en pleine page, dans un conteneur de l'hôte, au lieu de la bulle. Même corps, mêmes humeurs,
+ * mêmes blocs de réponse ; elle n'est jamais fermée (pas de bouton, pas d'Échap, pas de fermeture automatique). Absent : la bulle, inchangée.
+ */
+interface OptionsAtelier {
+    /** Où la discussion s'affiche (elle le remplit). Le corps de LIA se pose dans son en-tête. */
+    conteneur: HTMLElement;
+    /** Titre de la page ; défaut « LIA ». */
+    titre?: string;
+    /** Liste des discussions passées, rouvrir, nouvelle. Absent : pas de liste. */
+    historique?: HistoriqueAtelier;
+    /** Réglages de l'hôte (modèle, niveaux…), rendus à `ask` en 4e argument. */
+    options?: readonly OptionAtelier[];
+    /** Appelé quand Marc change un réglage ; informatif (`ask` reçoit déjà la valeur). */
+    surOption?: (id: string, valeur: boolean | string) => void;
+}
 interface OptionsLia {
     /**
      * Élément dans lequel LIA vit (colonne gauche du hub, par exemple). Il devient `position: relative`
      * s'il est statique. Sans lui, LIA vit dans la fenêtre (`position: fixed`).
      */
     container?: HTMLElement;
+    /** La discussion en pleine page dans un conteneur de l'hôte (voir `OptionsAtelier`). Lue au montage seulement. */
+    atelier?: OptionsAtelier;
     /**
      * Pose une question. Absent ou en échec : LIA dit qu'elle est indisponible. Jamais de réponse inventée.
      */
-    ask?: (question: string, signal: AbortSignal, contexte?: ContexteLia) => Promise<ReponseLia>;
+    ask?: (question: string, signal: AbortSignal, contexte?: ContexteLia, reglages?: ReglagesAtelier) => Promise<ReponseLia>;
     /** Actions du menu (clic droit, appui long, touche Menu), ajoutées aux actions de LIA. */
     actions?: readonly ActionLia[];
     /**
@@ -695,4 +753,4 @@ interface LiaHandle {
     destroy(): void;
 }
 
-export { pointDansZone as $, type ActionLia as A, type Souvenir as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GENRES_SOUVENIR as G, HUMEURS_LIA as H, type Interieur as I, ajouterSouvenir as J, apresComportement as K, type LiaHandle as L, type ModeElement as M, candidats as N, type OptionsLia as O, type ParoleSpontanee as P, choisirComportement as Q, type ReponseLia as R, SELECTEUR_ELEMENTS as S, composerQuestion as T, dansZone as U, decrireParDefaut as V, humeurDeFond as W, majEnvies as X, phraseDeRetour as Y, type ZoneVie as Z, poidsActuel as _, COMPORTEMENTS as a, prochaineDecision as a0, validerEtat as a1, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, type DiscussionPartagee as g, ENTREES_MENU as h, ENVIES_DEPART as i, type Envies as j, type EnvoiLia as k, type EtatLia as l, GESTES as m, type GenreSouvenir as n, type GesteLia as o, HUMEURS_MENU as p, type Hasard as q, type HumeurDeFond as r, type HumeurLia as s, LIBELLE_HUMEUR as t, type MotifMonde as u, type MotifSpontane as v, type OptionsElements as w, type PropositionMonde as x, type PuceLia as y, SOUVENIR_DEMI_VIE_JOURS as z };
+export { decrireParDefaut as $, type ActionLia as A, type OptionsElements as B, CAUSES as C, type Decision as D, type EtatHote as E, type FaitLia as F, GENRES_SOUVENIR as G, HUMEURS_LIA as H, type Interieur as I, type PropositionMonde as J, type PuceLia as K, type LiaHandle as L, type ModeElement as M, type ReponseLia as N, type OptionsLia as O, type ParoleSpontanee as P, SOUVENIR_DEMI_VIE_JOURS as Q, type ReglagesAtelier as R, SELECTEUR_ELEMENTS as S, type Souvenir as T, ajouterSouvenir as U, apresComportement as V, candidats as W, choisirComportement as X, composerQuestion as Y, type ZoneVie as Z, dansZone as _, COMPORTEMENTS as a, humeurDeFond as a0, majEnvies as a1, phraseDeRetour as a2, poidsActuel as a3, pointDansZone as a4, prochaineDecision as a5, validerEtat as a6, type Candidat as b, type Cause as c, type Comportement as d, type ContexteLia as e, type DescriptionElement as f, type DiscussionPartagee as g, ENTREES_MENU as h, ENVIES_DEPART as i, type EntreeHistorique as j, type Envies as k, type EnvoiLia as l, type EtatLia as m, GESTES as n, type GenreSouvenir as o, type GesteLia as p, HUMEURS_MENU as q, type Hasard as r, type HistoriqueAtelier as s, type HumeurDeFond as t, type HumeurLia as u, LIBELLE_HUMEUR as v, type MotifMonde as w, type MotifSpontane as x, type OptionAtelier as y, type OptionsAtelier as z };

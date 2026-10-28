@@ -4218,6 +4218,31 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__geste:hover,.lia-ui__geste:focus-visible{color:var(--lia-text)}
 @keyframes lia-ui-entre{from{opacity:0;transform:translateY(6px)}}
 @media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__chat--glisse{transition:none}.lia-ui__jauge-barre{transition:none}.lia-ui__ombre{transition:none}}
+/* atelier : la discussion en pleine page dans un conteneur de l'h\xF4te (en flux normal, pas en couche fixe) */
+.lia-ui--atelier{position:relative;inset:auto;z-index:auto;pointer-events:auto;width:100%;height:100%;min-height:0;display:flex}
+.lia-ui__chat--atelier{position:relative;left:auto;top:auto;width:100%;max-width:none;height:100%;max-height:none;border-radius:20px;animation:none;display:grid;grid-template-columns:minmax(0,17rem) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"tete tete" "options options" "histo journal" "histo form"}
+.lia-ui__chat--atelier.lia-ui__chat--sans-historique{grid-template-columns:minmax(0,1fr);grid-template-areas:"tete" "options" "journal" "form"}
+.lia-ui__chat--atelier .lia-ui__journal{grid-area:journal;max-height:none;padding:1rem}
+.lia-ui__chat--atelier .lia-ui__journal:empty{display:block}
+.lia-ui__chat--atelier .lia-ui__form{grid-area:form;padding:.6rem}
+.lia-ui__atelier-tete{grid-area:tete;display:flex;align-items:center;gap:.8rem;padding:.6rem .9rem;border-bottom:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}
+.lia-ui__atelier-corps{flex:none}
+.lia-ui__atelier-titre{flex:1;margin:0;font-size:1.1rem;font-weight:600;color:var(--lia-text)}
+.lia-ui__atelier-nouvelle{min-height:44px;padding:0 1rem;border-radius:22px;border:1px solid var(--lia-border);background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;cursor:pointer}
+.lia-ui__atelier-nouvelle:hover{border-color:var(--lia-accent)}
+.lia-ui__atelier-options{grid-area:options;display:flex;flex-wrap:wrap;gap:.4rem .9rem;align-items:center;padding:.3rem .9rem;border-bottom:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}
+.lia-ui__atelier-reglage{min-height:44px;display:inline-flex;align-items:center;gap:.5rem;color:var(--lia-soft);font-size:.9rem;cursor:pointer}
+.lia-ui__atelier-reglage input[type=checkbox]{width:20px;height:20px;accent-color:var(--lia-accent)}
+.lia-ui__atelier-reglage select{min-height:44px;border-radius:12px;border:1px solid var(--lia-border);background:var(--lia-surface-2);color:var(--lia-text);font:inherit;font-size:16px;padding:0 .6rem}
+.lia-ui__atelier-reglage :disabled{opacity:.55;cursor:default}
+.lia-ui__atelier-historique{grid-area:histo;display:flex;flex-direction:column;gap:.2rem;overflow-y:auto;padding:.5rem;border-right:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}
+.lia-ui__atelier-entree{min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:.1rem;padding:.3rem .7rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.92rem;text-align:left;cursor:pointer}
+.lia-ui__atelier-entree:hover,.lia-ui__atelier-entree[aria-current=true]{background:color-mix(in srgb,var(--lia-text) 8%,transparent)}
+.lia-ui__atelier-entree:focus-visible,.lia-ui__atelier-nouvelle:focus-visible{outline:2px solid var(--lia-accent);outline-offset:2px}
+.lia-ui__atelier-entree-titre{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lia-ui__atelier-entree-quand{font-size:.78rem;color:var(--lia-soft)}
+.lia-ui__atelier-vide{margin:0;padding:.6rem .7rem;font-size:.9rem;color:var(--lia-soft)}
+@media (max-width:720px){.lia-ui__chat--atelier{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr) auto;grid-template-areas:"tete" "options" "histo" "journal" "form"}.lia-ui__chat--atelier.lia-ui__chat--sans-historique{grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"tete" "options" "journal" "form"}.lia-ui__atelier-historique{max-height:9rem;border-right:0;border-bottom:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}}
 `;
 
 // src/lia.ts
@@ -4572,6 +4597,12 @@ function mountLia(options = {}) {
     return b;
   }
   let chat = null;
+  const atelier = options.atelier;
+  let atelierRacine = null;
+  let atelierCorps = null;
+  let atelierListe = null;
+  let atelierOuverte = null;
+  const reglages = {};
   let journal = null;
   let champ = null;
   let envoyer = null;
@@ -4582,7 +4613,7 @@ function mountLia(options = {}) {
   const trace = [];
   let quandDiscussion = 0;
   let discussionEtat;
-  const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur, quand = Date.now()) => {
+  const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur && !atelier, quand = Date.now()) => {
     activiteChat = t;
     if (garder3) {
       trace.push({ de: de2, texte });
@@ -4722,7 +4753,7 @@ function mountLia(options = {}) {
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
-      const rep = await options.ask(envoi, ctrl.signal, contexteLia());
+      const rep = await (atelier ? options.ask(envoi, ctrl.signal, contexteLia(), { ...reglages }) : options.ask(envoi, ctrl.signal, contexteLia()));
       if (ctrl.signal.aborted || detruit) return;
       montrerReflexion(false);
       const m = ajouterMsg(rep.text, "lia");
@@ -4755,6 +4786,7 @@ function mountLia(options = {}) {
       if (enCours === ctrl) enCours = null;
       if (envoyer) envoyer.disabled = false;
       champ?.focus();
+      if (atelier?.historique) void rafraichirHistorique();
     }
   };
   const zoneVisible = () => {
@@ -4899,6 +4931,155 @@ function mountLia(options = {}) {
     const c = couche.getBoundingClientRect();
     return r.width > 0 && r.height > 0 ? { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height } : null;
   };
+  const messagesValides = (liste) => Array.isArray(liste) ? liste.filter((m) => !!m && (m.de === "lia" || m.de === "moi") && typeof m.texte === "string") : [];
+  const repartirDiscussion = () => {
+    enCours?.abort();
+    enCours = null;
+    journal?.replaceChildren();
+    if (envoyer) envoyer.disabled = false;
+    montrerReflexion(false);
+  };
+  const marquerOuverte = () => {
+    for (const b of atelierListe?.querySelectorAll("[data-id]") ?? []) {
+      if (b.dataset.id === atelierOuverte) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
+    }
+  };
+  async function rafraichirHistorique() {
+    const h = atelier?.historique;
+    if (!h || !atelierListe) return;
+    let entrees;
+    try {
+      entrees = await h.liste();
+    } catch (e) {
+      console.error("LIA : la liste de l'historique n'a pas pu \xEAtre lue", e);
+      atelierListe?.replaceChildren(el("p", "lia-ui__atelier-vide", "L'historique n'est pas disponible pour le moment."));
+      return;
+    }
+    if (detruit || !atelierListe) return;
+    if (!entrees.length) {
+      atelierListe.replaceChildren(el("p", "lia-ui__atelier-vide", "Aucune discussion pour le moment."));
+      return;
+    }
+    atelierListe.replaceChildren(
+      ...entrees.map((x) => {
+        const b = el("button", "lia-ui__atelier-entree");
+        b.type = "button";
+        b.dataset.id = x.id;
+        b.append(el("span", "lia-ui__atelier-entree-titre", nettoyer(x.titre, 80)));
+        if (x.quand) b.append(el("span", "lia-ui__atelier-entree-quand", nettoyer(x.quand, 30)));
+        b.addEventListener("click", () => void ouvrirHistorique(x.id));
+        return b;
+      })
+    );
+    marquerOuverte();
+  }
+  async function ouvrirHistorique(id) {
+    const h = atelier?.historique;
+    if (!h) return;
+    try {
+      const msgs = messagesValides(await h.ouvrir(id));
+      if (detruit || !journal) return;
+      repartirDiscussion();
+      for (const m of msgs) ajouterMsg(m.texte, m.de, false, false);
+      atelierOuverte = id;
+      marquerOuverte();
+      champ?.focus();
+    } catch (e) {
+      console.error("LIA : la discussion n'a pas pu \xEAtre rouverte", e);
+      ajouterMsg("Je n'ai pas pu rouvrir cette discussion.", "lia", true);
+    }
+  }
+  const nouvelleDiscussion = async () => {
+    const h = atelier?.historique;
+    if (!h) return;
+    try {
+      await h.nouveau();
+      if (detruit || !journal) return;
+      repartirDiscussion();
+      atelierOuverte = null;
+      marquerOuverte();
+      void rafraichirHistorique();
+      champ?.focus();
+    } catch (e) {
+      console.error("LIA : la nouvelle discussion n'a pas pu commencer", e);
+      ajouterMsg("Je n'ai pas pu commencer une nouvelle discussion.", "lia", true);
+    }
+  };
+  const reglageAtelier = (o, surOption) => {
+    const nom = el("span", "lia-ui__atelier-reglage-nom", o.libelle);
+    const champReglage = o.type === "case" ? el("input") : el("select");
+    const etiquette = el("label", "lia-ui__atelier-reglage");
+    if (o.aide) etiquette.title = o.aide;
+    if (champReglage instanceof HTMLInputElement) {
+      champReglage.type = "checkbox";
+      champReglage.checked = o.valeur === true;
+      reglages[o.id] = champReglage.checked;
+      champReglage.addEventListener("change", () => {
+        reglages[o.id] = champReglage.checked;
+        surOption?.(o.id, champReglage.checked);
+      });
+      etiquette.append(champReglage, nom);
+    } else {
+      for (const c of o.choix ?? []) {
+        const opt = el("option", void 0, c.libelle);
+        opt.value = c.valeur;
+        champReglage.appendChild(opt);
+      }
+      const depart = typeof o.valeur === "string" && (o.choix ?? []).some((c) => c.valeur === o.valeur) ? o.valeur : o.choix?.[0]?.valeur ?? "";
+      champReglage.value = depart;
+      reglages[o.id] = depart;
+      champReglage.addEventListener("change", () => {
+        reglages[o.id] = champReglage.value;
+        surOption?.(o.id, champReglage.value);
+      });
+      etiquette.append(nom, champReglage);
+    }
+    champReglage.disabled = o.desactive === true;
+    if (o.aide) champReglage.setAttribute("aria-label", `${o.libelle} : ${o.aide}`);
+    return etiquette;
+  };
+  const montrerAtelier = (at, boite) => {
+    const racine = el("div", "lia-ui lia-ui--atelier");
+    racine.setAttribute("data-lia-ignorer", "");
+    atelierRacine = racine;
+    const tete = el("div", "lia-ui__atelier-tete");
+    atelierCorps = el("div", "lia-ui__atelier-corps");
+    atelierCorps.setAttribute("aria-hidden", "true");
+    atelierCorps.style.width = atelierCorps.style.height = `${Math.round(rayonBase * 2)}px`;
+    tete.append(atelierCorps, el("h2", "lia-ui__atelier-titre", at.titre ?? "LIA"));
+    if (at.historique) {
+      const nouveau = el("button", "lia-ui__atelier-nouvelle", "Nouvelle discussion");
+      nouveau.type = "button";
+      nouveau.addEventListener("click", () => void nouvelleDiscussion());
+      tete.appendChild(nouveau);
+    }
+    boite.prepend(tete);
+    if (at.options?.length) {
+      const barre = el("div", "lia-ui__atelier-options");
+      barre.setAttribute("role", "group");
+      barre.setAttribute("aria-label", "R\xE9glages de la discussion");
+      for (const o of at.options) barre.appendChild(reglageAtelier(o, at.surOption));
+      tete.after(barre);
+    }
+    if (at.historique) {
+      atelierListe = el("nav", "lia-ui__atelier-historique");
+      atelierListe.setAttribute("aria-label", "Discussions pass\xE9es");
+      boite.appendChild(atelierListe);
+      void rafraichirHistorique();
+    } else boite.classList.add("lia-ui__chat--sans-historique");
+    racine.appendChild(boite);
+    at.conteneur.appendChild(racine);
+  };
+  const placerCorpsAtelier = () => {
+    if (!atelierCorps) return;
+    const s = atelierCorps.getBoundingClientRect();
+    const c = couche.getBoundingClientRect();
+    if (s.width === 0 && s.height === 0) return;
+    pos.x = cible.x = s.left + s.width / 2 - c.left;
+    pos.y = cible.y = s.top + s.height / 2 - c.top;
+    pos.vx = pos.vy = 0;
+  };
   const ouvrirChat = () => {
     if (detruit || chatOuvert) return;
     reveiller();
@@ -4907,10 +5088,10 @@ function mountLia(options = {}) {
     derniereFocus = document.activeElement;
     chatOuvert = true;
     activiteChat = t;
-    ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand: quandDiscussion });
-    chat = el("div", "lia-ui__chat");
-    chat.setAttribute("role", "dialog");
-    chat.setAttribute("aria-label", "Discussion avec LIA");
+    if (!atelier) ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand: quandDiscussion });
+    chat = el("div", atelier ? "lia-ui__chat lia-ui__chat--atelier" : "lia-ui__chat");
+    chat.setAttribute("role", atelier ? "region" : "dialog");
+    chat.setAttribute("aria-label", atelier ? atelier.titre ?? "Atelier avec LIA" : "Discussion avec LIA");
     journal = el("div", "lia-ui__journal");
     journal.setAttribute("role", "log");
     journal.setAttribute("aria-live", "polite");
@@ -4933,7 +5114,8 @@ function mountLia(options = {}) {
     fermer.setAttribute("aria-label", "Fermer la discussion");
     fermer.appendChild(icone(ICONE_FERMER));
     fermer.addEventListener("click", fermerChat);
-    form.append(champ, envoyer, fermer);
+    form.append(champ, envoyer);
+    if (!atelier) form.append(fermer);
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const q = champ?.value.trim() ?? "";
@@ -4953,7 +5135,7 @@ function mountLia(options = {}) {
     chat.append(journal, form);
     for (const evenement of ["keydown", "input", "pointerdown", "focusin"]) chat.addEventListener(evenement, () => activiteChat = t);
     chat.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !atelier) {
         e.stopPropagation();
         fermerChat();
       }
@@ -4966,14 +5148,17 @@ function mountLia(options = {}) {
       },
       { passive: true }
     );
-    couche.appendChild(chat);
-    const zOuverture = zoneVisible();
-    cleChat = cleDePlace(zOuverture);
-    chatTaille = false;
-    assise = null;
-    placerAutour(chat, zOuverture);
-    chat.classList.add("lia-ui__chat--glisse");
-    installerSuiviChat(chat);
+    if (atelier) montrerAtelier(atelier, chat);
+    else {
+      couche.appendChild(chat);
+      const zOuverture = zoneVisible();
+      cleChat = cleDePlace(zOuverture);
+      chatTaille = false;
+      assise = null;
+      placerAutour(chat, zOuverture);
+      chat.classList.add("lia-ui__chat--glisse");
+      installerSuiviChat(chat);
+    }
     choisir3("ecoute");
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
@@ -4982,7 +5167,7 @@ function mountLia(options = {}) {
     champ.focus();
   };
   function fermerChat() {
-    if (!chatOuvert) return;
+    if (!chatOuvert || atelier && !detruit) return;
     enCours?.abort();
     enCours = null;
     finSuiviChat?.();
@@ -4990,11 +5175,13 @@ function mountLia(options = {}) {
     revelation?.cancel();
     revelation = null;
     chat?.remove();
+    atelierRacine?.remove();
+    atelierRacine = atelierCorps = atelierListe = null;
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
     trace.length = 0;
     quandDiscussion = 0;
-    ecrireDiscussion(cle, null);
+    if (!atelier) ecrireDiscussion(cle, null);
     discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
     contexteQuestion = null;
     cesserDeReperer();
@@ -6245,7 +6432,7 @@ function mountLia(options = {}) {
   let reprisTentee = false;
   const rapprocherDiscussion = (d, premiere) => {
     const x = d?.discussion;
-    if (!x || detruit) return;
+    if (!x || detruit || atelier) return;
     discussionDistante = x;
     if (x.quand <= (discussionEtat?.quand ?? 0)) return;
     if (trace.length === 0) discussionEtat = x;
@@ -6613,7 +6800,8 @@ function mountLia(options = {}) {
       bulle.style.left = `${limiter3(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
-    if (chat) suivreChat();
+    if (atelier) placerCorpsAtelier();
+    else if (chat) suivreChat();
     majRepere();
     majEssaim(dt);
   };
@@ -6779,12 +6967,14 @@ function mountLia(options = {}) {
       document.removeEventListener("visibilitychange", surVisibilite);
       window.removeEventListener("offline", surReseauCoupe);
       window.removeEventListener("online", surReseauRetabli);
+      atelierRacine?.remove();
       couche.remove();
       actif = null;
     }
   };
   actif = poignee;
-  const avant = lireDiscussion(cle);
+  const avant = atelier ? null : lireDiscussion(cle);
+  if (atelier) ouvrirChat();
   if (avant) {
     quandDiscussion = avant.quand;
     ouvrirChat();
@@ -6828,4 +7018,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-RT7AEITA.mjs.map
+//# sourceMappingURL=chunk-R3KXOR2H.mjs.map

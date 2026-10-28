@@ -90,4 +90,29 @@ position:fixed;inset:0;z-index:2147483000;pointer-events:none;font-family:inheri
 .lia-ui__geste:hover,.lia-ui__geste:focus-visible{color:var(--lia-text)}
 @keyframes lia-ui-entre{from{opacity:0;transform:translateY(6px)}}
 @media (prefers-reduced-motion:reduce){.lia-ui__points i,.lia-ui__chat,.lia-ui__msg{animation:none}.lia-ui__chat--glisse{transition:none}.lia-ui__jauge-barre{transition:none}.lia-ui__ombre{transition:none}}
+/* atelier : la discussion en pleine page dans un conteneur de l'hôte (en flux normal, pas en couche fixe) */
+.lia-ui--atelier{position:relative;inset:auto;z-index:auto;pointer-events:auto;width:100%;height:100%;min-height:0;display:flex}
+.lia-ui__chat--atelier{position:relative;left:auto;top:auto;width:100%;max-width:none;height:100%;max-height:none;border-radius:20px;animation:none;display:grid;grid-template-columns:minmax(0,17rem) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"tete tete" "options options" "histo journal" "histo form"}
+.lia-ui__chat--atelier.lia-ui__chat--sans-historique{grid-template-columns:minmax(0,1fr);grid-template-areas:"tete" "options" "journal" "form"}
+.lia-ui__chat--atelier .lia-ui__journal{grid-area:journal;max-height:none;padding:1rem}
+.lia-ui__chat--atelier .lia-ui__journal:empty{display:block}
+.lia-ui__chat--atelier .lia-ui__form{grid-area:form;padding:.6rem}
+.lia-ui__atelier-tete{grid-area:tete;display:flex;align-items:center;gap:.8rem;padding:.6rem .9rem;border-bottom:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}
+.lia-ui__atelier-corps{flex:none}
+.lia-ui__atelier-titre{flex:1;margin:0;font-size:1.1rem;font-weight:600;color:var(--lia-text)}
+.lia-ui__atelier-nouvelle{min-height:44px;padding:0 1rem;border-radius:22px;border:1px solid var(--lia-border);background:transparent;color:var(--lia-text);font:inherit;font-size:.95rem;cursor:pointer}
+.lia-ui__atelier-nouvelle:hover{border-color:var(--lia-accent)}
+.lia-ui__atelier-options{grid-area:options;display:flex;flex-wrap:wrap;gap:.4rem .9rem;align-items:center;padding:.3rem .9rem;border-bottom:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}
+.lia-ui__atelier-reglage{min-height:44px;display:inline-flex;align-items:center;gap:.5rem;color:var(--lia-soft);font-size:.9rem;cursor:pointer}
+.lia-ui__atelier-reglage input[type=checkbox]{width:20px;height:20px;accent-color:var(--lia-accent)}
+.lia-ui__atelier-reglage select{min-height:44px;border-radius:12px;border:1px solid var(--lia-border);background:var(--lia-surface-2);color:var(--lia-text);font:inherit;font-size:16px;padding:0 .6rem}
+.lia-ui__atelier-reglage :disabled{opacity:.55;cursor:default}
+.lia-ui__atelier-historique{grid-area:histo;display:flex;flex-direction:column;gap:.2rem;overflow-y:auto;padding:.5rem;border-right:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}
+.lia-ui__atelier-entree{min-height:44px;display:flex;flex-direction:column;justify-content:center;gap:.1rem;padding:.3rem .7rem;border:0;border-radius:12px;background:transparent;color:var(--lia-text);font:inherit;font-size:.92rem;text-align:left;cursor:pointer}
+.lia-ui__atelier-entree:hover,.lia-ui__atelier-entree[aria-current=true]{background:color-mix(in srgb,var(--lia-text) 8%,transparent)}
+.lia-ui__atelier-entree:focus-visible,.lia-ui__atelier-nouvelle:focus-visible{outline:2px solid var(--lia-accent);outline-offset:2px}
+.lia-ui__atelier-entree-titre{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lia-ui__atelier-entree-quand{font-size:.78rem;color:var(--lia-soft)}
+.lia-ui__atelier-vide{margin:0;padding:.6rem .7rem;font-size:.9rem;color:var(--lia-soft)}
+@media (max-width:720px){.lia-ui__chat--atelier{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr) auto;grid-template-areas:"tete" "options" "histo" "journal" "form"}.lia-ui__chat--atelier.lia-ui__chat--sans-historique{grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"tete" "options" "journal" "form"}.lia-ui__atelier-historique{max-height:9rem;border-right:0;border-bottom:1px solid color-mix(in srgb,var(--lia-border) 50%,transparent)}}
 `;
