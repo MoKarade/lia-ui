@@ -1481,10 +1481,10 @@ function validerEtat(brut2) {
   const { jour, n } = relances;
   if (typeof jour !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(jour)) return null;
   if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 100) return null;
-  const propre2 = {};
+  const propre3 = {};
   if (typeof lente === "object" && lente !== null) {
     for (const [k, v] of Object.entries(lente).slice(0, LENTE_MAX)) {
-      if (/^[A-Za-z0-9_-]{1,40}$/.test(k) && estFraction(v)) propre2[k] = v;
+      if (/^[A-Za-z0-9_-]{1,40}$/.test(k) && estFraction(v)) propre3[k] = v;
     }
   }
   const faits = [];
@@ -1504,7 +1504,7 @@ function validerEtat(brut2) {
     maj,
     envies: enviesPropres,
     journal: faits.slice(-JOURNAL_MAX),
-    lente: propre2,
+    lente: propre3,
     humeur: humeur2,
     relances: { jour, n },
     ...interieur ? { interieur } : {},
@@ -3544,20 +3544,125 @@ function totalVoix() {
   return TOTAL;
 }
 
+// src/barres.ts
+var BARRES_NATIVES = "progress, meter, [role='progressbar'], [role='meter']";
+var MARQUES_EN_LIGNE = "[style*='%']";
+var LIGNES = "li, tr, [role='listitem'], [role='row']";
+var LISTES = "ol, ul, table, [role='list'], [role='table'], [role='grid']";
+var PAS_UNE_BARRE = "img, svg, canvas, picture, video, input, textarea, select, hr, br, iframe";
+var MAX_LIGNES = 14;
+var MAX_LIBELLE_VISEE = 120;
+var MAX_LIBELLE = 70;
+var MAX_TOTAL = 1100;
+function propre(brut2, max) {
+  const t = (brut2 ?? "").replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}\u2026` : t;
+}
+function pourcentageEnLigne(e) {
+  const style = e.style;
+  if (!style) return void 0;
+  for (const brut2 of [style.width, style.height]) {
+    const m = /^(\d+(?:\.\d+)?)%$/.exec((brut2 ?? "").trim());
+    if (m) return `${Number(m[1])} %`;
+  }
+  return void 0;
+}
+function nombre(brut2) {
+  if (brut2 === null || brut2.trim() === "") return void 0;
+  const n = Number(brut2);
+  return Number.isFinite(n) ? n : void 0;
+}
+function pourcentageNatif(e) {
+  const tag = e.tagName.toLowerCase();
+  const valeur = tag === "progress" || tag === "meter" ? nombre(e.getAttribute("value")) : nombre(e.getAttribute("aria-valuenow"));
+  if (valeur === void 0) return void 0;
+  const vide = tag === "meter" ? nombre(e.getAttribute("min")) ?? 0 : tag === "progress" ? 0 : nombre(e.getAttribute("aria-valuemin")) ?? 0;
+  const plein = tag === "meter" ? nombre(e.getAttribute("max")) ?? 1 : tag === "progress" ? nombre(e.getAttribute("max")) ?? 1 : nombre(e.getAttribute("aria-valuemax")) ?? 100;
+  if (plein <= vide) return void 0;
+  const part = Math.min(100, Math.max(0, (valeur - vide) / (plein - vide) * 100));
+  return `${Math.round(part)} %`;
+}
+function proportion(e) {
+  if (e.matches(PAS_UNE_BARRE)) return void 0;
+  if (e.matches(BARRES_NATIVES)) return pourcentageNatif(e);
+  if (e.children.length > 0 || (e.textContent ?? "").trim() !== "") return void 0;
+  return pourcentageEnLigne(e);
+}
+function estBarre(e) {
+  return proportion(e) !== void 0;
+}
+function barresDe(racine) {
+  const trouvees = [...racine.querySelectorAll(`${BARRES_NATIVES}, ${MARQUES_EN_LIGNE}`)];
+  if (racine.matches(`${BARRES_NATIVES}, ${MARQUES_EN_LIGNE}`)) trouvees.unshift(racine);
+  return trouvees.filter(estBarre);
+}
+function morceaux(racine) {
+  const ecrits = [];
+  const marche = racine.ownerDocument.createTreeWalker(
+    racine,
+    4
+    /* NodeFilter.SHOW_TEXT */
+  );
+  for (let n = marche.nextNode(); n; n = marche.nextNode()) ecrits.push(n.textContent ?? "");
+  return ecrits.join(" ");
+}
+function texteDe(ligne, max) {
+  const visible = ligne.innerText;
+  return propre(typeof visible === "string" ? visible : morceaux(ligne), max);
+}
+function ligneDe(barre) {
+  return barre.closest(LIGNES) ?? barre.parentElement;
+}
+function lireBarres(cible) {
+  const vise = estBarre(cible) ? ligneDe(cible) : cible.closest(LIGNES) ?? cible;
+  if (!vise) return void 0;
+  const conteneur = vise.closest(LISTES) ?? vise.parentElement;
+  if (!conteneur) return void 0;
+  const lignes = [];
+  for (const barre of barresDe(conteneur)) {
+    const el2 = ligneDe(barre);
+    const p = proportion(barre);
+    if (!el2 || p === void 0) continue;
+    const deja = lignes.find((l) => l.el === el2);
+    if (deja) deja.barres.push(p);
+    else lignes.push({ el: el2, barres: [p] });
+  }
+  if (lignes.length === 0) return void 0;
+  const dit = (l, max) => {
+    const libelle = texteDe(l.el, max);
+    const forme = l.barres.length === 1 ? `barre de ${l.barres[0]} de largeur` : `barres de ${l.barres.join(", ")}`;
+    return `\xAB ${libelle === "" ? "sans texte" : libelle} \xBB : ${forme}`;
+  };
+  const visee = lignes.find((l) => l.el === vise || l.el.contains(vise));
+  const autres = lignes.filter((l) => l !== visee);
+  const tete = "Lu dans les barres de la page (la largeur d'une barre est une proportion dessin\xE9e, pas la valeur mesur\xE9e : la valeur est dans le texte de sa ligne ; ne rien calculer ni deviner) \u2014";
+  const debut = `${tete}${visee ? ` ligne vis\xE9e ${dit(visee, MAX_LIBELLE_VISEE)} ;` : ""} ${visee ? "autres lignes" : "lignes"} :`;
+  const listees = [];
+  for (const l of autres) {
+    if (listees.length >= MAX_LIGNES) break;
+    const bout = dit(l, MAX_LIBELLE);
+    if (debut.length + listees.join(" | ").length + bout.length + 4 > MAX_TOTAL) break;
+    listees.push(bout);
+  }
+  const reste = autres.length - listees.length;
+  const suite = reste > 0 ? [...listees, `\u2026 et ${reste} ligne${reste > 1 ? "s" : ""} de plus`] : listees;
+  return `${debut}${suite.length > 0 ? ` ${suite.join(" | ")}` : " aucune"}.`;
+}
+
 // src/graphique.ts
 function svgDe(cible) {
   const dedans = cible.closest("svg");
   if (dedans) return dedans;
   return cible.matches("figure, [class*='chart'], [class*='graph'], [class*='recharts']") ? cible.querySelector("svg") : null;
 }
-function propre(brut2, max) {
+function propre2(brut2, max) {
   const t = (brut2 ?? "").replace(/\s+/g, " ").trim();
   return t.length > max ? `${t.slice(0, max - 1).trimEnd()}\u2026` : t;
 }
 function distincts(els, lire, n, max) {
   const vus = /* @__PURE__ */ new Set();
   for (const e of els) {
-    const t = propre(lire(e), max);
+    const t = propre2(lire(e), max);
     if (t !== "" && !vus.has(t)) vus.add(t);
     if (vus.size >= n) break;
   }
@@ -3567,7 +3672,7 @@ function lireGraphique(cible) {
   const svg = svgDe(cible);
   if (!svg) return void 0;
   const racine = svg.closest(".recharts-wrapper, figure") ?? svg;
-  const nom = propre(
+  const nom = propre2(
     svg.getAttribute("aria-label") ?? svg.querySelector(":scope > title")?.textContent ?? racine.querySelector("figcaption")?.textContent,
     120
   );
@@ -3682,7 +3787,7 @@ function genreParDefaut(cible) {
 function decrireParDefaut(cible) {
   const genre = cible.getAttribute("data-lia-genre") ?? genreParDefaut(cible);
   const nom = cible.closest("[data-lia-app]")?.getAttribute("data-lia-app") ?? cible.parentElement?.closest("[data-lia-genre]")?.getAttribute("data-lia-genre") ?? void 0;
-  const donnees = cible.closest("[data-lia-donnees]")?.getAttribute("data-lia-donnees") ?? lireGraphique(cible);
+  const donnees = cible.closest("[data-lia-donnees]")?.getAttribute("data-lia-donnees") ?? lireGraphique(cible) ?? lireBarres(cible);
   const visible = cible.innerText;
   const brut2 = typeof visible === "string" ? visible : cible.textContent ?? "";
   const texte = brut2.trim() ? brut2 : libelleAccessible(cible);
@@ -3724,6 +3829,7 @@ function elementVise(cible, selecteur, couche, racine = document) {
       return svg ? partieNommeeDuGraphique(cible, svg) : media;
     }
     if (dedans && estMarqueVide(cible)) return dedans;
+    if (estBarre(cible)) return cible.parentElement?.closest(LIGNES) ?? cible;
     return cible;
   } catch {
     return cible;
@@ -4118,9 +4224,9 @@ function lireLente(cle) {
     if (typeof j !== "object" || j === null) return null;
     const { t, slow } = j;
     if (!Number.isFinite(t) || typeof slow !== "object" || slow === null) return null;
-    const propre2 = {};
-    for (const [k, v] of Object.entries(slow)) if (estFraction2(v)) propre2[k] = v;
-    return { t, slow: propre2 };
+    const propre3 = {};
+    for (const [k, v] of Object.entries(slow)) if (estFraction2(v)) propre3[k] = v;
+    return { t, slow: propre3 };
   } catch {
     return null;
   }
