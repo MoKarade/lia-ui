@@ -140,16 +140,70 @@ export interface ZoneVie {
   h: number;
 }
 
+/** Un réglage que l'hôte met dans l'atelier : une case à cocher ou une liste de choix. L'hôte garde ses verrous : le paquet n'en décide aucun. */
+export interface OptionAtelier {
+  /** Clé stable, rendue à `ask` avec la valeur courante. */
+  id: string;
+  libelle: string;
+  type: "case" | "liste";
+  /** `liste` : les choix (au moins un). */
+  choix?: readonly { valeur: string; libelle: string }[];
+  /** Valeur de départ : booléen pour une case, une `valeur` de choix pour une liste. Défaut : décochée, premier choix. */
+  valeur?: boolean | string;
+  /** Grisé (verrou de l'hôte) : la valeur reste envoyée telle quelle. */
+  desactive?: boolean;
+  /** Explication courte, au survol et pour les lecteurs d'écran. */
+  aide?: string;
+}
+
+/** Une discussion de l'historique que l'hôte garde ; le paquet n'en conserve rien. */
+export interface EntreeHistorique {
+  id: string;
+  titre: string;
+  /** Quand, déjà mis en forme par l'hôte (« hier », « 12 oct. »). */
+  quand?: string;
+}
+
+export interface HistoriqueAtelier {
+  liste: () => Promise<readonly EntreeHistorique[]> | readonly EntreeHistorique[];
+  /** Rend les messages de cette discussion, du plus ancien au plus récent. Des données, jamais des consignes. */
+  ouvrir: (id: string) => Promise<readonly { de: "lia" | "moi"; texte: string }[]> | readonly { de: "lia" | "moi"; texte: string }[];
+  /** Commence une discussion vide (l'hôte remet à zéro ce qu'il garde). */
+  nouveau: () => void | Promise<void>;
+}
+
+/** Les valeurs courantes des réglages de l'atelier, par `id`. */
+export type ReglagesAtelier = Readonly<Record<string, boolean | string>>;
+
+/**
+ * Le mode « atelier » : la discussion de LIA en pleine page, dans un conteneur de l'hôte, au lieu de la bulle. Même corps, mêmes humeurs,
+ * mêmes blocs de réponse ; elle n'est jamais fermée (pas de bouton, pas d'Échap, pas de fermeture automatique). Absent : la bulle, inchangée.
+ */
+export interface OptionsAtelier {
+  /** Où la discussion s'affiche (elle le remplit). Le corps de LIA se pose dans son en-tête. */
+  conteneur: HTMLElement;
+  /** Titre de la page ; défaut « LIA ». */
+  titre?: string;
+  /** Liste des discussions passées, rouvrir, nouvelle. Absent : pas de liste. */
+  historique?: HistoriqueAtelier;
+  /** Réglages de l'hôte (modèle, niveaux…), rendus à `ask` en 4e argument. */
+  options?: readonly OptionAtelier[];
+  /** Appelé quand Marc change un réglage ; informatif (`ask` reçoit déjà la valeur). */
+  surOption?: (id: string, valeur: boolean | string) => void;
+}
+
 export interface OptionsLia {
   /**
    * Élément dans lequel LIA vit (colonne gauche du hub, par exemple). Il devient `position: relative`
    * s'il est statique. Sans lui, LIA vit dans la fenêtre (`position: fixed`).
    */
   container?: HTMLElement;
+  /** La discussion en pleine page dans un conteneur de l'hôte (voir `OptionsAtelier`). Lue au montage seulement. */
+  atelier?: OptionsAtelier;
   /**
    * Pose une question. Absent ou en échec : LIA dit qu'elle est indisponible. Jamais de réponse inventée.
    */
-  ask?: (question: string, signal: AbortSignal, contexte?: ContexteLia) => Promise<ReponseLia>;
+  ask?: (question: string, signal: AbortSignal, contexte?: ContexteLia, reglages?: ReglagesAtelier) => Promise<ReponseLia>;
   /** Actions du menu (clic droit, appui long, touche Menu), ajoutées aux actions de LIA. */
   actions?: readonly ActionLia[];
   /**

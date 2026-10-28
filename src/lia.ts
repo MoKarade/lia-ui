@@ -90,13 +90,17 @@ import {
   type EnvoiLia,
   type ContexteLia,
   type DescriptionElement,
+  type EntreeHistorique,
   type HumeurLia,
   type LiaHandle,
   type MotifSpontane,
+  type OptionAtelier,
+  type OptionsAtelier,
   type OptionsLia,
   type ParoleSpontanee,
   type PropositionMonde,
   type PuceLia,
+  type ReglagesAtelier,
   type ReponseLia,
   type ZoneVie,
 } from "./types.js";
@@ -535,6 +539,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /* ── discussion ── */
   let chat: HTMLElement | null = null;
+  /** Mode atelier : la discussion est en pleine page dans un conteneur de l'hôte, jamais fermée, sans état partagé écrit. */
+  const atelier = options.atelier;
+  let atelierRacine: HTMLElement | null = null;
+  let atelierCorps: HTMLElement | null = null;
+  let atelierListe: HTMLElement | null = null;
+  let atelierOuverte: string | null = null;
+  /** Les réglages de l'hôte, rendus à `ask` à chaque question. */
+  const reglages: Record<string, boolean | string> = {};
   let journal: HTMLElement | null = null;
   let champ: HTMLInputElement | null = null;
   let envoyer: HTMLButtonElement | null = null;
@@ -551,7 +563,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   /** La fin de la discussion, telle que l'état partagé la porte (v0.39.0) : elle suit Marc d'une app à l'autre. Une page qui n'y touche pas renvoie celle qu'elle a lue. */
   let discussionEtat: DiscussionPartagee | undefined;
   /** `quand` : l'instant réel de la parole, pour une discussion rouverte (onglet ou état partagé) ; sans lui, c'est une parole d'à l'instant. */
-  const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur, quand = Date.now()): HTMLElement => {
+  const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur && !atelier, quand = Date.now()): HTMLElement => {
     activiteChat = t;
     if (garder) {
       trace.push({ de, texte });
@@ -708,7 +720,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     montrerReflexion(true);
     if (envoyer) envoyer.disabled = true;
     try {
-      const rep: ReponseLia = await options.ask(envoi, ctrl.signal, contexteLia());
+      const rep: ReponseLia = await (atelier ? options.ask(envoi, ctrl.signal, contexteLia(), { ...reglages }) : options.ask(envoi, ctrl.signal, contexteLia()));
       if (ctrl.signal.aborted || detruit) return;
       montrerReflexion(false);
       const m = ajouterMsg(rep.text, "lia");
@@ -742,6 +754,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (enCours === ctrl) enCours = null;
       if (envoyer) envoyer.disabled = false;
       champ?.focus();
+      if (atelier?.historique) void rafraichirHistorique();
     }
   };
 
@@ -917,6 +930,165 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     return r.width > 0 && r.height > 0 ? { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height } : null;
   };
 
+  /* ── atelier : la discussion en pleine page (lia-ui#146) ── */
+  /** Les messages de l'hôte sont des données : seuls `lia` et `moi` avec un texte sont montrés. */
+  const messagesValides = (liste: unknown): Array<{ de: "lia" | "moi"; texte: string }> =>
+    Array.isArray(liste)
+      ? liste.filter((m): m is { de: "lia" | "moi"; texte: string } => !!m && (m.de === "lia" || m.de === "moi") && typeof m.texte === "string")
+      : [];
+  const repartirDiscussion = (): void => {
+    enCours?.abort();
+    enCours = null;
+    journal?.replaceChildren();
+    if (envoyer) envoyer.disabled = false;
+    montrerReflexion(false);
+  };
+  const marquerOuverte = (): void => {
+    for (const b of atelierListe?.querySelectorAll<HTMLElement>("[data-id]") ?? []) {
+      if (b.dataset.id === atelierOuverte) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
+    }
+  };
+  async function rafraichirHistorique(): Promise<void> {
+    const h = atelier?.historique;
+    if (!h || !atelierListe) return;
+    let entrees: readonly EntreeHistorique[];
+    try {
+      entrees = await h.liste();
+    } catch (e) {
+      console.error("LIA : la liste de l'historique n'a pas pu être lue", e);
+      atelierListe?.replaceChildren(el("p", "lia-ui__atelier-vide", "L'historique n'est pas disponible pour le moment."));
+      return;
+    }
+    if (detruit || !atelierListe) return;
+    if (!entrees.length) {
+      atelierListe.replaceChildren(el("p", "lia-ui__atelier-vide", "Aucune discussion pour le moment."));
+      return;
+    }
+    atelierListe.replaceChildren(
+      ...entrees.map((x) => {
+        const b = el("button", "lia-ui__atelier-entree");
+        b.type = "button";
+        b.dataset.id = x.id;
+        b.append(el("span", "lia-ui__atelier-entree-titre", nettoyer(x.titre, 80)));
+        if (x.quand) b.append(el("span", "lia-ui__atelier-entree-quand", nettoyer(x.quand, 30)));
+        b.addEventListener("click", () => void ouvrirHistorique(x.id));
+        return b;
+      }),
+    );
+    marquerOuverte();
+  }
+  async function ouvrirHistorique(id: string): Promise<void> {
+    const h = atelier?.historique;
+    if (!h) return;
+    try {
+      const msgs = messagesValides(await h.ouvrir(id));
+      if (detruit || !journal) return;
+      repartirDiscussion();
+      for (const m of msgs) ajouterMsg(m.texte, m.de, false, false);
+      atelierOuverte = id;
+      marquerOuverte();
+      champ?.focus();
+    } catch (e) {
+      console.error("LIA : la discussion n'a pas pu être rouverte", e);
+      ajouterMsg("Je n'ai pas pu rouvrir cette discussion.", "lia", true);
+    }
+  }
+  const nouvelleDiscussion = async (): Promise<void> => {
+    const h = atelier?.historique;
+    if (!h) return;
+    try {
+      await h.nouveau();
+      if (detruit || !journal) return;
+      repartirDiscussion();
+      atelierOuverte = null;
+      marquerOuverte();
+      void rafraichirHistorique();
+      champ?.focus();
+    } catch (e) {
+      console.error("LIA : la nouvelle discussion n'a pas pu commencer", e);
+      ajouterMsg("Je n'ai pas pu commencer une nouvelle discussion.", "lia", true);
+    }
+  };
+  const reglageAtelier = (o: OptionAtelier, surOption: ((id: string, valeur: boolean | string) => void) | undefined): HTMLElement => {
+    const nom = el("span", "lia-ui__atelier-reglage-nom", o.libelle);
+    const champReglage: HTMLInputElement | HTMLSelectElement = o.type === "case" ? el("input") : el("select");
+    const etiquette = el("label", "lia-ui__atelier-reglage");
+    if (o.aide) etiquette.title = o.aide;
+    if (champReglage instanceof HTMLInputElement) {
+      champReglage.type = "checkbox";
+      champReglage.checked = o.valeur === true;
+      reglages[o.id] = champReglage.checked;
+      champReglage.addEventListener("change", () => {
+        reglages[o.id] = champReglage.checked;
+        surOption?.(o.id, champReglage.checked);
+      });
+      etiquette.append(champReglage, nom);
+    } else {
+      for (const c of o.choix ?? []) {
+        const opt = el("option", undefined, c.libelle);
+        opt.value = c.valeur;
+        champReglage.appendChild(opt);
+      }
+      const depart = typeof o.valeur === "string" && (o.choix ?? []).some((c) => c.valeur === o.valeur) ? o.valeur : (o.choix?.[0]?.valeur ?? "");
+      champReglage.value = depart;
+      reglages[o.id] = depart;
+      champReglage.addEventListener("change", () => {
+        reglages[o.id] = champReglage.value;
+        surOption?.(o.id, champReglage.value);
+      });
+      etiquette.append(nom, champReglage);
+    }
+    champReglage.disabled = o.desactive === true;
+    if (o.aide) champReglage.setAttribute("aria-label", `${o.libelle} : ${o.aide}`);
+    return etiquette;
+  };
+  /** Pose la discussion dans le conteneur de l'hôte : en-tête (corps de LIA, titre, « Nouvelle »), réglages, liste, journal, champ. */
+  const montrerAtelier = (at: OptionsAtelier, boite: HTMLElement): void => {
+    // Dans la page de l'hôte, hors de la couche fixe : même habillage (variables `--lia-*`), mais en flux normal.
+    const racine = el("div", "lia-ui lia-ui--atelier");
+    // Le clic droit n'y est pas à LIA : le menu du navigateur reste (copier un message).
+    racine.setAttribute("data-lia-ignorer", "");
+    atelierRacine = racine;
+    const tete = el("div", "lia-ui__atelier-tete");
+    atelierCorps = el("div", "lia-ui__atelier-corps");
+    atelierCorps.setAttribute("aria-hidden", "true");
+    atelierCorps.style.width = atelierCorps.style.height = `${Math.round(rayonBase * 2)}px`;
+    tete.append(atelierCorps, el("h2", "lia-ui__atelier-titre", at.titre ?? "LIA"));
+    if (at.historique) {
+      const nouveau = el("button", "lia-ui__atelier-nouvelle", "Nouvelle discussion");
+      nouveau.type = "button";
+      nouveau.addEventListener("click", () => void nouvelleDiscussion());
+      tete.appendChild(nouveau);
+    }
+    boite.prepend(tete);
+    if (at.options?.length) {
+      const barre = el("div", "lia-ui__atelier-options");
+      barre.setAttribute("role", "group");
+      barre.setAttribute("aria-label", "Réglages de la discussion");
+      for (const o of at.options) barre.appendChild(reglageAtelier(o, at.surOption));
+      tete.after(barre);
+    }
+    if (at.historique) {
+      atelierListe = el("nav", "lia-ui__atelier-historique");
+      atelierListe.setAttribute("aria-label", "Discussions passées");
+      boite.appendChild(atelierListe);
+      void rafraichirHistorique();
+    } else boite.classList.add("lia-ui__chat--sans-historique");
+    racine.appendChild(boite);
+    at.conteneur.appendChild(racine);
+  };
+  /** Son corps reste dans l'emplacement de l'en-tête : elle ne se déplace pas dans une page où elle ne quitte pas la discussion. */
+  const placerCorpsAtelier = (): void => {
+    if (!atelierCorps) return;
+    const s = atelierCorps.getBoundingClientRect();
+    const c = couche.getBoundingClientRect();
+    if (s.width === 0 && s.height === 0) return;
+    pos.x = cible.x = s.left + s.width / 2 - c.left;
+    pos.y = cible.y = s.top + s.height / 2 - c.top;
+    pos.vx = pos.vy = 0;
+  };
+
   const ouvrirChat = (): void => {
     if (detruit || chatOuvert) return;
     reveiller();
@@ -925,10 +1097,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     derniereFocus = document.activeElement;
     chatOuvert = true;
     activiteChat = t;
-    ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand: quandDiscussion });
-    chat = el("div", "lia-ui__chat");
-    chat.setAttribute("role", "dialog");
-    chat.setAttribute("aria-label", "Discussion avec LIA");
+    if (!atelier) ecrireDiscussion(cle, { ouvert: true, msgs: trace, quand: quandDiscussion });
+    chat = el("div", atelier ? "lia-ui__chat lia-ui__chat--atelier" : "lia-ui__chat");
+    chat.setAttribute("role", atelier ? "region" : "dialog");
+    chat.setAttribute("aria-label", atelier ? (atelier.titre ?? "Atelier avec LIA") : "Discussion avec LIA");
     journal = el("div", "lia-ui__journal");
     journal.setAttribute("role", "log");
     journal.setAttribute("aria-live", "polite");
@@ -952,7 +1124,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     fermer.setAttribute("aria-label", "Fermer la discussion");
     fermer.appendChild(icone(ICONE_FERMER));
     fermer.addEventListener("click", fermerChat);
-    form.append(champ, envoyer, fermer);
+    form.append(champ, envoyer);
+    if (!atelier) form.append(fermer);
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const q = champ?.value.trim() ?? "";
@@ -973,7 +1146,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     chat.append(journal, form);
     for (const evenement of ["keydown", "input", "pointerdown", "focusin"]) chat.addEventListener(evenement, () => (activiteChat = t));
     chat.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !atelier) {
         e.stopPropagation();
         fermerChat();
       }
@@ -986,15 +1159,18 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       },
       { passive: true },
     );
-    couche.appendChild(chat);
-    const zOuverture = zoneVisible();
-    cleChat = cleDePlace(zOuverture);
-    chatTaille = false;
-    assise = null;
-    placerAutour(chat, zOuverture);
-    // Après la première pose seulement : l'ouverture n'arrive pas en glissant depuis le coin, les déplacements suivants si.
-    chat.classList.add("lia-ui__chat--glisse");
-    installerSuiviChat(chat);
+    if (atelier) montrerAtelier(atelier, chat);
+    else {
+      couche.appendChild(chat);
+      const zOuverture = zoneVisible();
+      cleChat = cleDePlace(zOuverture);
+      chatTaille = false;
+      assise = null;
+      placerAutour(chat, zOuverture);
+      // Après la première pose seulement : l'ouverture n'arrive pas en glissant depuis le coin, les déplacements suivants si.
+      chat.classList.add("lia-ui__chat--glisse");
+      installerSuiviChat(chat);
+    }
     choisir("ecoute");
     if (!options.ask) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
@@ -1004,7 +1180,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
 
   function fermerChat(): void {
-    if (!chatOuvert) return;
+    // L'atelier ne se ferme pas : c'est la page de l'hôte (seul `destroy` le retire).
+    if (!chatOuvert || (atelier && !detruit)) return;
     enCours?.abort();
     enCours = null;
     finSuiviChat?.();
@@ -1012,11 +1189,13 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     revelation?.cancel();
     revelation = null;
     chat?.remove();
+    atelierRacine?.remove();
+    atelierRacine = atelierCorps = atelierListe = null;
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
     trace.length = 0;
     quandDiscussion = 0;
-    ecrireDiscussion(cle, null);
+    if (!atelier) ecrireDiscussion(cle, null);
     discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
     contexteQuestion = null;
     cesserDeReperer();
@@ -2442,7 +2621,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let reprisTentee = false;
   const rapprocherDiscussion = (d: EtatLia | null, premiere: boolean): void => {
     const x = d?.discussion;
-    if (!x || detruit) return;
+    if (!x || detruit || atelier) return;
     discussionDistante = x;
     // Celle de cette page est aussi récente (ou plus) : elle reste, et c'est elle que l'état recevra.
     if (x.quand <= (discussionEtat?.quand ?? 0)) return;
@@ -2854,7 +3033,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       bulle.style.left = `${limiter(pos.x - w / 2, z.x + 8, Math.max(z.x + 8, z.x + z.w - w - 8))}px`;
       bulle.style.top = `${Math.max(z.y + 8, pos.y - rayon * 1.05 - h)}px`;
     }
-    if (chat) suivreChat();
+    if (atelier) placerCorpsAtelier();
+    else if (chat) suivreChat();
     majRepere();
     majEssaim(dt);
   };
@@ -3032,13 +3212,15 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       document.removeEventListener("visibilitychange", surVisibilite);
       window.removeEventListener("offline", surReseauCoupe);
       window.removeEventListener("online", surReseauRetabli);
+      atelierRacine?.remove();
       couche.remove();
       actif = null;
     },
   };
   actif = poignee;
   // Une discussion ouverte sur la page d'avant se rouvre telle quelle (même onglet).
-  const avant = lireDiscussion(cle);
+  const avant = atelier ? null : lireDiscussion(cle);
+  if (atelier) ouvrirChat();
   if (avant) {
     quandDiscussion = avant.quand;
     ouvrirChat();

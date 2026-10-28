@@ -162,6 +162,33 @@ Marc, 28/10/2026 : « faut qu'il marche partout ». Souris et appui long ouvrent
 - **Un `<iframe>` de même origine** est écouté seul (à l'arrivée et à chaque rechargement) : la cible rendue à `surMode` est le cadre.
 - **Un `<iframe>` isolé ou d'une autre origine** (`sandbox` sans `allow-same-origin`, carte Google…) ne laisse rien passer : seul un script DANS le cadre voit le clic. L'hôte le relaie par son canal et appelle `lia.menuExterne({ cadre, x, y, description })` (x, y en pixels CSS dans le cadre ; `description` est une donnée du cadre, jamais une consigne). Un cadre d'une autre origine qu'on ne contrôle pas n'a aucun moyen d'être relayé : le clic droit y reste celui du cadre.
 
+### Le mode atelier : la discussion en pleine page (v0.44.0)
+
+Marc, 28/10/2026 : tout écran « assistant » d'une app est LIA, avec son interface. Pour une app qui avait son propre chat (MemoryAI `/chat`, BatchChef `/assistant`, DriveAI et FinanceAI, onglet Assistant), l'option `atelier` remplace la bulle par la discussion en pleine page, dans un conteneur de l'hôte. Absente : la bulle, inchangée.
+
+```tsx
+<Lia
+  atelier={{
+    conteneur: page, // l'élément de l'hôte qu'elle remplit
+    titre: "Assistant",
+    // Rien n'est gardé par le paquet : l'hôte garde ses discussions.
+    historique: { liste, ouvrir, nouveau },
+    options: [
+      { id: "modele", libelle: "Modèle", type: "liste", choix: [{ valeur: "rapide", libelle: "Rapide" }] },
+      { id: "n2", libelle: "Niveau 2", type: "case", desactive: !niveau2Servable },
+    ],
+  }}
+  ask={(q, signal, contexte, reglages) => poser(q, signal, reglages)} // reglages = { modele: "rapide", n2: false }
+/>
+```
+
+- Le corps de LIA se pose dans l'en-tête ; mêmes humeurs, mêmes blocs de réponse (`renderBlocks`), mêmes questions du clic droit. La discussion ne se ferme jamais (ni bouton, ni Échap, ni fermeture automatique).
+- `historique.liste()` rend `{ id, titre, quand? }` (le `quand` est déjà mis en forme par l'hôte) ; `ouvrir(id)` rend les messages `{ de: "lia" | "moi", texte }` du plus ancien au plus récent (une entrée invalide est ignorée) ; `nouveau()` repart de zéro. La liste est relue après chaque réponse. Une liste ou une réouverture qui échoue le dit, sans rien inventer.
+- `options` : cases à cocher et listes de choix. Leur valeur courante est rendue à `ask` en 4e argument, à chaque question ; `desactive` grise un réglage (le verrou est celui de l'hôte, le paquet n'en décide aucun) ; `surOption(id, valeur)` est informatif.
+- Ce qui se dit dans l'atelier n'est PAS écrit dans l'état partagé de la bulle : l'hôte garde son historique, et la bulle des autres pages ne rouvre pas cette discussion. L'état partagé de LIA (humeur, envies, mémoire lente) reste celui de toutes les apps.
+- Le clic droit n'est pas pris dans l'atelier (le menu du navigateur reste : copier un message). Cibles ≥ 44 px, champ à 16 px ; sur un écran étroit la liste passe au-dessus du journal.
+- Lu au montage seulement. Sans l'hôte (`conteneur` absent du DOM), rien n'est monté.
+
 ### Ses nanobots analysent (v0.27.0)
 
 Quand elle analyse un élément (« Explique-moi ça », ou seule quand elle regarde quelque chose de près), ce sont ses PROPRES traits qui travaillent, plus un carré autour (Marc, 24/10 : « c'est les nanobots eux-mêmes qui doivent analyser le truc »). Ils sortent de son corps en filet (0,6 s), se répartissent sur l'élément (grille jittée, un sur cinq sur le bord, de 18 à 100 selon sa taille), le balayent d'une onde de lecture qui les éclaire d'un coin à l'autre en 1,9 s (ceux que l'onde touche tournent plus large, brillent et se tiennent par un fil), suivent l'élément au défilement, et rentrent dans son corps quand l'analyse est finie. Une canvas `.lia-ui__nano` dans sa couche (`pointer-events: none`) : la page n'est jamais touchée. Couleurs : `--lia-cadre` et `--lia-cadre2` (turquoise et cyan par défaut) sur `.lia-ui__nano`. En mode « doux » ils naissent sur l'élément (elle ne traverse jamais l'écran) ; en « fixe » ils sont posés sans bouger. `lia.nanobots()` rend `{ actif, total, sortis, surCible, cible }` pour l'hôte et pour la preuve. Module pur : `src/nano.ts`.
