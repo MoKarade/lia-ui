@@ -1365,8 +1365,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     menuOuvert = true;
     const placerMenu = (): void => {
       if (!menu) return;
-      const z = zoneVie();
       const r = couche.getBoundingClientRect();
+      // Le menu d'un élément s'ouvre là où Marc a cliqué, sur toute la page : la zone où LIA vit (`bounds`, qui peut
+      // exclure un panneau de l'hôte) ne le borne pas, sinon il se retrouve loin du clic, hors de la fenêtre visée.
+      const z = element ? { x: 0, y: 0, w: r.width, h: r.height } : zoneVie();
       menu.style.left = `${limiter(x - r.left, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
       menu.style.top = `${limiter(y - r.top, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
     };
