@@ -5,6 +5,7 @@
  * question, jamais lu comme une consigne, `<` et `>` retirés.
  */
 
+import { estBarre, LIGNES, lireBarres } from "./barres.js";
 import { lireGraphique } from "./graphique.js";
 
 export type ModeElement = "expliquer" | "changer" | "regarder" | "question";
@@ -153,8 +154,8 @@ export function decrireParDefaut(cible: Element): ElementDecrit {
     cible.parentElement?.closest("[data-lia-genre]")?.getAttribute("data-lia-genre") ??
     undefined;
   // Les faits de l'unité que l'hôte a déclarée (`data-lia-donnees`, sur l'élément ou un ancêtre) : un morceau de carte reste lu avec sa carte.
-  // Sans faits de l'hôte, un graphique SVG dit lui-même ce qu'il écrit (`lireGraphique`).
-  const donnees = cible.closest("[data-lia-donnees]")?.getAttribute("data-lia-donnees") ?? lireGraphique(cible);
+  // Sans faits de l'hôte, un graphique SVG dit lui-même ce qu'il écrit (`lireGraphique`), un graphique en barres HTML aussi (`lireBarres`).
+  const donnees = cible.closest("[data-lia-donnees]")?.getAttribute("data-lia-donnees") ?? lireGraphique(cible) ?? lireBarres(cible);
   const visible = (cible as HTMLElement).innerText;
   const brut = typeof visible === "string" ? visible : (cible.textContent ?? "");
   // Sans texte visible (image, graphique), le libellé que l'auteur lui a donné dit ce que c'est.
@@ -218,6 +219,8 @@ export function elementVise(
       return svg ? partieNommeeDuGraphique(cible, svg) : media;
     }
     if (dedans && estMarqueVide(cible)) return dedans;
+    // Une barre de graphique en HTML (marque vide à largeur en pourcentage, `<progress>`) vise sa ligne : c'est là que sont son nom et sa valeur.
+    if (estBarre(cible)) return cible.parentElement?.closest(LIGNES) ?? cible;
     return cible;
   } catch {
     // Sélecteur invalide fourni par l'hôte : le clic droit vise l'élément cliqué lui-même.
