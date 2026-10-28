@@ -5,6 +5,8 @@
  * question, jamais lu comme une consigne, `<` et `>` retirés.
  */
 
+import { lireGraphique } from "./graphique.js";
+
 export type ModeElement = "expliquer" | "changer" | "regarder" | "question";
 
 /** Les quatre entrées du menu d'un élément, dans l'ordre de la maquette. */
@@ -151,7 +153,8 @@ export function decrireParDefaut(cible: Element): ElementDecrit {
     cible.parentElement?.closest("[data-lia-genre]")?.getAttribute("data-lia-genre") ??
     undefined;
   // Les faits de l'unité que l'hôte a déclarée (`data-lia-donnees`, sur l'élément ou un ancêtre) : un morceau de carte reste lu avec sa carte.
-  const donnees = cible.closest("[data-lia-donnees]")?.getAttribute("data-lia-donnees") ?? undefined;
+  // Sans faits de l'hôte, un graphique SVG dit lui-même ce qu'il écrit (`lireGraphique`).
+  const donnees = cible.closest("[data-lia-donnees]")?.getAttribute("data-lia-donnees") ?? lireGraphique(cible);
   const visible = (cible as HTMLElement).innerText;
   const brut = typeof visible === "string" ? visible : (cible.textContent ?? "");
   // Sans texte visible (image, graphique), le libellé que l'auteur lui a donné dit ce que c'est.
