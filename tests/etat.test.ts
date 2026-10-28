@@ -224,13 +224,13 @@ describe("LIA avec un état partagé", () => {
     expect(l.humeur().nom).toBe("excite");
   });
 
-  it("relit chaque minute : l'état d'une autre page arrive en une minute au plus", async () => {
+  it("relit toutes les 2 minutes : l'état d'une autre page arrive en deux minutes au plus", async () => {
     let distant: EtatLia | null = null;
     // L'autre page écrit au moment où on la lit : son état est plus récent que le nôtre (qui s'est écrit à 20 s).
     const l = monter({ lire: async () => (distant ? { ...distant, maj: Date.now() } : null), ecrire: async () => null });
     await vi.advanceTimersByTimeAsync(10);
     distant = etat({ humeur: "fier" });
-    await vi.advanceTimersByTimeAsync(61_000);
+    await vi.advanceTimersByTimeAsync(121_000);
     expect(l.humeur().nom).toBe("fier");
   });
 
