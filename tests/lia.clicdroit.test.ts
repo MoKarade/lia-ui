@@ -101,6 +101,16 @@ describe("une fenêtre modale", () => {
   });
 });
 
+describe("la zone où LIA vit ne borne pas le menu d'un élément", () => {
+  it("un panneau de l'hôte hors de `bounds` : le menu s'ouvre sous le clic, pas ramené dans la zone de LIA", () => {
+    // MemoryAI : `bounds` exclut le panneau « Sa journée » à droite ; un clic droit DANS le panneau doit ouvrir le menu là.
+    lia = mountLia({ vieAutonome: false, bounds: () => ({ x: 0, y: 0, w: 400, h: 800 }) });
+    clicDroit(document.getElementById("para") as Element, { clientX: 800, clientY: 300 });
+    expect(menu()?.style.left).toBe("800px");
+    expect(menu()?.style.top).toBe("300px");
+  });
+});
+
 describe("un cadre", () => {
   it("menuExterne : le menu s'ouvre à la bonne place de la page, la cible est le cadre", () => {
     const surMode = vi.fn();

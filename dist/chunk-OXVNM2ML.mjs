@@ -5337,8 +5337,8 @@ function mountLia(options = {}) {
     menuOuvert = true;
     const placerMenu = () => {
       if (!menu) return;
-      const z = zoneVie();
       const r = couche.getBoundingClientRect();
+      const z = element ? { x: 0, y: 0, w: r.width, h: r.height } : zoneVie();
       menu.style.left = `${limiter3(x - r.left, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
       menu.style.top = `${limiter3(y - r.top, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
     };
@@ -7018,4 +7018,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-R3KXOR2H.mjs.map
+//# sourceMappingURL=chunk-OXVNM2ML.mjs.map
