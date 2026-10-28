@@ -198,6 +198,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   if (conteneur && (posConteneur === "static" || posConteneur === "")) conteneur.style.position = "relative";
   const couche = el("div", conteneur ? "lia-ui lia-ui--conteneur" : "lia-ui");
   (conteneur ?? document.body).appendChild(couche);
+  /** La couche du menu d'un élément quand LIA vit dans un conteneur de l'hôte (voir `ouvrirMenu`) ; sinon le menu est dans `couche`. */
+  let hoteMenu: HTMLElement | null = null;
+  /** Ce qui est à LIA : sa couche et, le cas échéant, celle du menu d'un élément ; jamais une cible pour ses propres regards. */
+  const zoneLia = { contains: (n: Node | null): boolean => couche.contains(n) || (hoteMenu?.contains(n) ?? false) };
   const corpsEl = el("div", "lia-ui__corps");
   const ombre = el("div", "lia-ui__ombre");
   const toile = el("canvas", "lia-ui__toile");
@@ -1208,6 +1212,18 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /* ── menu ── */
   let menu: HTMLElement | null = null;
+  const hoteDuMenuElement = (): HTMLElement => {
+    const hote = el("div", "lia-ui");
+    let haut: Element | null = null;
+    try {
+      const modales = document.querySelectorAll("dialog:modal");
+      haut = modales[modales.length - 1] ?? null;
+    } catch {
+      /* `:modal` inconnu de ce navigateur : il n'a pas non plus de fenêtre modale à suivre */
+    }
+    (haut ?? document.body).appendChild(hote);
+    return hote;
+  };
   const item = (libelle: string, action: () => void): HTMLButtonElement => {
     const b = el("button", "lia-ui__item", libelle);
     b.type = "button";
@@ -1363,9 +1379,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     fermerMenu();
     tais();
     menuOuvert = true;
+    // Dans un conteneur de l'hôte, la couche de LIA a un z-index de 5 : une fenêtre de l'hôte (z-index 10, `<aside role="dialog">`)
+    // passe par-dessus le menu d'un élément et le cache. Ce menu s'ouvre donc dans sa propre couche, sur la page entière et au-dessus
+    // de tout (ou dans la fenêtre modale ouverte), et non plus dans le conteneur.
+    if (element && conteneur) hoteMenu = hoteDuMenuElement();
+    const surface = (): HTMLElement => hoteMenu ?? couche;
     const placerMenu = (): void => {
       if (!menu) return;
-      const r = couche.getBoundingClientRect();
+      const r = surface().getBoundingClientRect();
       // Le menu d'un élément s'ouvre là où Marc a cliqué, sur toute la page : la zone où LIA vit (`bounds`, qui peut
       // exclure un panneau de l'hôte) ne le borne pas, sinon il se retrouve loin du clic, hors de la fenêtre visée.
       const z = element ? { x: 0, y: 0, w: r.width, h: r.height } : zoneVie();
@@ -1448,7 +1469,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         fermerMenu();
       }
     });
-    couche.appendChild(menu);
+    surface().appendChild(menu);
     placerMenu();
     menu.querySelector<HTMLElement>("[role=menuitem]")?.focus();
   };
@@ -1456,6 +1477,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   function fermerMenu(): void {
     if (!menuOuvert) return;
     menu?.remove();
+    hoteMenu?.remove();
+    hoteMenu = null;
     menu = null;
     menuOuvert = false;
     majCommentVa = null;
@@ -1510,7 +1533,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   const cibleAnalyse = (): Element | null => {
     if (analysePour && !analysePour.isConnected) analysePour = null;
     const cible = analysePour ?? (etat === "analyse" ? (reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde) : null);
-    if (!cible || !cible.isConnected || couche.contains(cible)) return null;
+    if (!cible || !cible.isConnected || zoneLia.contains(cible)) return null;
     return cible;
   };
   const dessinerNano = (e: Essaim, zone: { x: number; y: number; w: number; h: number }, c: DOMRect): void => {
@@ -1730,7 +1753,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
    */
   const menuElementEn = (x: number, y: number, vise: EventTarget | null, cadre?: HTMLIFrameElement): boolean => {
     const racine = cadre?.contentDocument ?? document;
-    const interieur = elementVise(cibleSousSurcouche(vise, x, y, couche, racine), selecteurElements, couche, racine);
+    const interieur = elementVise(cibleSousSurcouche(vise, x, y, zoneLia, racine), selecteurElements, zoneLia, racine);
     const fond = !interieur && (vise === racine.body || vise === racine.documentElement);
     const cible = fond ? racine.body : interieur;
     if (!cible) return false;
@@ -1800,7 +1823,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       } catch {
         /* d'une autre origine : seul l'hôte peut relayer (`menuExterne`) */
       }
-      if (!doc || cadresVus.has(doc) || couche.contains(f)) continue;
+      if (!doc || cadresVus.has(doc) || zoneLia.contains(f)) continue;
       const ecouteurs = ecouteursClicDroit(f);
       ecouteurs.brancher(doc);
       cadresVus.set(doc, () => ecouteurs.debrancher(doc as Document));
@@ -1808,7 +1831,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   /** Pour un cadre qui ne se laisse pas lire (origine opaque ou autre) : l'hôte relaie le clic droit reçu DANS le cadre. */
   const menuExterne = (o: { cadre: Element; x: number; y: number; description: DescriptionElement }): boolean => {
-    if (detruit || !optElements || !Number.isFinite(o.x) || !Number.isFinite(o.y) || !o.cadre.isConnected || couche.contains(o.cadre)) return false;
+    if (detruit || !optElements || !Number.isFinite(o.x) || !Number.isFinite(o.y) || !o.cadre.isConnected || zoneLia.contains(o.cadre)) return false;
     const r = o.cadre.getBoundingClientRect();
     clearTimeout(appui);
     glisse = null;
@@ -1831,7 +1854,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (e.type !== "pointermove" && e.type !== "focusin" && !pose) return;
     let sous: Element | null = null;
     try {
-      sous = e.target instanceof Element && !couche.contains(e.target) ? e.target.closest(selecteurCibles) : null;
+      sous = e.target instanceof Element && !zoneLia.contains(e.target) ? e.target.closest(selecteurCibles) : null;
     } catch {
       /* sélecteur invalide fourni par l'hôte : elle ne sait rien de ce que Marc regarde */
     }
@@ -1984,7 +2007,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   window.addEventListener("pointerdown", surCurseur, { passive: true });
   /** Le clavier prend le focus quelque part : elle y jette un œil. */
   const surFocus = (e: FocusEvent): void => {
-    if (!(e.target instanceof Element) || couche.contains(e.target)) return;
+    if (!(e.target instanceof Element) || zoneLia.contains(e.target)) return;
     const r = couche.getBoundingClientRect();
     const f = e.target.getBoundingClientRect();
     regarder(limiter((f.left + f.width / 2 - r.left - pos.x) / 400, -1, 1), limiter((f.top + f.height / 2 - r.top - pos.y) / 400, -1, 1), t);
@@ -2015,7 +2038,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       return [];
     }
     const f = fenetre();
-    return liste.filter((x) => !couche.contains(x) && estRegarde(x.getBoundingClientRect(), f));
+    return liste.filter((x) => !zoneLia.contains(x) && estRegarde(x.getBoundingClientRect(), f));
   };
   const peutBouger = (): boolean => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !balle.actif && !detruit;
 
@@ -2039,7 +2062,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
 
   /** `etatArrivee` : ce qu'elle fait une fois posée (par défaut, d'après l'élément : analyse, lit, calcule, surveille…) ; en route elle cherche. */
   function allerVoir(element: Element, secondes = 10, etatArrivee?: string): boolean {
-    if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
+    if (!peutBouger() || !element.isConnected || zoneLia.contains(element)) return false;
     annulerPerchage();
     const r = element.getBoundingClientRect();
     attention = {
@@ -2303,7 +2326,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const f = fenetre();
     const vues: { el: Element; rect: RectCarte; page: { x: number; y: number } }[] = [];
     for (const el of liste) {
-      if (couche.contains(el)) continue;
+      if (zoneLia.contains(el)) continue;
       if (!estVisible(el.getBoundingClientRect(), f)) continue;
       const c = lireCarte(el);
       if (c) vues.push({ el, ...c });
@@ -2631,7 +2654,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (trace.length === 0) discussionEtat = x;
     const focus = document.activeElement;
     const marcEcritAilleurs =
-      focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus);
+      focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !zoneLia.contains(focus);
     if (!x.ouvert) {
       // Fermée ailleurs plus récemment : celle de cette page se ferme aussi (avec l'instant de la fermeture, pas « maintenant »).
       if (chatOuvert && trace.length > 0 && !enCours && !champ?.value && !marcEcritAilleurs) {

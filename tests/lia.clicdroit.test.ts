@@ -35,6 +35,29 @@ afterEach(() => {
 });
 
 describe("le clic droit marche partout", () => {
+  it("dans un conteneur de l'hôte, le menu d'un élément s'ouvre dans sa propre couche, au-dessus de toute fenêtre de l'hôte, et se retire à la fermeture", () => {
+    const hote = document.createElement("div");
+    hote.id = "hote";
+    document.body.appendChild(hote);
+    lia = mountLia({ vieAutonome: false, container: hote });
+    const para = document.getElementById("para") as Element;
+    clicDroit(para);
+    const m = menu() as HTMLElement;
+    expect(m).not.toBeNull();
+    expect(hote.contains(m)).toBe(false); // pas dans le conteneur (z-index 5, sous une fenêtre de z-index 10)
+    const couche = m.closest(".lia-ui") as HTMLElement;
+    expect(couche.parentElement).toBe(document.body);
+    expect(couche.classList.contains("lia-ui--conteneur")).toBe(false); // la couche pleine page, au-dessus de tout
+    // le menu n'est pas lui-même une cible pour LIA : un clic droit dessus n'ouvre pas un second menu
+    const titreMenu = m.querySelector(".lia-ui__menu-titre") as Element;
+    clicDroit(titreMenu);
+    expect(document.querySelectorAll(".lia-ui__menu").length).toBe(1);
+    // fermer le menu retire aussi sa couche
+    m.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(menu()).toBeNull();
+    expect(document.querySelectorAll(".lia-ui").length).toBe(1); // reste la couche de LIA dans son conteneur
+  });
+
   it("la page a pris le menu natif ou arrêté la propagation : LIA ouvre quand même son menu", () => {
     lia = mountLia({ vieAutonome: false });
     const tenir = document.getElementById("tenir") as Element;

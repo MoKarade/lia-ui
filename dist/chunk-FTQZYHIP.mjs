@@ -4320,6 +4320,8 @@ function mountLia(options = {}) {
   if (conteneur && (posConteneur === "static" || posConteneur === "")) conteneur.style.position = "relative";
   const couche = el("div", conteneur ? "lia-ui lia-ui--conteneur" : "lia-ui");
   (conteneur ?? document.body).appendChild(couche);
+  let hoteMenu = null;
+  const zoneLia = { contains: (n) => couche.contains(n) || (hoteMenu?.contains(n) ?? false) };
   const corpsEl = el("div", "lia-ui__corps");
   const ombre = el("div", "lia-ui__ombre");
   const toile = el("canvas", "lia-ui__toile");
@@ -5202,6 +5204,17 @@ function mountLia(options = {}) {
     else hit.focus();
   }
   let menu = null;
+  const hoteDuMenuElement = () => {
+    const hote2 = el("div", "lia-ui");
+    let haut = null;
+    try {
+      const modales = document.querySelectorAll("dialog:modal");
+      haut = modales[modales.length - 1] ?? null;
+    } catch {
+    }
+    (haut ?? document.body).appendChild(hote2);
+    return hote2;
+  };
   const item = (libelle, action) => {
     const b = el("button", "lia-ui__item", libelle);
     b.type = "button";
@@ -5345,9 +5358,11 @@ function mountLia(options = {}) {
     fermerMenu();
     tais();
     menuOuvert = true;
+    if (element && conteneur) hoteMenu = hoteDuMenuElement();
+    const surface = () => hoteMenu ?? couche;
     const placerMenu = () => {
       if (!menu) return;
-      const r = couche.getBoundingClientRect();
+      const r = surface().getBoundingClientRect();
       const z = element ? { x: 0, y: 0, w: r.width, h: r.height } : zoneVie();
       menu.style.left = `${limiter3(x - r.left, z.x + 8, Math.max(z.x + 8, z.x + z.w - menu.offsetWidth - 8))}px`;
       menu.style.top = `${limiter3(y - r.top, z.y + 8, Math.max(z.y + 8, z.y + z.h - menu.offsetHeight - 8))}px`;
@@ -5423,13 +5438,15 @@ function mountLia(options = {}) {
         fermerMenu();
       }
     });
-    couche.appendChild(menu);
+    surface().appendChild(menu);
     placerMenu();
     menu.querySelector("[role=menuitem]")?.focus();
   };
   function fermerMenu() {
     if (!menuOuvert) return;
     menu?.remove();
+    hoteMenu?.remove();
+    hoteMenu = null;
     menu = null;
     menuOuvert = false;
     majCommentVa = null;
@@ -5469,7 +5486,7 @@ function mountLia(options = {}) {
   const cibleAnalyse = () => {
     if (analysePour && !analysePour.isConnected) analysePour = null;
     const cible2 = analysePour ?? (etat === "analyse" ? reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde : null);
-    if (!cible2 || !cible2.isConnected || couche.contains(cible2)) return null;
+    if (!cible2 || !cible2.isConnected || zoneLia.contains(cible2)) return null;
     return cible2;
   };
   const dessinerNano = (e, zone, c) => {
@@ -5655,7 +5672,7 @@ function mountLia(options = {}) {
   const descriptionPage = (racine) => normaliser({ genre: "la page", ...racine.title ? { texte: racine.title } : {} });
   const menuElementEn = (x, y, vise, cadre) => {
     const racine = cadre?.contentDocument ?? document;
-    const interieur2 = elementVise(cibleSousSurcouche(vise, x, y, couche, racine), selecteurElements, couche, racine);
+    const interieur2 = elementVise(cibleSousSurcouche(vise, x, y, zoneLia, racine), selecteurElements, zoneLia, racine);
     const fond = !interieur2 && (vise === racine.body || vise === racine.documentElement);
     const cible2 = fond ? racine.body : interieur2;
     if (!cible2) return false;
@@ -5719,14 +5736,14 @@ function mountLia(options = {}) {
         doc = f.contentDocument;
       } catch {
       }
-      if (!doc || cadresVus.has(doc) || couche.contains(f)) continue;
+      if (!doc || cadresVus.has(doc) || zoneLia.contains(f)) continue;
       const ecouteurs = ecouteursClicDroit(f);
       ecouteurs.brancher(doc);
       cadresVus.set(doc, () => ecouteurs.debrancher(doc));
     }
   };
   const menuExterne = (o) => {
-    if (detruit || !optElements || !Number.isFinite(o.x) || !Number.isFinite(o.y) || !o.cadre.isConnected || couche.contains(o.cadre)) return false;
+    if (detruit || !optElements || !Number.isFinite(o.x) || !Number.isFinite(o.y) || !o.cadre.isConnected || zoneLia.contains(o.cadre)) return false;
     const r = o.cadre.getBoundingClientRect();
     clearTimeout(appui);
     glisse = null;
@@ -5747,7 +5764,7 @@ function mountLia(options = {}) {
     if (e.type !== "pointermove" && e.type !== "focusin" && !pose) return;
     let sous = null;
     try {
-      sous = e.target instanceof Element && !couche.contains(e.target) ? e.target.closest(selecteurCibles) : null;
+      sous = e.target instanceof Element && !zoneLia.contains(e.target) ? e.target.closest(selecteurCibles) : null;
     } catch {
     }
     if (sous !== survol?.el) survol = sous ? { el: sous, depuis: dernierMarc } : null;
@@ -5887,7 +5904,7 @@ function mountLia(options = {}) {
   window.addEventListener("pointermove", surCurseur, { passive: true });
   window.addEventListener("pointerdown", surCurseur, { passive: true });
   const surFocus = (e) => {
-    if (!(e.target instanceof Element) || couche.contains(e.target)) return;
+    if (!(e.target instanceof Element) || zoneLia.contains(e.target)) return;
     const r = couche.getBoundingClientRect();
     const f = e.target.getBoundingClientRect();
     regarder(limiter3((f.left + f.width / 2 - r.left - pos.x) / 400, -1, 1), limiter3((f.top + f.height / 2 - r.top - pos.y) / 400, -1, 1), t);
@@ -5915,7 +5932,7 @@ function mountLia(options = {}) {
       return [];
     }
     const f = fenetre();
-    return liste.filter((x) => !couche.contains(x) && estRegarde(x.getBoundingClientRect(), f));
+    return liste.filter((x) => !zoneLia.contains(x) && estRegarde(x.getBoundingClientRect(), f));
   };
   const peutBouger = () => !sansMouvement && !chatOuvert && !menuOuvert && !glisse && !balle.actif && !detruit;
   function finAttention() {
@@ -5934,7 +5951,7 @@ function mountLia(options = {}) {
     return true;
   }
   function allerVoir(element, secondes = 10, etatArrivee) {
-    if (!peutBouger() || !element.isConnected || couche.contains(element)) return false;
+    if (!peutBouger() || !element.isConnected || zoneLia.contains(element)) return false;
     annulerPerchage();
     const r = element.getBoundingClientRect();
     attention = {
@@ -6152,7 +6169,7 @@ function mountLia(options = {}) {
     const f = fenetre();
     const vues = [];
     for (const el2 of liste) {
-      if (couche.contains(el2)) continue;
+      if (zoneLia.contains(el2)) continue;
       if (!estVisible(el2.getBoundingClientRect(), f)) continue;
       const c = lireCarte(el2);
       if (c) vues.push({ el: el2, ...c });
@@ -6447,7 +6464,7 @@ function mountLia(options = {}) {
     if (x.quand <= (discussionEtat?.quand ?? 0)) return;
     if (trace.length === 0) discussionEtat = x;
     const focus = document.activeElement;
-    const marcEcritAilleurs = focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus);
+    const marcEcritAilleurs = focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !zoneLia.contains(focus);
     if (!x.ouvert) {
       if (chatOuvert && trace.length > 0 && !enCours && !champ?.value && !marcEcritAilleurs) {
         fermerChat();
@@ -7028,4 +7045,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-5J2LWBO7.mjs.map
+//# sourceMappingURL=chunk-FTQZYHIP.mjs.map
