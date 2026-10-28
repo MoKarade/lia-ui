@@ -179,13 +179,18 @@ function estIcone(media: Element): boolean {
  * vide dans un contrôle ou un titre vise ce contrôle ; `null` quand LIA doit laisser le menu du navigateur.
  * Un sélecteur propre à l'hôte (`options.elements.selecteur`) garde son sens d'avant : le plus proche ancêtre qui correspond.
  */
+/** Vrai pour un élément de n'importe quel document (un `<iframe>` de même origine a ses propres classes : `instanceof Element` y est faux). */
+export function estElement(x: unknown): x is Element {
+  return typeof x === "object" && x !== null && (x as Node).nodeType === 1;
+}
+
 export function elementVise(
   cible: EventTarget | null,
   selecteur: string,
   couche: Element,
   racine: Document = document,
 ): Element | null {
-  if (!(cible instanceof Element)) return null;
+  if (!estElement(cible)) return null;
   if (cible === racine.documentElement || cible === racine.body) return null;
   if (couche.contains(cible)) return null;
   if (cible.closest(EXCLUS)) return null;
@@ -220,7 +225,7 @@ export function cibleSousSurcouche(
   couche: Element,
   racine: Document = document,
 ): EventTarget | null {
-  if (!(cible instanceof Element) || typeof racine.elementsFromPoint !== "function") return cible;
+  if (!estElement(cible) || typeof racine.elementsFromPoint !== "function") return cible;
   const contient = (e: Element): boolean => {
     const r = e.getBoundingClientRect();
     return x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1;

@@ -1,4 +1,4 @@
-import { O as OptionsLia, L as LiaHandle } from './types-BfWK1mF_.js';
+import { O as OptionsLia, L as LiaHandle } from './types-Cfh-x_B3.js';
 
 interface LiaProps extends OptionsLia {
     /** Reçoit la poignée une fois LIA montée (et `null` au démontage). */

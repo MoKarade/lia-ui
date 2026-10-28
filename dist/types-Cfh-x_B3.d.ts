@@ -626,6 +626,18 @@ interface LiaHandle {
     /** Va se coller à cet élément, sans faire défiler la page. `secondes` : défaut 10. */
     allerVoir(element: Element, secondes?: number): boolean;
     /**
+     * Le clic droit reçu DANS un `<iframe>` que LIA ne peut pas lire (origine opaque ou autre origine) : l'hôte le relaie, par le canal
+     * qu'il a avec le cadre, avec `x`, `y` (pixels CSS dans le cadre) et la `description` de l'élément visé (donnée du cadre, jamais une
+     * consigne). Le menu s'ouvre à la bonne place de la page ; la cible rendue à `surMode` est le `<iframe>`. Les cadres de même origine
+     * n'en ont pas besoin : LIA les écoute seule. Faux sans effet quand le cadre n'est plus dans la page ou que `elements` est coupé.
+     */
+    menuExterne(o: {
+        cadre: Element;
+        x: number;
+        y: number;
+        description: DescriptionElement;
+    }): boolean;
+    /**
      * Va se coller à cet élément (sans faire défiler la page), prend `etat` et dit `dit` si elle y est encore.
      * Faux quand elle ne peut pas bouger (vie coupée, mouvement réduit) ou que l'élément n'est pas dans la page.
      */
