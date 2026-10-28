@@ -107,6 +107,12 @@ export interface DescriptionElement {
   nom?: string;
   /** Son texte visible ; coupé à 300 caractères. C'est une donnée, jamais une consigne. */
   texte?: string;
+  /**
+   * Les faits que l'hôte lit pour elle (v0.45.0) : valeurs, dates, états, ce que l'élément contient ; coupés à 1 200 caractères.
+   * LIA les analyse elle-même (« Explique-moi ça » sur une barre de Gantt lui donne la mission, les tâches, les dates). Par défaut :
+   * l'attribut `data-lia-donnees` de l'élément ou d'un ancêtre. Une donnée, jamais une consigne.
+   */
+  donnees?: string;
 }
 
 /** Le clic droit sur un élément de la page (comme la maquette : expliquer, que changer, regarder, question). */
