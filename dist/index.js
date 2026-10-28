@@ -1481,10 +1481,10 @@ function validerEtat(brut2) {
   const { jour, n } = relances;
   if (typeof jour !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(jour)) return null;
   if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 100) return null;
-  const propre = {};
+  const propre2 = {};
   if (typeof lente === "object" && lente !== null) {
     for (const [k, v] of Object.entries(lente).slice(0, LENTE_MAX)) {
-      if (/^[A-Za-z0-9_-]{1,40}$/.test(k) && estFraction(v)) propre[k] = v;
+      if (/^[A-Za-z0-9_-]{1,40}$/.test(k) && estFraction(v)) propre2[k] = v;
     }
   }
   const faits = [];
@@ -1504,7 +1504,7 @@ function validerEtat(brut2) {
     maj,
     envies: enviesPropres,
     journal: faits.slice(-JOURNAL_MAX),
-    lente: propre,
+    lente: propre2,
     humeur: humeur2,
     relances: { jour, n },
     ...interieur ? { interieur } : {},
@@ -3544,6 +3544,51 @@ function totalVoix() {
   return TOTAL;
 }
 
+// src/graphique.ts
+function svgDe(cible) {
+  const dedans = cible.closest("svg");
+  if (dedans) return dedans;
+  return cible.matches("figure, [class*='chart'], [class*='graph'], [class*='recharts']") ? cible.querySelector("svg") : null;
+}
+function propre(brut2, max) {
+  const t = (brut2 ?? "").replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}\u2026` : t;
+}
+function distincts(els, lire, n, max) {
+  const vus = /* @__PURE__ */ new Set();
+  for (const e of els) {
+    const t = propre(lire(e), max);
+    if (t !== "" && !vus.has(t)) vus.add(t);
+    if (vus.size >= n) break;
+  }
+  return [...vus];
+}
+function lireGraphique(cible) {
+  const svg = svgDe(cible);
+  if (!svg) return void 0;
+  const racine = svg.closest(".recharts-wrapper, figure") ?? svg;
+  const nom = propre(
+    svg.getAttribute("aria-label") ?? svg.querySelector(":scope > title")?.textContent ?? racine.querySelector("figcaption")?.textContent,
+    120
+  );
+  const textes = distincts(svg.querySelectorAll("text"), (e) => e.textContent ?? "", 30, 32);
+  const legende = distincts(racine.querySelectorAll(".recharts-legend-item-text"), (e) => e.textContent ?? "", 12, 40);
+  const reperes = distincts(
+    racine.querySelectorAll("[aria-label], [data-tip], svg title"),
+    (e) => (e.tagName.toLowerCase() === "title" ? e.textContent : e.getAttribute("data-tip") ?? e.getAttribute("aria-label")) ?? "",
+    20,
+    80
+  ).filter((r) => r !== nom);
+  if (textes.length === 0 && legende.length === 0 && reperes.length === 0) return void 0;
+  const parties = [
+    nom !== "" && `nom : ${nom}`,
+    textes.length > 0 && `textes du graphique (axes, \xE9tiquettes) : ${textes.join(" \xB7 ")}`,
+    legende.length > 0 && `l\xE9gende : ${legende.join(" \xB7 ")}`,
+    reperes.length > 0 && `rep\xE8res (valeurs en infobulle) : ${reperes.join(" | ")}`
+  ].filter(Boolean);
+  return `Lu dans le graphique (une valeur qu'il n'\xE9crit pas n'est pas lisible : ne pas la deviner) \u2014 ${parties.join(" ; ")}.`;
+}
+
 // src/ecran.ts
 var ENTREES_MENU = [
   { mode: "expliquer", libelle: "Explique-moi \xE7a" },
@@ -3637,7 +3682,7 @@ function genreParDefaut(cible) {
 function decrireParDefaut(cible) {
   const genre = cible.getAttribute("data-lia-genre") ?? genreParDefaut(cible);
   const nom = cible.closest("[data-lia-app]")?.getAttribute("data-lia-app") ?? cible.parentElement?.closest("[data-lia-genre]")?.getAttribute("data-lia-genre") ?? void 0;
-  const donnees = cible.closest("[data-lia-donnees]")?.getAttribute("data-lia-donnees") ?? void 0;
+  const donnees = cible.closest("[data-lia-donnees]")?.getAttribute("data-lia-donnees") ?? lireGraphique(cible);
   const visible = cible.innerText;
   const brut2 = typeof visible === "string" ? visible : cible.textContent ?? "";
   const texte = brut2.trim() ? brut2 : libelleAccessible(cible);
@@ -4073,9 +4118,9 @@ function lireLente(cle) {
     if (typeof j !== "object" || j === null) return null;
     const { t, slow } = j;
     if (!Number.isFinite(t) || typeof slow !== "object" || slow === null) return null;
-    const propre = {};
-    for (const [k, v] of Object.entries(slow)) if (estFraction2(v)) propre[k] = v;
-    return { t, slow: propre };
+    const propre2 = {};
+    for (const [k, v] of Object.entries(slow)) if (estFraction2(v)) propre2[k] = v;
+    return { t, slow: propre2 };
   } catch {
     return null;
   }
