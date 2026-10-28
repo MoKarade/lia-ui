@@ -198,7 +198,8 @@ Le contrat `ask` ne change pas : l'élément arrive dans le texte de la question
 ```tsx
 <Lia
   elements={{
-    // Par défaut : data-lia-genre, data-lia-app (sur l'élément ou un ancêtre) et son texte visible.
+    // Par défaut : data-lia-genre, data-lia-app (sur l'élément ou un ancêtre), son texte visible et, depuis v0.45.0, ses FAITS
+    // (`data-lia-donnees` : valeurs, dates, états, contenu ; 1 200 caractères) que LIA analyse elle-même. Renvoie `donnees` pour les donner d'ailleurs.
     decrire: (el) =>
       el.closest("[data-app]")
         ? { genre: "la carte d'une app", nom: el.closest<HTMLElement>("[data-app]")?.dataset.app, texte: el.textContent ?? "" }

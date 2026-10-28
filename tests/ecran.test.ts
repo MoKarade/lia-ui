@@ -225,3 +225,40 @@ describe("tout ce que Marc touche", () => {
     expect(elementVise(document.getElementById("ico"), SELECTEUR_ELEMENTS, couche)?.id).toBe("b");
   });
 });
+
+describe("faits lus par l'hôte (donnees)", () => {
+  it("normaliser les garde, bornés à 1 200 caractères, sans < ni >", () => {
+    const d = normaliser({ genre: "une barre du Gantt", donnees: `mission <b>X</b> ${"a ".repeat(900)}` });
+    expect(d.donnees!.length).toBeLessThanOrEqual(1200);
+    expect(d.donnees!.length).toBeGreaterThan(1150);
+    expect(d.donnees).not.toMatch(/[<>]/);
+    expect(normaliser({ genre: "x", donnees: "   " }).donnees).toBeUndefined();
+  });
+
+  it("decrireParDefaut lit data-lia-donnees sur l'élément ou un ancêtre", () => {
+    html('<div data-lia-donnees="mission M ; 3 tâches ; fin prévue le 30/10"><span id="x">Hubperso 30 j</span></div>');
+    const d = decrireParDefaut(document.getElementById("x")!);
+    expect(d.donnees).toBe("mission M ; 3 tâches ; fin prévue le 30/10");
+    expect(d.texte).toBe("Hubperso 30 j");
+  });
+
+  it("composerQuestion donne les faits à LIA, balisés comme donnée, et reste sous 2 000 caractères", () => {
+    const q = composerQuestion("expliquer", normaliser({ genre: "une barre du Gantt", texte: "T".repeat(300), donnees: "d ".repeat(700) }));
+    expect(q).toContain("Faits lus dans l'app pour toi");
+    expect(q).toContain("analyse-les toi-même");
+    expect(q.length).toBeLessThanOrEqual(2000);
+    expect(q.trimEnd().endsWith("»")).toBe(true);
+  });
+
+  it("sans faits, la question est celle d'avant (aucune mention de faits)", () => {
+    const q = composerQuestion("expliquer", normaliser({ genre: "un bouton", texte: "OK" }));
+    expect(q).not.toContain("Faits lus");
+    expect(q).toContain("texte : « OK »");
+  });
+
+  it("question libre de 1 000 caractères : les faits sont tronqués, jamais la borne", () => {
+    const q = composerQuestion("question", normaliser({ genre: "g", nom: "n", texte: "t".repeat(300), donnees: "d ".repeat(700) }), "q".repeat(1000));
+    expect(q.length).toBeLessThanOrEqual(2000);
+    expect(q.trimEnd().endsWith("»")).toBe(true);
+  });
+});
