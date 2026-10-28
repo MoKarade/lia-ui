@@ -4343,6 +4343,7 @@ var DELAI_PAROLE_PROPRE = 28;
 var DELAI_MONDE = { appeler: 90, resumer: 720, feliciter: 1200, rappeler: 1800, souvenir: 1500, accompagner: 0, veiller: 240 };
 var SURVOL_MS = 4e3;
 var DELAI_REPRISE_DISCUSSION_MS = 30 * 6e4;
+var INTERVALLE_LECTURE_ETAT_MS = 12e4;
 var DELAI_ACCOMPAGNER_MS = 18e4;
 var ETAT_MONDE = { appeler: "alerte", resumer: "analyse", feliciter: "reussi", rappeler: "planifie", souvenir: "souvient", accompagner: "lit" };
 var etatSur = (etat) => ST.includes(etat) ? etat : "repos";
@@ -6567,7 +6568,9 @@ function mountLia(options = {}) {
       enEcriture = false;
     }
   };
-  const minuterieLecture = hote ? setInterval(() => void lireEtat(), 6e4) : void 0;
+  const minuterieLecture = hote ? setInterval(() => {
+    if (!document.hidden) void lireEtat();
+  }, INTERVALLE_LECTURE_ETAT_MS) : void 0;
   const minuterieEcriture = hote ? setInterval(() => void ecrireEtat(), 2e4) : void 0;
   const surFermeture = () => {
     if (document.visibilityState === "hidden") void ecrireEtat(true);
@@ -7094,4 +7097,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-6JLCAMMO.mjs.map
+//# sourceMappingURL=chunk-CYVYEEIW.mjs.map

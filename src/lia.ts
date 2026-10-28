@@ -168,6 +168,8 @@ const DELAI_MONDE: Record<MotifMonde | "veiller", number> = { appeler: 90, resum
 const SURVOL_MS = 4000;
 /** Une discussion de l'état partagé plus vieille que cela ne se rouvre pas dans une autre app. */
 const DELAI_REPRISE_DISCUSSION_MS = 30 * 60_000;
+/** Relecture de l'état partagé d'une page à l'écran (ms) : un onglet caché ne lit pas, il relit en revenant au premier plan (lia-ui#162). */
+const INTERVALLE_LECTURE_ETAT_MS = 120_000;
 const DELAI_ACCOMPAGNER_MS = 180_000;
 const ETAT_MONDE: Record<MotifMonde, string> = { appeler: "alerte", resumer: "analyse", feliciter: "reussi", rappeler: "planifie", souvenir: "souvient", accompagner: "lit" };
 const etatSur = (etat: string): string => (ST.includes(etat) ? etat : "repos");
@@ -2722,7 +2724,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       enEcriture = false;
     }
   };
-  const minuterieLecture = hote ? setInterval(() => void lireEtat(), 60_000) : undefined;
+  const minuterieLecture = hote ? setInterval(() => { if (!document.hidden) void lireEtat(); }, INTERVALLE_LECTURE_ETAT_MS) : undefined;
   const minuterieEcriture = hote ? setInterval(() => void ecrireEtat(), 20_000) : undefined;
   const surFermeture = (): void => {
     if (document.visibilityState === "hidden") void ecrireEtat(true);
