@@ -4426,6 +4426,7 @@ function mountLia(options = {}) {
   let contexteQuestion = null;
   let reperee = null;
   let analysePour = null;
+  let analyseEnvoyee = null;
   let attenteElement;
   let relache = 0;
   let glisse = null;
@@ -5485,7 +5486,8 @@ function mountLia(options = {}) {
   };
   const cibleAnalyse = () => {
     if (analysePour && !analysePour.isConnected) analysePour = null;
-    const cible2 = analysePour ?? (etat === "analyse" ? reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde : null);
+    const ordre = analyseEnvoyee && attention?.type === "element" && attention.el === analyseEnvoyee ? analyseEnvoyee : null;
+    const cible2 = analysePour ?? ordre;
     if (!cible2 || !cible2.isConnected || zoneLia.contains(cible2)) return null;
     return cible2;
   };
@@ -5953,6 +5955,7 @@ function mountLia(options = {}) {
   function allerVoir(element, secondes = 10, etatArrivee) {
     if (!peutBouger() || !element.isConnected || zoneLia.contains(element)) return false;
     annulerPerchage();
+    analyseEnvoyee = null;
     const r = element.getBoundingClientRect();
     attention = {
       type: "element",
@@ -6074,6 +6077,7 @@ function mountLia(options = {}) {
   function envoyerVers(element, opts = {}) {
     if (!allerVoir(element, opts.secondes ?? 10, opts.etat)) return false;
     if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir3(opts.etat);
+    if (opts.etat === "analyse") analyseEnvoyee = element;
     const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (dit) direLa(element, dit, false);
     return true;
@@ -7045,4 +7049,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-FTQZYHIP.mjs.map
+//# sourceMappingURL=chunk-SW7MSXKQ.mjs.map

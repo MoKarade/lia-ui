@@ -334,6 +334,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let reperee: Element | null = null;
   /** L'élément qu'elle analyse à la demande de Marc : le cadre se dessine dès le clic et reste jusqu'à la fin de la réponse (même si elle est encore en route). */
   let analysePour: Element | null = null;
+  /** L'élément que l'hôte lui a dit d'analyser (`envoyer` avec l'état « analyse ») : une demande, valable tant qu'elle y est. */
+  let analyseEnvoyee: Element | null = null;
   let attenteElement: ReturnType<typeof setTimeout> | undefined;
   let relache = 0;
   let glisse: { x: number; y: number; x0: number; y0: number; deplace: boolean } | null = null;
@@ -1497,8 +1499,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
 
   /**
-   * Quand elle analyse, ce sont ses propres traits, les nanobots, qui sortent de son corps, se répartissent sur ce qu'elle regarde
-   * (la carte que Marc a désignée, celle qu'elle visite ou qu'elle regarde avec lui), le balayent d'une onde de lecture, puis
+   * Quand elle analyse, ce sont ses propres traits, les nanobots, qui sortent de son corps, se répartissent sur ce qu'on lui a demandé
+   * d'analyser (l'élément que Marc a désigné dans le menu, ou que l'hôte lui a fait analyser), le balayent d'une onde de lecture, puis
    * rentrent (Marc, 24/10 : « c'est les nanobots eux-mêmes qui doivent analyser le truc, pas un carré de plus »). Dans sa couche,
    * la page n'est jamais modifiée ; jamais d'essaim sans élément réel à analyser.
    */
@@ -1529,10 +1531,16 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     essaimZone = null;
     toileNano.hidden = true;
   };
-  /** La cible de l'analyse : ce que Marc vient de désigner, sinon ce qu'elle analyse d'elle-même. */
+  /**
+   * La cible de l'analyse : UNIQUEMENT ce qu'on lui a demandé d'analyser, jamais ce qu'elle regarde d'elle-même (Marc, 28/10 :
+   * « quand il scan, je veux que ce soit uniquement sur ce que je lui ai demandé de scanner, pour chaque app, chaque action »).
+   * Une demande, c'est une entrée du menu de l'élément (`analysePour`) ou un ordre explicite de l'hôte (`envoyer(el, { etat: "analyse" })`,
+   * valable tant qu'elle y est). Ses visites spontanées (`allerVoir`, sa curiosité, une proposition du monde) n'envoient aucun nanobot.
+   */
   const cibleAnalyse = (): Element | null => {
     if (analysePour && !analysePour.isConnected) analysePour = null;
-    const cible = analysePour ?? (etat === "analyse" ? (reperee ?? (attention?.type === "element" ? attention.el : null) ?? regarde) : null);
+    const ordre = analyseEnvoyee && attention?.type === "element" && attention.el === analyseEnvoyee ? analyseEnvoyee : null;
+    const cible = analysePour ?? ordre;
     if (!cible || !cible.isConnected || zoneLia.contains(cible)) return null;
     return cible;
   };
@@ -2064,6 +2072,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   function allerVoir(element: Element, secondes = 10, etatArrivee?: string): boolean {
     if (!peutBouger() || !element.isConnected || zoneLia.contains(element)) return false;
     annulerPerchage();
+    // Une visite n'est pas une demande d'analyse : seul `envoyerVers` en pose une, après coup.
+    analyseEnvoyee = null;
     const r = element.getBoundingClientRect();
     attention = {
       type: "element",
@@ -2206,6 +2216,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   function envoyerVers(element: Element, opts: EnvoiLia = {}): boolean {
     if (!allerVoir(element, opts.secondes ?? 10, opts.etat)) return false;
     if (opts.etat && !etatForce && ST.includes(opts.etat)) choisir(opts.etat);
+    if (opts.etat === "analyse") analyseEnvoyee = element;
     const dit = opts.dit?.trim().slice(0, LONGUEUR_MAX_SPONTANE);
     if (dit) direLa(element, dit, false);
     return true;

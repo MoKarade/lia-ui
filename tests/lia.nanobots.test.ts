@@ -122,6 +122,22 @@ describe("ses nanobots analysent eux-mêmes ce qu'elle regarde, plus de carré",
     expect(toile().hidden).toBe(true);
   });
 
+  it("une visite qu'elle fait d'elle-même (allerVoir, sa curiosité) n'envoie aucun nanobot : seul ce qu'on lui demande d'analyser est balayé (Marc, 28/10)", () => {
+    lia = mountLia({ vieAutonome: false, quandMouvementReduit: "complet" });
+    expect(lia.allerVoir(carte(), 20)).toBe(true);
+    seconde(8);
+    expect(lia.nanobots().actif).toBe(false);
+    expect(toile().hidden).toBe(true);
+    // Un ordre de l'hôte, lui, est une demande : les nanobots partent, et rentrent quand elle repart ailleurs.
+    expect(lia.envoyer(carte(), { etat: "analyse", secondes: 20 })).toBe(true);
+    seconde(7);
+    expect(lia.nanobots().actif).toBe(true);
+    document.body.insertAdjacentHTML("beforeend", `<article id="autre" data-lia-cible>Une autre</article>`);
+    expect(lia.allerVoir(document.getElementById("autre") as HTMLElement, 20)).toBe(true);
+    seconde(12);
+    expect(lia.nanobots().actif).toBe(false);
+  });
+
   it("le CSS pose la canvas sans jamais prendre un clic, et le carré d'avant n'existe plus", () => {
     expect(CSS).toMatch(/\.lia-ui__nano\{[^}]*pointer-events:none/);
     expect(CSS).not.toMatch(/lia-ui__cadre|lia-ui__coin|lia-ui__balai/);
