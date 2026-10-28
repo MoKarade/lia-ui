@@ -2303,6 +2303,11 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     avertie = true;
     console.error("LIA : son état partagé est indisponible, elle garde son état local", e);
   };
+  /** La discussion que l'hôte portait à la dernière lecture : une écriture ne la remplace jamais par une plus ancienne (l'onglet d'une autre app, resté sur une vieille discussion). */
+  let discussionDistante: DiscussionPartagee | undefined;
+  const copieDiscussion = (d: DiscussionPartagee): DiscussionPartagee => ({ ...d, msgs: d.msgs.map((m) => ({ ...m })) });
+  const discussionAEcrire = (): DiscussionPartagee | undefined =>
+    discussionEtat && discussionDistante ? (discussionDistante.quand > discussionEtat.quand ? discussionDistante : discussionEtat) : (discussionEtat ?? discussionDistante);
   const etatCourant = (version: number, maj: number): EtatLia => {
     const jour = jourLocal(new Date(maj));
     return {
@@ -2315,12 +2320,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       relances: { jour, n: lireRelances(cle, jour) },
       interieur: { ...interieur },
       ...(souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {}),
-      ...(discussionEtat ? { discussion: { ...discussionEtat, msgs: discussionEtat.msgs.map((m) => ({ ...m })) } } : {}),
+      ...(discussionAEcrire() ? { discussion: copieDiscussion(discussionAEcrire() as DiscussionPartagee) } : {}),
     };
   };
   const appliquerEtat = (e: EtatLia): void => {
-    // Sa discussion d'ailleurs : seulement si cette page n'a rien dit elle-même (ce qui s'y est dit l'emporte, c'est plus frais).
-    if (trace.length === 0) discussionEtat = e.discussion;
     envies = { ...e.envies };
     faits = e.journal.map((f) => ({ ...f }));
     chargerLente(reseau, e.lente, Date.now() - e.maj);
@@ -2361,20 +2364,36 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     derniereEmpreinte = empreinte(e);
   };
   /**
-   * Une discussion commencée dans une autre app se rouvre ici, une seule fois, à la première lecture : ni vieille de plus d'une demi-heure,
-   * ni par-dessus un champ où Marc écrit. Celle de l'onglet (rouverte au montage avec son vrai instant) ne cède que devant une plus récente.
+   * La plus récente des deux discussions gagne, à CHAQUE lecture de l'état (pas seulement la première) : celle de cette page (onglet ou dite ici)
+   * et celle que l'hôte porte (ouverte ou fermée ailleurs). Une plus récente fermée ferme celle-ci ; une plus récente ouverte la remplace
+   * (jamais par-dessus un champ où Marc écrit, ni pendant une question en route, ni dans un champ de LIA où il a déjà tapé) ; une plus
+   * ancienne n'est jamais écrite par-dessus (voir `discussionAEcrire`). Une discussion fermée de l'onglet ne s'ouvre jamais d'elle-même :
+   * seule la première lecture ouvre le chat (et pour une discussion de moins d'une demi-heure), les suivantes ne font que remplacer ou fermer.
    */
   let reprisTentee = false;
-  const reprendreDiscussion = (d: EtatLia | null): void => {
-    if (reprisTentee) return;
-    reprisTentee = true;
+  const rapprocherDiscussion = (d: EtatLia | null, premiere: boolean): void => {
     const x = d?.discussion;
-    if (!x || !x.ouvert || x.msgs.length === 0 || detruit) return;
-    if (Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS) return;
-    // Une discussion ouverte mais vide (Marc vient de l'ouvrir) n'est pas à remplacer ; une avec des paroles l'est si la partagée est plus récente.
-    if (chatOuvert && (trace.length === 0 || x.quand <= quandDiscussion)) return;
+    if (!x || detruit) return;
+    discussionDistante = x;
+    // Celle de cette page est aussi récente (ou plus) : elle reste, et c'est elle que l'état recevra.
+    if (x.quand <= (discussionEtat?.quand ?? 0)) return;
+    // Rien dit ici : cette page porte celle de l'hôte (un chat ouvert mais vide, que Marc vient d'ouvrir, n'est pas remplacé plus bas).
+    if (trace.length === 0) discussionEtat = x;
     const focus = document.activeElement;
-    if (focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus)) return;
+    const marcEcritAilleurs =
+      focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus);
+    if (!x.ouvert) {
+      // Fermée ailleurs plus récemment : celle de cette page se ferme aussi (avec l'instant de la fermeture, pas « maintenant »).
+      if (chatOuvert && trace.length > 0 && !enCours && !champ?.value && !marcEcritAilleurs) {
+        fermerChat();
+        discussionEtat = x;
+      }
+      return;
+    }
+    if (x.msgs.length === 0 || Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS || enCours) return;
+    // Un chat ouvert mais vide est à Marc ; un chat fermé ne s'ouvre qu'à la première lecture.
+    if (chatOuvert ? trace.length === 0 : !premiere) return;
+    if (marcEcritAilleurs) return;
     if (chatOuvert) {
       trace.length = 0;
       journal?.replaceChildren();
@@ -2391,7 +2410,9 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
         appliquerEtat(d);
         retenir(d);
       }
-      reprendreDiscussion(d);
+      const premiere = !reprisTentee;
+      reprisTentee = true;
+      rapprocherDiscussion(d, premiere);
     } catch (e) {
       avertirEtat(e);
     }
@@ -2407,6 +2428,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       if (rendu && rendu.version !== e.version && adopter(rendu, majVue, versionVue)) {
         appliquerEtat(rendu);
         retenir(rendu);
+        rapprocherDiscussion(rendu, false);
       } else {
         retenir(e);
       }

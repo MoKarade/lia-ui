@@ -6096,6 +6096,9 @@ function mountLia(options = {}) {
     avertie = true;
     console.error("LIA : son \xE9tat partag\xE9 est indisponible, elle garde son \xE9tat local", e);
   };
+  let discussionDistante;
+  const copieDiscussion = (d) => ({ ...d, msgs: d.msgs.map((m) => ({ ...m })) });
+  const discussionAEcrire = () => discussionEtat && discussionDistante ? discussionDistante.quand > discussionEtat.quand ? discussionDistante : discussionEtat : discussionEtat ?? discussionDistante;
   const etatCourant = (version, maj) => {
     const jour = jourLocal(new Date(maj));
     return {
@@ -6108,11 +6111,10 @@ function mountLia(options = {}) {
       relances: { jour, n: lireRelances(cle, jour) },
       interieur: { ...interieur },
       ...souvenirs.length ? { souvenirs: souvenirs.map((s) => ({ ...s })) } : {},
-      ...discussionEtat ? { discussion: { ...discussionEtat, msgs: discussionEtat.msgs.map((m) => ({ ...m })) } } : {}
+      ...discussionAEcrire() ? { discussion: copieDiscussion(discussionAEcrire()) } : {}
     };
   };
   const appliquerEtat = (e) => {
-    if (trace.length === 0) discussionEtat = e.discussion;
     envies = { ...e.envies };
     faits = e.journal.map((f) => ({ ...f }));
     chargerLente(reseau, e.lente, Date.now() - e.maj);
@@ -6150,15 +6152,24 @@ function mountLia(options = {}) {
     derniereEmpreinte = empreinte(e);
   };
   let reprisTentee = false;
-  const reprendreDiscussion = (d) => {
-    if (reprisTentee) return;
-    reprisTentee = true;
+  const rapprocherDiscussion = (d, premiere) => {
     const x = d?.discussion;
-    if (!x || !x.ouvert || x.msgs.length === 0 || detruit) return;
-    if (Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS) return;
-    if (chatOuvert && (trace.length === 0 || x.quand <= quandDiscussion)) return;
+    if (!x || detruit) return;
+    discussionDistante = x;
+    if (x.quand <= (discussionEtat?.quand ?? 0)) return;
+    if (trace.length === 0) discussionEtat = x;
     const focus = document.activeElement;
-    if (focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus)) return;
+    const marcEcritAilleurs = focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !couche.contains(focus);
+    if (!x.ouvert) {
+      if (chatOuvert && trace.length > 0 && !enCours && !champ?.value && !marcEcritAilleurs) {
+        fermerChat();
+        discussionEtat = x;
+      }
+      return;
+    }
+    if (x.msgs.length === 0 || Date.now() - x.quand > DELAI_REPRISE_DISCUSSION_MS || enCours) return;
+    if (chatOuvert ? trace.length === 0 : !premiere) return;
+    if (marcEcritAilleurs) return;
     if (chatOuvert) {
       trace.length = 0;
       journal?.replaceChildren();
@@ -6175,7 +6186,9 @@ function mountLia(options = {}) {
         appliquerEtat(d);
         retenir(d);
       }
-      reprendreDiscussion(d);
+      const premiere = !reprisTentee;
+      reprisTentee = true;
+      rapprocherDiscussion(d, premiere);
     } catch (e) {
       avertirEtat(e);
     }
@@ -6190,6 +6203,7 @@ function mountLia(options = {}) {
       if (rendu && rendu.version !== e.version && adopter(rendu, majVue, versionVue)) {
         appliquerEtat(rendu);
         retenir(rendu);
+        rapprocherDiscussion(rendu, false);
       } else {
         retenir(e);
       }
