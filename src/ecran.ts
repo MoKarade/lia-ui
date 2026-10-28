@@ -197,7 +197,7 @@ export function estElement(x: unknown): x is Element {
 export function elementVise(
   cible: EventTarget | null,
   selecteur: string,
-  couche: Element,
+  couche: { contains(n: Node | null): boolean },
   racine: Document = document,
 ): Element | null {
   if (!estElement(cible)) return null;
@@ -232,7 +232,7 @@ export function cibleSousSurcouche(
   cible: EventTarget | null,
   x: number,
   y: number,
-  couche: Element,
+  couche: { contains(n: Node | null): boolean },
   racine: Document = document,
 ): EventTarget | null {
   if (!estElement(cible) || typeof racine.elementsFromPoint !== "function") return cible;
