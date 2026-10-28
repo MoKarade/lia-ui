@@ -1,0 +1,36 @@
+name: Tag
+
+# Pose le tag annoté vX.Y.Z quand la version de package.json change sur main (Marc, 28/10/2026 : « automatique »).
+# Les apps épinglent ce tag ; une session ne peut pas en pousser un, le jeton du job le peut.
+# Jamais de force-push, jamais un tag existant déplacé : voir scripts/poser-tag.mjs (tout passe par l'API REST, sans `git push`).
+# `contents: write` seulement sur ce job. Les actions sont épinglées par SHA (grille de conformité).
+on:
+  push:
+    branches: [main]
+
+# Un push à la fois : deux fusions d'affilée ne se doublent pas, la seconde attend la première (jamais annulée).
+concurrency:
+  group: tag
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: Poser le tag de version
+    runs-on: ${{ github.event.repository.visibility == 'public' && 'ubuntu-latest' || fromJSON('["self-hosted","pc-marc"]') }} # comme la CI : public = machines GitHub, privé = robot du PC
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+      - run: node scripts/poser-tag.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AVANT_SHA: ${{ github.event.before }}

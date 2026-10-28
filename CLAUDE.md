@@ -25,6 +25,6 @@
 
 ## Git et CI
 - Branches `claude/<slug>`, commits en français préfixés (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`), PR en brouillon pour itérer, `--base main` explicite, jamais `--force` sur `main`, jamais `--no-verify`.
-- ⚠️ **Une session ne peut PAS pousser de tag** (HTTP 403 sur les refs de tag) : Marc pose le tag annoté `vX.Y.Z` après merge. Les apps épinglent ce tag ; jamais de branche.
+- **Le tag annoté `vX.Y.Z` se pose tout seul** : `.github/workflows/tag.yml` (script `scripts/poser-tag.mjs`) le crée à chaque push sur `main` où la version de `package.json` change, avec le jeton du job ; jamais de tag déplacé ni de force-push (une session ne peut pas pousser de tag elle-même, HTTP 403). Les apps épinglent ce tag ; jamais de branche.
 - Breaking change de l'API (props, types) : bump majeur ET nouveau tag majeur, comme `hub-contract`.
 - Dépôt **privé** tant que Marc n'a pas dit « autorisé » : les apps publiques ne peuvent l'installer qu'une fois le dépôt public.
