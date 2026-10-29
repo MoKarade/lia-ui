@@ -4836,6 +4836,7 @@ function mountLia(options = {}) {
   const trace = [];
   let quandDiscussion = 0;
   let discussionEtat;
+  let discussionMasquee = false;
   const ajouterMsg = (texte, de2, erreur = false, garder3 = !erreur && !atelier, quand = Date.now()) => {
     activiteChat = t;
     if (garder3) {
@@ -5387,9 +5388,18 @@ function mountLia(options = {}) {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
       choisir3("indispo");
     }
+    const masquee = discussionMasquee;
+    discussionMasquee = false;
+    const reste = discussionEtat;
+    if (masquee && !atelier && trace.length === 0 && reste?.ouvert && reste.msgs.length > 0 && Date.now() - reste.quand <= DELAI_REPRISE_DISCUSSION_MS) {
+      for (const m of reste.msgs) ajouterMsg(m.texte, m.de, false, true, reste.quand);
+    }
     champ.focus();
   };
   function fermerChat() {
+    fermerChatEtGarder(false);
+  }
+  function fermerChatEtGarder(garder3) {
     if (!chatOuvert || atelier && !detruit) return;
     enCours?.abort();
     enCours = null;
@@ -5402,10 +5412,14 @@ function mountLia(options = {}) {
     atelierRacine = atelierCorps = atelierListe = null;
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
+    const gardee = garder3 && !atelier && trace.length > 0;
     trace.length = 0;
     quandDiscussion = 0;
-    if (!atelier) ecrireDiscussion(cle, null);
-    discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
+    discussionMasquee = gardee;
+    if (!gardee) {
+      if (!atelier) ecrireDiscussion(cle, null);
+      discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
+    }
     contexteQuestion = null;
     cesserDeReperer();
     choisir3(etatForce ?? "repos");
@@ -6508,7 +6522,7 @@ function mountLia(options = {}) {
   };
   const penser = () => {
     if (finEtatTemp && t > finEtatTemp) finirPassagere();
-    if (chatOuvert && !enCours && !champ?.value && t - activiteChat > DELAI_CHAT_OUBLIE) fermerChat();
+    if (chatOuvert && !enCours && !champ?.value && t - activiteChat > DELAI_CHAT_OUBLIE) fermerChatEtGarder(true);
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
@@ -6680,6 +6694,7 @@ function mountLia(options = {}) {
     const focus = document.activeElement;
     const marcEcritAilleurs = focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !zoneLia.contains(focus);
     if (!x.ouvert) {
+      discussionMasquee = false;
       if (chatOuvert && trace.length > 0 && !enCours && !champ?.value && !marcEcritAilleurs) {
         fermerChat();
         discussionEtat = x;
@@ -6692,7 +6707,10 @@ function mountLia(options = {}) {
     if (chatOuvert) {
       trace.length = 0;
       journal?.replaceChildren();
-    } else ouvrirChat();
+    } else {
+      discussionMasquee = false;
+      ouvrirChat();
+    }
     for (const m of x.msgs) ajouterMsg(m.texte, m.de, false, true, x.quand);
   };
   const lireEtat = async () => {

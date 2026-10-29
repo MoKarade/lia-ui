@@ -408,3 +408,98 @@ describe("la plus récente gagne à CHAQUE lecture de l'état, fermée ou ouvert
     expect((garde as EtatLia | null)?.discussion?.ouvert).toBe(false);
   });
 });
+
+describe("la discussion survit à la fermeture pour inactivité (lia-ui#166)", () => {
+  const poser = async (garde: { v: EtatLia | null }): Promise<void> => {
+    const hote: EtatHote = { lire: async () => garde.v, ecrire: async (e) => ((garde.v = e), null) };
+    lia = mountLia({ vieAutonome: false, cle: "a", etat: hote, ask: async () => ({ text: "Elle est à 80 %." }) });
+    await vi.advanceTimersByTimeAsync(500);
+    lia.ouvrirChat();
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
+    champ.value = "Où en est ma recharge ?";
+    document.querySelector<HTMLFormElement>(".lia-ui__form")?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    await vi.advanceTimersByTimeAsync(2_000);
+  };
+
+  it("avec des messages : le chat se cache après 2 min, mais l'état partagé garde la discussion ouverte, telle quelle", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    await poser(garde);
+    await vi.advanceTimersByTimeAsync(25_000);
+    const avant = garde.v?.discussion;
+    expect(avant?.ouvert).toBe(true);
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+    expect(garde.v?.discussion).toEqual(avant);
+  });
+
+  it("rouvrir le chat sur la même page retrouve les messages, avec leur vrai instant", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    await poser(garde);
+    await vi.advanceTimersByTimeAsync(25_000);
+    const quand = garde.v?.discussion?.quand;
+    await vi.advanceTimersByTimeAsync(200_000);
+    lia?.ouvrirChat();
+    expect(messages()).toEqual(["Où en est ma recharge ?", "Elle est à 80 %."]);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(garde.v?.discussion?.quand).toBe(quand);
+  });
+
+  it("une autre page (autre onglet, autre app) la rouvre à son arrivée", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    await poser(garde);
+    await vi.advanceTimersByTimeAsync(225_000);
+    lia?.destroy();
+    lia = null;
+    sessionStorage.clear();
+    document.body.innerHTML = "<p>Une autre app</p>";
+    lia = mountLia({ vieAutonome: false, cle: "b", etat: { lire: async () => garde.v, ecrire: async (e) => ((garde.v = e), null) }, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages()).toEqual(["Où en est ma recharge ?", "Elle est à 80 %."]);
+  });
+
+  it("un chat resté vide se referme après 2 min et le dit à l'état partagé, comme avant", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    lia = mountLia({ vieAutonome: false, cle: "a", etat: { lire: async () => garde.v, ecrire: async (e) => ((garde.v = e), null) }, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    lia.ouvrirChat();
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+    expect(garde.v?.discussion?.ouvert ?? false).toBe(false);
+  });
+
+  it("une fermeture voulue (✕) efface toujours, partout", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    await poser(garde);
+    await vi.advanceTimersByTimeAsync(25_000);
+    document.querySelector<HTMLButtonElement>('[aria-label="Fermer la discussion"]')?.click();
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(garde.v?.discussion).toMatchObject({ ouvert: false, msgs: [] });
+    lia?.ouvrirChat();
+    expect(messages()).toEqual([]);
+  });
+
+  it("fermée ailleurs entre-temps : rouvrir ici ne remontre pas l'ancienne discussion", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    // Un hôte qui refuse d'écraser un état plus récent (comme MemoryAI : 409 + l'état gardé).
+    const hote: EtatHote = {
+      lire: async () => garde.v,
+      ecrire: async (e) => {
+        if (garde.v && garde.v.maj > e.maj) return garde.v;
+        garde.v = e;
+        return null;
+      },
+    };
+    lia = mountLia({ vieAutonome: false, cle: "a", etat: hote, ask: async () => ({ text: "Elle est à 80 %." }) });
+    await vi.advanceTimersByTimeAsync(500);
+    lia.ouvrirChat();
+    const champ = document.querySelector<HTMLInputElement>(".lia-ui__champ") as HTMLInputElement;
+    champ.value = "Où en est ma recharge ?";
+    document.querySelector<HTMLFormElement>(".lia-ui__form")?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+    garde.v = etat({ version: (garde.v?.version ?? 0) + 10, maj: Date.now() + 500_000, discussion: { ouvert: false, quand: Date.now() + 5000, msgs: [] } });
+    await vi.advanceTimersByTimeAsync(30_000);
+    lia.ouvrirChat();
+    expect(messages()).toEqual([]);
+  });
+});
