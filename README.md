@@ -108,7 +108,7 @@ Un lien dont le `::after` couvre toute la carte (motif courant : `a::after { pos
 
 ## Le toucher que l'hôte peut prendre (v0.33.0)
 
-`surToucher: () => boolean`. Quand la discussion de LIA est fermée, un toucher de son corps (clic sans glissement, Entrée, Espace) appelle l'hôte une fois ; s'il rend `true`, l'hôte l'a pris (il ouvre sa propre conversation, comme dans la maquette) et la discussion de lia-ui ne s'ouvre pas. Elle réagit quand même au toucher. Toute autre valeur, ou une erreur levée (dite dans la console), ouvre sa discussion comme avant. Discussion ouverte : le toucher la ferme, sans appeler l'hôte. `ouvrirChat()` de la poignée n'appelle jamais `surToucher`. Le menu (clic droit, appui long, touche Menu) n'est pas concerné. Sans l'option, rien ne change.
+`surToucher: () => boolean`. Quand la discussion de LIA est fermée, un toucher de son corps (clic sans glissement, Entrée, Espace) appelle l'hôte une fois ; s'il rend `true`, l'hôte l'a pris (il ouvre sa propre conversation, comme dans la maquette) et la discussion de lia-ui ne s'ouvre pas. Elle réagit quand même au toucher. Toute autre valeur, ou une erreur levée (dite dans la console), ouvre sa discussion comme avant. Discussion ouverte : le toucher la cache, sans appeler l'hôte et sans l'effacer (v0.48.2 : elle reste dans l'onglet et dans l'état partagé, 30 minutes ; le toucher suivant la remontre ; seuls ✕ et Échap l'effacent, partout ; un chat resté vide se ferme). `ouvrirChat()` de la poignée n'appelle jamais `surToucher`. Le menu (clic droit, appui long, touche Menu) n'est pas concerné. Sans l'option, rien ne change.
 
 ## Sa mémoire sur plusieurs jours (v0.25.0)
 

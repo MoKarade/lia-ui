@@ -5998,7 +5998,7 @@ function mountLia(options = {}) {
   });
   const toucher = () => {
     if (chatOuvert) {
-      fermerChat();
+      fermerChatEtGarder(true);
       return;
     }
     if (options.surToucher) {
@@ -7221,4 +7221,4 @@ export {
   LIBELLE_HUMEUR,
   mountLia
 };
-//# sourceMappingURL=chunk-4JO5XPSN.mjs.map
+//# sourceMappingURL=chunk-O7VTU6I6.mjs.map

@@ -6056,7 +6056,7 @@ function mountLia(options = {}) {
   });
   const toucher = () => {
     if (chatOuvert) {
-      fermerChat();
+      fermerChatEtGarder(true);
       return;
     }
     if (options.surToucher) {

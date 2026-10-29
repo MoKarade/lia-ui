@@ -457,6 +457,61 @@ describe("la discussion survit à la fermeture pour inactivité (lia-ui#166)", (
     expect(messages()).toEqual(["Où en est ma recharge ?", "Elle est à 80 %."]);
   });
 
+  const toucherCorps = (): void => {
+    const hit = document.querySelector<HTMLElement>(".lia-ui__hit") as HTMLElement;
+    hit.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 100, clientY: 100 }));
+    hit.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0, clientX: 100, clientY: 100 }));
+  };
+
+  it("toucher son corps avec des messages cache le chat sans effacer la discussion (lia-ui#168), la retoucher la remontre", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    await poser(garde);
+    await vi.advanceTimersByTimeAsync(25_000);
+    const avant = garde.v?.discussion;
+    toucherCorps();
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+    expect(garde.v?.discussion).toEqual(avant);
+    expect(lireDiscussion("a")?.msgs.length).toBe(2);
+    toucherCorps();
+    expect(messages()).toEqual(["Où en est ma recharge ?", "Elle est à 80 %."]);
+  });
+
+  it("toucher son corps cachée, puis recharger : la discussion est reprise (le piège du relevé du 29/10)", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    await poser(garde);
+    await vi.advanceTimersByTimeAsync(25_000);
+    toucherCorps();
+    await vi.advanceTimersByTimeAsync(25_000);
+    lia?.destroy();
+    lia = null;
+    document.body.innerHTML = "<p>La même page, rechargée</p>";
+    lia = mountLia({ vieAutonome: false, cle: "a", etat: { lire: async () => garde.v, ecrire: async (e) => ((garde.v = e), null) }, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(messages()).toEqual(["Où en est ma recharge ?", "Elle est à 80 %."]);
+  });
+
+  it("Échap efface toujours, partout", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    await poser(garde);
+    await vi.advanceTimersByTimeAsync(25_000);
+    document.querySelector<HTMLElement>(".lia-ui__chat")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(garde.v?.discussion).toMatchObject({ ouvert: false, msgs: [] });
+    expect(lireDiscussion("a")).toBeNull();
+  });
+
+  it("toucher son corps sur un chat resté vide le ferme comme avant", async () => {
+    const garde: { v: EtatLia | null } = { v: null };
+    lia = mountLia({ vieAutonome: false, cle: "a", etat: { lire: async () => garde.v, ecrire: async (e) => ((garde.v = e), null) }, ask });
+    await vi.advanceTimersByTimeAsync(500);
+    lia.ouvrirChat();
+    toucherCorps();
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(document.querySelector(".lia-ui__chat")).toBeNull();
+    expect(garde.v?.discussion?.ouvert ?? false).toBe(false);
+  });
+
   it("un chat resté vide se referme après 2 min et le dit à l'état partagé, comme avant", async () => {
     const garde: { v: EtatLia | null } = { v: null };
     lia = mountLia({ vieAutonome: false, cle: "a", etat: { lire: async () => garde.v, ecrire: async (e) => ((garde.v = e), null) }, ask });
