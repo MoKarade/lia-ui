@@ -570,6 +570,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   let quandDiscussion = 0;
   /** La fin de la discussion, telle que l'état partagé la porte (v0.39.0) : elle suit Marc d'une app à l'autre. Une page qui n'y touche pas renvoie celle qu'elle a lue. */
   let discussionEtat: DiscussionPartagee | undefined;
+  /** Vrai quand le chat a été caché pour inactivité en gardant sa discussion (lia-ui#166) : le rouvrir la remontre telle que l'état la porte. */
+  let discussionMasquee = false;
   /** `quand` : l'instant réel de la parole, pour une discussion rouverte (onglet ou état partagé) ; sans lui, c'est une parole d'à l'instant. */
   const ajouterMsg = (texte: string, de: "lia" | "moi", erreur = false, garder = !erreur && !atelier, quand = Date.now()): HTMLElement => {
     activiteChat = t;
@@ -1184,10 +1186,24 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       ajouterMsg("Je ne suis pas disponible pour le moment.", "lia", true);
       choisir("indispo");
     }
+    // Cachée pour inactivité (lia-ui#166) : ce que l'état partagé porte encore, avec son vrai instant (ni plus récent, ni oublié).
+    const masquee = discussionMasquee;
+    discussionMasquee = false;
+    const reste = discussionEtat;
+    if (masquee && !atelier && trace.length === 0 && reste?.ouvert && reste.msgs.length > 0 && Date.now() - reste.quand <= DELAI_REPRISE_DISCUSSION_MS) {
+      for (const m of reste.msgs) ajouterMsg(m.texte, m.de, false, true, reste.quand);
+    }
     champ.focus();
   };
 
   function fermerChat(): void {
+    fermerChatEtGarder(false);
+  }
+  /**
+   * `garder` (fermeture pour inactivité, lia-ui#166) : le chat disparaît et LIA reprend sa vie, mais la discussion n'est ni effacée de l'onglet
+   * ni fermée dans l'état partagé. Un rechargement ou une autre app la retrouve, 30 minutes au plus. Une fermeture voulue (✕, Échap, toucher) efface.
+   */
+  function fermerChatEtGarder(garder: boolean): void {
     // L'atelier ne se ferme pas : c'est la page de l'hôte (seul `destroy` le retire).
     if (!chatOuvert || (atelier && !detruit)) return;
     enCours?.abort();
@@ -1201,10 +1217,14 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     atelierRacine = atelierCorps = atelierListe = null;
     chat = journal = champ = envoyer = points = null;
     chatOuvert = false;
+    const gardee = garder && !atelier && trace.length > 0;
     trace.length = 0;
     quandDiscussion = 0;
-    if (!atelier) ecrireDiscussion(cle, null);
-    discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
+    discussionMasquee = gardee;
+    if (!gardee) {
+      if (!atelier) ecrireDiscussion(cle, null);
+      discussionEtat = { ouvert: false, quand: Date.now(), msgs: [] };
+    }
     contexteQuestion = null;
     cesserDeReperer();
     choisir(etatForce ?? "repos");
@@ -2474,8 +2494,8 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
   };
   const penser = (): void => {
     if (finEtatTemp && t > finEtatTemp) finirPassagere();
-    // Une discussion laissée vide et sans réponse en attente ne la fige pas : après 2 min sans geste, elle la referme et reprend sa vie.
-    if (chatOuvert && !enCours && !champ?.value && t - activiteChat > DELAI_CHAT_OUBLIE) fermerChat();
+    // Une discussion laissée sans geste et sans réponse en attente ne la fige pas : après 2 min, elle la cache et reprend sa vie (la discussion est gardée, lia-ui#166).
+    if (chatOuvert && !enCours && !champ?.value && t - activiteChat > DELAI_CHAT_OUBLIE) fermerChatEtGarder(true);
     if (!vie || sansMouvement || chatOuvert || menuOuvert || glisse || document.hidden || parle || etatForce) return;
     if (relache && t < relache + 6) return;
     relache = 0;
@@ -2669,6 +2689,7 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     const marcEcritAilleurs =
       focus instanceof HTMLElement && (focus.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(focus.tagName)) && !zoneLia.contains(focus);
     if (!x.ouvert) {
+      discussionMasquee = false;
       // Fermée ailleurs plus récemment : celle de cette page se ferme aussi (avec l'instant de la fermeture, pas « maintenant »).
       if (chatOuvert && trace.length > 0 && !enCours && !champ?.value && !marcEcritAilleurs) {
         fermerChat();
@@ -2683,7 +2704,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
     if (chatOuvert) {
       trace.length = 0;
       journal?.replaceChildren();
-    } else ouvrirChat();
+    } else {
+      discussionMasquee = false;
+      ouvrirChat();
+    }
     for (const m of x.msgs) ajouterMsg(m.texte, m.de, false, true, x.quand);
   };
   const lireEtat = async (): Promise<void> => {
