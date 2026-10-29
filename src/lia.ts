@@ -1955,10 +1955,10 @@ export function mountLia(options: OptionsLia = {}): LiaHandle {
       clearTimeout(appui);
     }
   });
-  /** Le toucher de son corps : l'hôte peut le prendre (`surToucher`), sinon sa discussion s'ouvre ou se ferme. */
+  /** Le toucher de son corps : l'hôte peut le prendre (`surToucher`), sinon sa discussion s'ouvre ou se cache (sans s'effacer : seuls ✕ et Échap l'effacent, lia-ui#168). */
   const toucher = (): void => {
     if (chatOuvert) {
-      fermerChat();
+      fermerChatEtGarder(true);
       return;
     }
     if (options.surToucher) {
